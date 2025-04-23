@@ -1,0 +1,357 @@
+body {
+    font-family: sans-serif;
+    line-height: 1.6;
+    margin: 0;
+    padding: 0;
+    background-color: #f4f4f4;
+    color: #333;
+}
+
+header {
+    background-color: #333;
+    color: #fff;
+    padding: 1rem 0;
+    text-align: center;
+    margin-bottom: 1rem;
+}
+
+header h1 {
+    margin: 0;
+}
+
+main {
+    display: flex;
+    gap: 1rem;
+    padding: 1rem;
+    max-width: 1200px;
+    margin: auto;
+}
+
+nav#subforum-nav {
+    flex: 1;
+    background: #fff;
+    padding: 1rem;
+    border-radius: 5px;
+    box-shadow: 0 0 5px rgba(0,0,0,0.1);
+    align-self: flex-start; /* Keep nav from stretching */
+}
+
+section {
+    flex: 3;
+    background: #fff;
+    padding: 1rem;
+    border-radius: 5px;
+    box-shadow: 0 0 5px rgba(0,0,0,0.1);
+}
+
+h2, h3, h4 {
+    color: #333;
+}
+
+ul {
+    list-style: none;
+    padding: 0;
+}
+
+li {
+    margin-bottom: 0.5rem;
+}
+
+a {
+    color: #3498db;
+    text-decoration: none;
+}
+
+a:hover {
+    text-decoration: underline;
+}
+
+button {
+    background-color: #3498db;
+    color: white;
+    border: none;
+    padding: 0.5rem 1rem;
+    border-radius: 3px;
+    cursor: pointer;
+    margin-top: 0.5rem;
+}
+
+button:hover {
+    background-color: #2980b9;
+}
+
+input[type="text"], textarea {
+    width: calc(100% - 22px); /* Account for padding/border */
+    padding: 0.5rem;
+    margin-bottom: 0.5rem;
+    border: 1px solid #ccc;
+    border-radius: 3px;
+}
+
+textarea {
+    min-height: 80px;
+    resize: vertical;
+}
+
+.add-item-form {
+    margin-top: 1rem;
+    padding-top: 1rem;
+    border-top: 1px solid #eee;
+}
+
+#topic-list li, #post-list .post {
+    border: 1px solid #eee;
+    padding: 1rem;
+    margin-bottom: 1rem;
+    border-radius: 4px;
+    background-color: #f9f9f9;
+}
+
+.post-meta {
+    font-size: 0.9em;
+    color: #666;
+    margin-bottom: 0.5rem;
+}
+
+.post-content {
+    margin-bottom: 0.5rem;
+}
+
+.post-actions button {
+    margin-right: 0.5rem;
+    padding: 0.3rem 0.6rem;
+    font-size: 0.9em;
+}
+
+.llm-response {
+    border-left: 4px solid #1abc9c; /* Teal border for LLM responses */
+    background-color: #e8f8f5;
+}
+
+.llm-meta {
+    font-style: italic;
+    font-size: 0.85em;
+    color: #16a085;
+}
+
+/* Basic Threading Indentation */
+.post-replies {
+    margin-left: 2rem;
+    border-left: 2px solid #ddd;
+    padding-left: 1rem;
+    margin-top: 1rem;
+}
+
+#reply-form-container {
+    margin-top: 1rem;
+    padding: 1rem;
+    border: 1px dashed #ccc;
+    background-color: #f0f0f0;
+}
+
+footer {
+    text-align: center;
+    margin-top: 2rem;
+    padding: 1rem;
+    background-color: #ddd;
+    color: #333;
+}
+
+/* Modal Styles */
+.modal {
+    position: fixed;
+    z-index: 1;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    overflow: auto;
+    background-color: rgba(0,0,0,0.4);
+}
+
+.modal-content {
+    background-color: #fefefe;
+    margin: 15% auto;
+    padding: 20px;
+    border: 1px solid #888;
+    width: 80%;
+    max-width: 500px;
+    border-radius: 5px;
+}
+
+.close-btn {
+    color: #aaa;
+    float: right;
+    font-size: 28px;
+    font-weight: bold;
+}
+
+.close-btn:hover,
+.close-btn:focus {
+    color: black;
+    text-decoration: none;
+    cursor: pointer;
+}
+
+.error-message {
+    color: red;
+    font-size: 0.9em;
+    margin-top: 0.5rem;
+}
+
+#schedule-display {
+    margin-top: 0.5rem;
+    font-size: 0.9em;
+    color: #ccc;
+}
+/* Settings Modal Specific Styles */
+.setting-item {
+    margin-bottom: 1rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.setting-item label {
+    flex-basis: 150px; /* Align labels */
+}
+
+#model-select {
+    flex-grow: 1;
+    padding: 0.4rem;
+    border: 1px solid #ccc;
+    border-radius: 3px;
+}
+
+#settings-btn { /* Style settings button like schedule button */
+    margin-left: 1rem;
+}
+
+
+/* Dark Mode Styles */
+body.dark-mode {
+    --bg-color: #222;
+    --text-color: #eee;
+    --header-bg: #111;
+    --header-text: #eee;
+    --nav-bg: #333;
+    --section-bg: #333;
+    --post-bg: #444;
+    --post-border: #555;
+    --post-meta-color: #bbb;
+    --llm-response-bg: #2a3f3c;
+    --llm-response-border: #1abc9c;
+    --llm-meta-color: #1abc9c;
+    --link-color: #5dade2;
+    --button-bg: #5dade2;
+    --button-hover-bg: #3498db;
+    --input-bg: #555;
+    --input-border: #777;
+    --input-text: #eee;
+    --modal-bg: #444;
+    --modal-border: #666;
+    --modal-text: #eee;
+    --close-btn-color: #ccc;
+    --close-btn-hover-color: #fff;
+    --footer-bg: #111;
+    --footer-text: #ccc;
+    --schedule-display-color: #888;
+
+    background-color: var(--bg-color);
+    color: var(--text-color);
+}
+
+body.dark-mode header {
+    background-color: var(--header-bg);
+    color: var(--header-text);
+}
+
+body.dark-mode nav#subforum-nav,
+body.dark-mode section {
+    background: var(--nav-bg);
+    box-shadow: 0 0 5px rgba(255,255,255,0.1);
+}
+
+body.dark-mode h2,
+body.dark-mode h3,
+body.dark-mode h4 {
+    color: var(--text-color);
+}
+
+body.dark-mode a {
+    color: var(--link-color);
+}
+
+body.dark-mode button {
+    background-color: var(--button-bg);
+    color: var(--header-text); /* Usually white/light */
+}
+
+body.dark-mode button:hover {
+    background-color: var(--button-hover-bg);
+}
+
+body.dark-mode input[type="text"],
+body.dark-mode textarea,
+body.dark-mode select /* Style select dropdown too */
+{
+    background-color: var(--input-bg);
+    border: 1px solid var(--input-border);
+    color: var(--input-text);
+}
+
+body.dark-mode #topic-list li,
+body.dark-mode #post-list .post {
+    background-color: var(--post-bg);
+    border: 1px solid var(--post-border);
+}
+
+body.dark-mode .post-meta {
+    color: var(--post-meta-color);
+}
+
+body.dark-mode .llm-response {
+    background-color: var(--llm-response-bg);
+    border-left-color: var(--llm-response-border);
+}
+
+body.dark-mode .llm-meta {
+    color: var(--llm-meta-color);
+}
+
+body.dark-mode .post-replies {
+    border-left-color: var(--post-border);
+}
+
+body.dark-mode #reply-form-container {
+    background-color: var(--nav-bg); /* Match nav/section bg */
+    border-color: var(--input-border);
+}
+
+body.dark-mode footer {
+    background-color: var(--footer-bg);
+    color: var(--footer-text);
+}
+
+body.dark-mode .modal-content {
+    background-color: var(--modal-bg);
+    border-color: var(--modal-border);
+    color: var(--modal-text);
+}
+
+body.dark-mode .close-btn {
+    color: var(--close-btn-color);
+}
+
+body.dark-mode .close-btn:hover,
+body.dark-mode .close-btn:focus {
+    color: var(--close-btn-hover-color);
+}
+
+body.dark-mode #schedule-display {
+    color: var(--schedule-display-color);
+}
+
+body.dark-mode .add-item-form {
+     border-top-color: var(--post-border);
+}

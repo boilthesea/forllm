@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FORLLM - Forum for Local LLMs</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <header>
+        <h1>FORLLM</h1>
+        <p>Asynchronous Forum for Local LLM Interaction</p>
+        <div id="schedule-display">
+            Loading schedule...
+        </div>
+        <button id="edit-schedule-btn">Edit Schedule</button>
+        <button id="settings-btn">Settings</button> <!-- Added Settings Button -->
+    </header>
+
+    <div id="schedule-modal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <span class="close-btn">&times;</span>
+            <h2>Edit Processing Schedule</h2>
+            <label for="start-hour">Start Hour (0-23):</label>
+            <input type="number" id="start-hour" min="0" max="23">
+            <label for="end-hour">End Hour (0-23):</label>
+            <input type="number" id="end-hour" min="0" max="23">
+            <label for="schedule-enabled">Enabled:</label>
+            <input type="checkbox" id="schedule-enabled">
+            <button id="save-schedule-btn">Save Schedule</button>
+            <p id="schedule-error" class="error-message"></p>
+        </div>
+    </div>
+
+    <!-- Settings Modal -->
+    <div id="settings-modal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <span class="close-btn">&times;</span>
+            <h2>Settings</h2>
+
+            <div class="setting-item">
+                <label for="dark-mode-toggle">Dark Mode:</label>
+                <input type="checkbox" id="dark-mode-toggle">
+            </div>
+
+            <div class="setting-item">
+                <label for="model-select">Select LLM Model:</label>
+                <select id="model-select">
+                    <!-- Options will be loaded by JS -->
+                    <option value="">Loading models...</option>
+                </select>
+            </div>
+
+            <button id="save-settings-btn">Save Settings</button>
+            <p id="settings-error" class="error-message"></p>
+        </div>
+    </div>
+    <!-- End Settings Modal -->
+
+    <main>
+        <nav id="subforum-nav">
+            <h2>Subforums</h2>
+            <ul id="subforum-list">
+                <!-- Subforums will be loaded here -->
+                 {% for subforum in subforums %}
+                    <li><a href="#" data-subforum-id="{{ subforum.subforum_id }}">{{ subforum.name }}</a></li>
+                 {% endfor %}
+            </ul>
+            <div class="add-item-form">
+                <input type="text" id="new-subforum-name" placeholder="New subforum name">
+                <button id="add-subforum-btn">Add Subforum</button>
+            </div>
+        </nav>
+
+        <section id="topic-list-section" style="display: none;">
+            <h2 id="current-subforum-name"></h2>
+            <button id="back-to-subforums-btn">< Back to Subforums</button>
+            <h3>Topics</h3>
+            <ul id="topic-list">
+                <!-- Topics will be loaded here -->
+            </ul>
+             <div class="add-item-form">
+                <h4>Create New Topic</h4>
+                <input type="text" id="new-topic-title" placeholder="Topic Title">
+                <textarea id="new-topic-content" placeholder="Your initial post content..."></textarea>
+                <button id="add-topic-btn">Create Topic</button>
+            </div>
+        </section>
+
+        <section id="topic-view-section" style="display: none;">
+            <h2 id="current-topic-title"></h2>
+             <button id="back-to-topics-btn">< Back to Topics</button>
+            <h3>Posts</h3>
+            <div id="post-list">
+                <!-- Posts will be loaded here in a threaded view -->
+            </div>
+             <div id="reply-form-container" style="display:none;">
+                 <h4>Reply to Post <span id="reply-to-post-id"></span></h4>
+                 <textarea id="reply-content" placeholder="Your reply..."></textarea>
+                 <button id="submit-reply-btn">Submit Reply</button>
+                 <button id="cancel-reply-btn">Cancel</button>
+             </div>
+        </section>
+
+    </main>
+
+    <footer>
+        <p>FORLLM MVP</p>
+    </footer>
+
+    <script src="{{ url_for('static', filename='script.js') }}"></script>
+</body>
+</html>
