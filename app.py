@@ -261,39 +261,104 @@ def process_llm_request(request_details):
         # 2. Call Ollama API (Replace with actual call)
         print(f"Sending prompt to Ollama ({OLLAMA_GENERATE_URL}) for model '{model}'...")
         # --- Actual Ollama call ---
+        # --- Actual Ollama call ---
+        full_response_content = "" # Initialize before the try block for communication
         try:
+            # Variables for streaming
+            last_chunk_time = time.time()
+            inter_chunk_timeout = 300 # Seconds between chunks before timeout
+            initial_connection_timeout = 300 # Seconds for initial connection
+
+            print(f"Sending streaming prompt to Ollama ({OLLAMA_GENERATE_URL}) for model '{model}'...")
             response = requests.post(
                 OLLAMA_GENERATE_URL,
-                json={'model': model, 'prompt': prompt_content, 'stream': False},
-                headers={'Content-Type': 'application/json'}, # Ensure correct header
-                timeout=300 # Add a timeout (e.g., 5 minutes)
+                json={'model': model, 'prompt': prompt_content, 'stream': True}, # Enable streaming
+                headers={'Content-Type': 'application/json'},
+                stream=True, # Required for iter_lines()
+                timeout=initial_connection_timeout # Timeout for initial connection
             )
-            response.raise_for_status() # Raise exception for bad status codes (4xx or 5xx)
-            response_data = response.json()
-            llm_response_content = response_data.get('response')
-            if llm_response_content is None:
-                 # Log the full response if the expected field is missing
-                print(f"Warning: 'response' field missing in Ollama reply for request {request_id}. Full response: {response_data}")
-                raise ValueError("Ollama response missing 'response' field.")
-            print(f"Received response from Ollama for request {request_id}.")
+            response.raise_for_status() # Check for initial connection errors (4xx, 5xx)
+
+            print(f"Connection established. Receiving stream for request {request_id}...")
+            stream_done = False # Flag to track if 'done' was received
+            for line in response.iter_lines():
+                if line:
+                    current_time = time.time()
+                    # Check for inter-chunk timeout
+                    if current_time - last_chunk_time > inter_chunk_timeout:
+                        raise TimeoutError(f"Ollama response timed out after {inter_chunk_timeout} seconds of inactivity.")
+                    last_chunk_time = current_time
+
+                    try:
+                        # Decode and parse the JSON chunk
+                        chunk = json.loads(line.decode('utf-8'))
+                        response_part = chunk.get('response', '')
+                        full_response_content += response_part
+
+                        # Optional: Log progress
+                        # print(f"Received chunk for request {request_id}: {len(response_part)} chars")
+
+                        if chunk.get('done', False):
+                            print(f"Stream finished ('done': true) for request {request_id}.")
+                            stream_done = True
+                            break # Exit loop once Ollama signals completion
+                    except json.JSONDecodeError:
+                        print(f"Warning: Received non-JSON line from Ollama stream for request {request_id}: {line}")
+                        # Decide if this is critical. For now, we just skip it.
+                        continue
+
+            # After the loop, check if the stream completed properly
+            if not stream_done:
+                 print(f"Warning: Ollama stream ended for request {request_id} without receiving 'done': true.")
+                 # If no content was received at all, treat it as an error.
+                 if not full_response_content:
+                     raise ValueError("Ollama stream ended unexpectedly with no content and no 'done' flag.")
+                 else:
+                     print(f"Proceeding with content received ({len(full_response_content)} chars) despite missing 'done' flag.")
+
+            print(f"Received complete response ({len(full_response_content)} chars) from Ollama for request {request_id}.")
+
+            # --- If communication successful, save the response ---
+            # 3. Save the LLM response to the posts table (using the accumulated content)
+            cursor.execute("""
+                INSERT INTO posts (topic_id, user_id, parent_post_id, content, is_llm_response, llm_model_id, llm_persona_id)
+                SELECT topic_id, ?, ?, ?, TRUE, ?, ?
+                FROM posts WHERE post_id = ?
+            """, (CURRENT_USER_ID, post_id, full_response_content, model, persona, post_id))
+            new_post_id = cursor.lastrowid
+            print(f"Saved LLM response as post {new_post_id}")
+
+            # 4. Update the status in llm_requests table to 'complete'
+            cursor.execute("UPDATE llm_requests SET status = 'complete', processed_at = CURRENT_TIMESTAMP WHERE request_id = ?", (request_id,))
+            db.commit()
+            print(f"Request {request_id} marked as complete.")
+
+        # --- Exception Handling for Ollama Communication (catches errors from the 'try' block above) ---
+        except requests.exceptions.Timeout:
+            # This catches the initial connection timeout
+            print(f"Ollama API connection timed out after {initial_connection_timeout} seconds for request {request_id}.")
+            # Re-raise as a generic Exception to be caught by the outer handler
+            raise Exception(f"Failed to connect to Ollama API within {initial_connection_timeout} seconds.")
         except requests.exceptions.RequestException as req_err:
-            print(f"Ollama API request failed: {req_err}")
-            raise ConnectionError(f"Failed to connect or communicate with Ollama API: {req_err}") from req_err
+            # Catches other connection/request errors (DNS, refused connection, etc.)
+            print(f"Ollama API request failed for request {request_id}: {req_err}")
+            raise Exception(f"Failed to communicate with Ollama API: {req_err}") from req_err
+        except TimeoutError as stream_timeout_err:
+            # Catches the inter-chunk timeout
+            print(f"Ollama streaming error for request {request_id}: {stream_timeout_err}")
+            raise Exception(f"Ollama stream timed out: {stream_timeout_err}") from stream_timeout_err
+        except json.JSONDecodeError as json_err:
+             # Should ideally be caught within the loop, but catch here as a fallback
+             print(f"Error decoding JSON from Ollama stream for request {request_id}: {json_err}")
+             raise Exception(f"Invalid JSON received from Ollama stream: {json_err}") from json_err
+        except ValueError as val_err:
+             # Catch specific ValueErrors raised (e.g., stream ended with no content)
+             print(f"Value error during Ollama processing for request {request_id}: {val_err}")
+             raise Exception(f"Data error during Ollama processing: {val_err}") from val_err
+        # Note: Other unexpected errors will be caught by the outer try...except block (starting line 250)
+        # which handles updating the llm_requests status to 'error'.
+
         # --------------------------
-
-        # 3. Save the LLM response to the posts table
-        cursor.execute("""
-            INSERT INTO posts (topic_id, user_id, parent_post_id, content, is_llm_response, llm_model_id, llm_persona_id)
-            SELECT topic_id, ?, ?, ?, TRUE, ?, ?
-            FROM posts WHERE post_id = ?
-        """, (CURRENT_USER_ID, post_id, llm_response_content, model, persona, post_id))
-        new_post_id = cursor.lastrowid
-        print(f"Saved LLM response as post {new_post_id}")
-
-        # 4. Update the status in llm_requests table
-        cursor.execute("UPDATE llm_requests SET status = 'complete', processed_at = CURRENT_TIMESTAMP WHERE request_id = ?", (request_id,))
-        db.commit()
-        print(f"Request {request_id} marked as complete.")
 
     except Exception as e:
         print(f"Error processing request {request_id}: {e}")
