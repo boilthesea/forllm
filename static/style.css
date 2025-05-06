@@ -175,9 +175,15 @@ footer {
     padding: 20px;
     border: 1px solid #888;
     width: 80%;
-    max-width: 500px;
+    max-width: 500px; /* Default max-width */
     border-radius: 5px;
 }
+
+/* Wider modal for schedules */
+.schedule-modal-content {
+    max-width: 700px;
+}
+
 
 .close-btn {
     color: #aaa;
@@ -204,6 +210,150 @@ footer {
     font-size: 0.9em;
     color: #ccc;
 }
+
+/* Schedule Modal Specific Styles */
+#schedule-list-container {
+    max-height: 40vh; /* Limit height and make scrollable if many schedules */
+    overflow-y: auto;
+    margin-bottom: 1rem;
+    padding-right: 10px; /* Space for scrollbar */
+}
+
+.schedule-row {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.75rem;
+    border: 1px solid #eee;
+    border-radius: 4px;
+    margin-bottom: 0.75rem;
+    background-color: #f9f9f9;
+}
+
+.schedule-row .time-inputs {
+    display: flex;
+    align-items: center;
+    gap: 0.3rem;
+}
+.schedule-row .time-inputs input[type="number"] {
+    width: 50px; /* Smaller width for hour inputs */
+    padding: 0.4rem;
+    text-align: center;
+}
+
+.schedule-row .days-selector {
+    display: flex;
+    gap: 0.3rem;
+    border: 1px solid #ccc;
+    padding: 0.3rem 0.5rem;
+    border-radius: 3px;
+    flex-wrap: wrap; /* Allow days to wrap if not enough space */
+}
+.schedule-row .days-selector label {
+    display: inline-flex; /* Align checkbox and text */
+    align-items: center;
+    font-size: 0.9em;
+    cursor: pointer;
+}
+.schedule-row .days-selector input[type="checkbox"] {
+    margin-right: 0.2rem;
+}
+
+
+/* Toggle Switch for Enabled/Disabled */
+.toggle-switch {
+    position: relative;
+    display: inline-block;
+    width: 50px; /* Width of the toggle */
+    height: 24px; /* Height of the toggle */
+    margin-left: auto; /* Push to the right */
+}
+
+.toggle-switch input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+
+.slider {
+    position: absolute;
+    cursor: pointer;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: #ccc;
+    -webkit-transition: .4s;
+    transition: .4s;
+}
+
+.slider:before {
+    position: absolute;
+    content: "";
+    height: 18px; /* Size of the circle */
+    width: 18px;
+    left: 3px; /* Position of the circle */
+    bottom: 3px;
+    background-color: white;
+    -webkit-transition: .4s;
+    transition: .4s;
+}
+
+input:checked + .slider {
+    background-color: #2196F3; /* Blue when checked */
+}
+body.dark-mode input:checked + .slider {
+    background-color: var(--button-bg, #5dade2);
+}
+
+
+input:focus + .slider {
+    box-shadow: 0 0 1px #2196F3;
+}
+
+input:checked + .slider:before {
+    -webkit-transform: translateX(26px); /* Move circle to the right */
+    -ms-transform: translateX(26px);
+    transform: translateX(26px);
+}
+
+.slider.round {
+    border-radius: 24px; /* Make it round */
+}
+
+.slider.round:before {
+    border-radius: 50%; /* Make circle round */
+}
+
+.schedule-row .delete-schedule-btn,
+#add-schedule-row-btn {
+    padding: 0.3rem 0.6rem;
+    font-size: 0.9em;
+    background-color: #e74c3c; /* Red for delete */
+}
+#add-schedule-row-btn {
+    background-color: #2ecc71; /* Green for add */
+    margin-top: 0.5rem;
+    margin-bottom: 1rem;
+    display: block; /* Make it full width or center it */
+    margin-left: auto;
+    margin-right: auto;
+}
+
+.schedule-row .delete-schedule-btn:hover {
+    background-color: #c0392b;
+}
+#add-schedule-row-btn:hover {
+    background-color: #27ae60;
+}
+
+#save-schedules-btn { /* Style for the main save button */
+    display: block;
+    width: auto;
+    margin: 1rem auto 0; /* Center it */
+}
+
+
 /* Settings Modal Specific Styles */
 .setting-item {
     margin-bottom: 1rem;
@@ -352,9 +502,78 @@ body.dark-mode #schedule-display {
     color: var(--schedule-display-color);
 }
 
+body.dark-mode .schedule-row {
+    background-color: var(--post-bg, #444);
+    border-color: var(--post-border, #555);
+}
+body.dark-mode .schedule-row .time-inputs input[type="number"] {
+    background-color: var(--input-bg, #555);
+    border-color: var(--input-border, #777);
+    color: var(--input-text, #eee);
+}
+body.dark-mode .schedule-row .days-selector {
+    border-color: var(--input-border, #777);
+    color: var(--text-color, #eee);
+}
+body.dark-mode .schedule-row .days-selector label {
+    color: var(--text-color, #eee);
+}
+
+body.dark-mode .slider {
+    background-color: #555; /* Darker grey for disabled toggle */
+}
+
+
 body.dark-mode .add-item-form {
      border-top-color: var(--post-border);
 }
+
+
+/* --- Fixed Status Indicator --- */
+#processing-status-indicator-container {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    z-index: 1000; /* Ensure it's above other content */
+    padding: 5px; /* Space for the gray background area */
+    border-radius: 50%; /* Make the background area round */
+    background-color: rgba(128, 128, 128, 0.7); /* Medium gray, slightly transparent */
+    box-shadow: 0 0 8px rgba(0,0,0,0.3);
+    cursor: default; /* Indicate it's not clickable but has a tooltip */
+}
+
+/* Removed empty .status-dot-background ruleset */
+
+.status-dot {
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    transition: background-color 0.3s ease;
+}
+
+.status-dot.status-active {
+    background-color: #2ecc71; /* Green */
+}
+
+.status-dot.status-inactive {
+    background-color: #e74c3c; /* Red */
+}
+
+.status-dot.status-loading {
+    background-color: #f39c12; /* Orange for loading/unknown */
+    animation: pulse 1.5s infinite ease-in-out;
+}
+.status-dot.status-error {
+    background-color: #d35400; /* Darker orange/brown for error */
+}
+
+
+@keyframes pulse {
+    0% { transform: scale(0.9); opacity: 0.7; }
+    50% { transform: scale(1.1); opacity: 1; }
+    100% { transform: scale(0.9); opacity: 0.7; }
+}
+
 
 /* --- Markdown Element Styles --- */
 
@@ -706,4 +925,13 @@ body.dark-mode .editor-statusbar {
 /* Adjust textarea margin if needed (EasyMDE hides the original textarea) */
 #new-topic-content, #reply-content {
    margin-bottom: 0.5rem; /* Keep some space below editor */
+}
+
+hr {
+   border: none;
+   border-top: 1px solid #eee;
+   margin: 1rem 0;
+}
+body.dark-mode hr {
+   border-top-color: var(--input-border, #777);
 }

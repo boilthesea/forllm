@@ -2,9 +2,11 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- State Variables ---
     let currentSubforumId = null;
     let currentTopicId = null;
-    let currentPosts = []; // Store posts for the current topic to build threads
-    let newTopicEditor = null; // To hold the EasyMDE instance for new topics
-    let replyEditor = null; // To hold the EasyMDE instance for replies
+    let currentPosts = []; // Store posts for the current topic
+    let newTopicEditor = null; // EasyMDE instance for new topics
+    let replyEditor = null; // EasyMDE instance for replies
+    let schedules = []; // Store loaded schedules
+    const DAY_ORDER = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']; // For consistent day ordering
 
     // --- DOM Elements ---
     const subforumNav = document.getElementById('subforum-nav');
@@ -31,16 +33,17 @@ document.addEventListener('DOMContentLoaded', () => {
     const submitReplyBtn = document.getElementById('submit-reply-btn');
     const cancelReplyBtn = document.getElementById('cancel-reply-btn');
 
-    // Schedule Modal Elements
-    const scheduleDisplay = document.getElementById('schedule-display');
+    // Schedule Elements
+    const scheduleDisplay = document.getElementById('schedule-display'); // For next schedule text
     const editScheduleBtn = document.getElementById('edit-schedule-btn');
     const scheduleModal = document.getElementById('schedule-modal');
-    const closeBtn = scheduleModal.querySelector('.close-btn');
-    const startHourInput = document.getElementById('start-hour');
-    const endHourInput = document.getElementById('end-hour');
-    const scheduleEnabledCheckbox = document.getElementById('schedule-enabled');
-    const saveScheduleBtn = document.getElementById('save-schedule-btn');
+    const scheduleCloseBtn = scheduleModal.querySelector('.close-btn'); // Specific close button
+    const scheduleListContainer = document.getElementById('schedule-list-container');
+    const addScheduleRowBtn = document.getElementById('add-schedule-row-btn');
+    const saveSchedulesBtn = document.getElementById('save-schedules-btn'); // Renamed save button
     const scheduleError = document.getElementById('schedule-error');
+    const statusIndicatorContainer = document.getElementById('processing-status-indicator-container');
+    const statusDot = document.getElementById('processing-status-dot');
 
     // Settings Modal Elements
     const settingsBtn = document.getElementById('settings-btn');
@@ -57,7 +60,6 @@ document.addEventListener('DOMContentLoaded', () => {
         selectedModel: null,
         llmLinkSecurity: 'true' // Added default
     };
-
 
     // --- API Helper Function ---
     async function apiRequest(url, method = 'GET', body = null) {
@@ -77,22 +79,21 @@ document.addEventListener('DOMContentLoaded', () => {
                 console.error('API Error:', errorData);
                 throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
             }
-            // Handle cases where response might be empty (e.g., 201 No Content or 202 Accepted)
-             if (response.status === 204 || response.status === 202) {
-                return null; // Or return a specific indicator if needed
+            if (response.status === 204 || response.status === 202) {
+                return null;
             }
             return await response.json();
         } catch (error) {
             console.error('Fetch Error:', error);
             alert(`An error occurred: ${error.message}`);
-            throw error; // Re-throw to handle in calling function if needed
+            throw error;
         }
     }
 
     // --- Rendering Functions ---
 
     function renderSubforumList(subforums) {
-        subforumList.innerHTML = ''; // Clear existing list
+        subforumList.innerHTML = '';
         if (!Array.isArray(subforums)) {
             console.error("Invalid subforums data:", subforums);
             return;
@@ -103,7 +104,7 @@ document.addEventListener('DOMContentLoaded', () => {
             a.href = '#';
             a.textContent = subforum.name;
             a.dataset.subforumId = subforum.subforum_id;
-            a.dataset.subforumName = subforum.name; // Store name for later use
+            a.dataset.subforumName = subforum.name;
             a.addEventListener('click', (e) => {
                 e.preventDefault();
                 loadTopics(subforum.subforum_id, subforum.name);
@@ -114,7 +115,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function renderTopicList(topics) {
-        topicList.innerHTML = ''; // Clear existing list
+        topicList.innerHTML = '';
          if (!Array.isArray(topics)) {
             console.error("Invalid topics data:", topics);
             return;
@@ -125,7 +126,7 @@ document.addEventListener('DOMContentLoaded', () => {
             a.href = '#';
             a.textContent = topic.title;
             a.dataset.topicId = topic.topic_id;
-            a.dataset.topicTitle = topic.title; // Store title
+            a.dataset.topicTitle = topic.title;
             a.addEventListener('click', (e) => {
                 e.preventDefault();
                 loadPosts(topic.topic_id, topic.title);
@@ -141,21 +142,19 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function renderPosts(posts) {
-        postList.innerHTML = ''; // Clear existing list
-        currentPosts = posts; // Store for potential future use (e.g., finding parent content)
+        postList.innerHTML = '';
+        currentPosts = posts;
 
         if (!Array.isArray(posts)) {
             console.error("Invalid posts data:", posts);
             return;
         }
 
-        // Build a map of posts by ID for easy lookup
         const postsById = posts.reduce((map, post) => {
             map[post.post_id] = { ...post, children: [] };
             return map;
         }, {});
 
-        // Build the tree structure
         const rootPosts = [];
         posts.forEach(post => {
             if (post.parent_post_id && postsById[post.parent_post_id]) {
@@ -165,10 +164,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
 
-        // Sort root posts by creation date (API already sorts, but good practice)
         rootPosts.sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
-
-        // Render the tree
         rootPosts.forEach(post => renderPostNode(post, postList, 0));
     }
 
@@ -176,7 +172,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const postDiv = document.createElement('div');
         postDiv.className = 'post';
         postDiv.dataset.postId = post.post_id;
-        postDiv.style.marginLeft = `${depth * 2}rem`; // Indentation
+        postDiv.style.marginLeft = `${depth * 2}rem`;
 
         if (post.is_llm_response) {
             postDiv.classList.add('llm-response');
@@ -194,7 +190,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const contentDiv = document.createElement('div');
         contentDiv.className = 'post-content';
-        // Use innerHTML to render the processed HTML from the backend
         contentDiv.innerHTML = post.content;
 
         const actionsDiv = document.createElement('div');
@@ -205,7 +200,6 @@ document.addEventListener('DOMContentLoaded', () => {
         replyButton.addEventListener('click', () => showReplyForm(post.post_id));
         actionsDiv.appendChild(replyButton);
 
-        // Only show "Request LLM Response" button on non-LLM posts
         if (!post.is_llm_response) {
             const llmButton = document.createElement('button');
             llmButton.textContent = 'Request LLM Response';
@@ -216,64 +210,151 @@ document.addEventListener('DOMContentLoaded', () => {
         postDiv.appendChild(metaDiv);
         postDiv.appendChild(contentDiv);
         postDiv.appendChild(actionsDiv);
-
         parentElement.appendChild(postDiv);
 
-        // Recursively render children, sorted by date
         if (post.children && post.children.length > 0) {
             const repliesContainer = document.createElement('div');
             repliesContainer.className = 'post-replies';
-            postDiv.appendChild(repliesContainer); // Append replies container to the parent post div
+            postDiv.appendChild(repliesContainer);
             post.children
                 .sort((a, b) => new Date(a.created_at) - new Date(b.created_at))
-                .forEach(child => renderPostNode(child, repliesContainer, 0)); // Reset depth visually within container
+                .forEach(child => renderPostNode(child, repliesContainer, 0));
         }
     }
 
-     function renderSchedule(schedule) {
-        if (schedule) {
-            const enabledText = schedule.enabled ? "Enabled" : "Disabled";
-            scheduleDisplay.textContent = `Processing Schedule: ${String(schedule.start_hour).padStart(2, '0')}:00 - ${String(schedule.end_hour).padStart(2, '0')}:00 (${enabledText})`;
-            // Update modal inputs
-            startHourInput.value = schedule.start_hour;
-            endHourInput.value = schedule.end_hour;
-            scheduleEnabledCheckbox.checked = schedule.enabled;
+    // --- Schedule Rendering Functions ---
+    function renderSchedules(scheduleData) {
+        schedules = scheduleData || []; // Update global schedules state
+        scheduleListContainer.innerHTML = ''; // Clear existing rows
+        if (!Array.isArray(schedules) || schedules.length === 0) {
+            scheduleListContainer.innerHTML = '<p>No schedules configured. Click "+" to add one.</p>';
         } else {
-            scheduleDisplay.textContent = "Could not load schedule.";
+            schedules.forEach(schedule => {
+                const scheduleRow = createScheduleRowElement(schedule);
+                scheduleListContainer.appendChild(scheduleRow);
+            });
         }
+        // Add event listeners to newly created delete buttons
+        scheduleListContainer.querySelectorAll('.delete-schedule-btn').forEach(btn => {
+            btn.addEventListener('click', handleDeleteSchedule);
+        });
     }
 
+    function createScheduleRowElement(schedule = {}) {
+        const scheduleId = schedule.id || null; // Use null for new rows
+        const startHour = schedule.start_hour !== undefined ? schedule.start_hour : 0;
+        const endHour = schedule.end_hour !== undefined ? schedule.end_hour : 6;
+        const enabled = schedule.enabled !== undefined ? schedule.enabled : false; // Default new schedules to disabled
+        const activeDays = schedule.days_active ? schedule.days_active.split(',') : []; // Default to no days if new
+
+        const row = document.createElement('div');
+        row.className = 'schedule-row';
+        if (scheduleId) {
+            row.dataset.scheduleId = scheduleId;
+        }
+
+        const timeInputContainer = document.createElement('div');
+        timeInputContainer.className = 'time-inputs';
+        timeInputContainer.innerHTML = `
+            <input type="number" class="schedule-start-hour" min="0" max="23" value="${startHour}" title="Start Hour (0-23)">
+            <span>to</span>
+            <input type="number" class="schedule-end-hour" min="0" max="23" value="${endHour}" title="End Hour (0-23)">
+        `;
+
+        const daysSelector = document.createElement('div');
+        daysSelector.className = 'days-selector';
+        DAY_ORDER.forEach(day => {
+            const isChecked = activeDays.includes(day);
+            daysSelector.innerHTML += `
+                <label title="${day}">
+                    <input type="checkbox" value="${day}" ${isChecked ? 'checked' : ''}>${day.substring(0,1)}
+                </label>
+            `;
+        });
+
+        const toggleLabel = document.createElement('label');
+        toggleLabel.className = 'toggle-switch';
+        toggleLabel.title = enabled ? 'Schedule Enabled' : 'Schedule Disabled';
+        toggleLabel.innerHTML = `
+            <input type="checkbox" class="schedule-enabled" ${enabled ? 'checked' : ''}>
+            <span class="slider round"></span>
+        `;
+        toggleLabel.querySelector('.schedule-enabled').addEventListener('change', (e) => {
+             toggleLabel.title = e.target.checked ? 'Schedule Enabled' : 'Schedule Disabled';
+        });
+
+        const deleteButton = document.createElement('button');
+        deleteButton.className = 'delete-schedule-btn';
+        deleteButton.textContent = 'Delete';
+        deleteButton.title = 'Delete this schedule';
+        if (!scheduleId) {
+             deleteButton.textContent = 'Remove';
+             deleteButton.title = 'Remove this new schedule row';
+        }
+
+        row.appendChild(timeInputContainer);
+        row.appendChild(daysSelector);
+        row.appendChild(toggleLabel);
+        row.appendChild(deleteButton);
+        return row;
+    }
+
+    function renderNextSchedule(nextScheduleInfo) {
+         if (nextScheduleInfo && nextScheduleInfo.next_start_iso) {
+             const nextStart = new Date(nextScheduleInfo.next_start_iso);
+             const formattedDate = nextStart.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
+             const formattedTime = nextStart.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', hour12: true });
+             scheduleDisplay.textContent = `Next: ${formattedDate} at ${formattedTime} (${nextScheduleInfo.schedule_details})`;
+         } else {
+             scheduleDisplay.textContent = "No upcoming processing schedule.";
+         }
+     }
+
+     function renderCurrentStatus(statusInfo) {
+         const isActive = statusInfo && statusInfo.active;
+         statusDot.classList.remove('status-active', 'status-inactive', 'status-loading', 'status-error');
+
+         if (isActive === true) {
+             statusDot.classList.add('status-active');
+             statusIndicatorContainer.title = 'Schedule active';
+         } else if (isActive === false) {
+             statusDot.classList.add('status-inactive');
+             statusIndicatorContainer.title = 'No schedule active';
+         } else {
+             statusDot.classList.add('status-error');
+             statusIndicatorContainer.title = 'Schedule status: Unknown';
+         }
+     }
+
+    // --- Dark Mode ---
     function applyDarkMode(isDark) {
         if (isDark) {
             document.body.classList.add('dark-mode');
         } else {
             document.body.classList.remove('dark-mode');
         }
-        // Ensure toggle reflects the state
         darkModeToggle.checked = isDark;
     }
 
     // --- Link Security Popup ---
     function showLinkWarningPopup(linkUrl, linkText) {
-        // Check if popup already exists, remove if so
         const existingPopup = document.getElementById('link-warning-popup');
         if (existingPopup) {
             existingPopup.remove();
         }
 
-        // Create popup elements
         const popup = document.createElement('div');
         popup.id = 'link-warning-popup';
-        popup.className = 'modal'; // Reuse modal styles
-        popup.style.display = 'block'; // Make it visible
+        popup.className = 'modal';
+        popup.style.display = 'block';
 
         const popupContent = document.createElement('div');
-        popupContent.className = 'modal-content link-warning-content'; // Add specific class
+        popupContent.className = 'modal-content link-warning-content';
 
-        const closeBtn = document.createElement('span');
-        closeBtn.className = 'close-btn';
-        closeBtn.innerHTML = '&times;';
-        closeBtn.onclick = () => popup.remove();
+        const closeBtnEl = document.createElement('span');
+        closeBtnEl.className = 'close-btn';
+        closeBtnEl.innerHTML = '&times;';
+        closeBtnEl.onclick = () => popup.remove();
 
         const title = document.createElement('h4');
         title.textContent = 'Link Security Warning';
@@ -281,11 +362,11 @@ document.addEventListener('DOMContentLoaded', () => {
         const text = document.createElement('p');
         text.innerHTML = `You clicked on a link generated by an LLM: <br>
                           <strong>Text:</strong> ${linkText}<br>
-                          <strong>URL:</strong> <span class="link-url">${linkUrl}</span>`; // Use span for potential styling
+                          <strong>URL:</strong> <span class="link-url">${linkUrl}</span>`;
 
         const warning = document.createElement('p');
         warning.innerHTML = `<strong>Warning:</strong> LLM data can be outdated or inaccurate. This link might lead to an unexpected or potentially harmful website. Verify the destination before proceeding.`;
-        warning.style.color = 'orange'; // Or use CSS class
+        warning.style.color = 'orange';
 
         const buttonContainer = document.createElement('div');
         buttonContainer.style.marginTop = '1rem';
@@ -294,29 +375,25 @@ document.addEventListener('DOMContentLoaded', () => {
         const proceedBtn = document.createElement('button');
         proceedBtn.textContent = 'Proceed to Link';
         proceedBtn.onclick = () => {
-            window.open(linkUrl, '_blank', 'noopener noreferrer'); // Open in new tab safely
+            window.open(linkUrl, '_blank', 'noopener noreferrer');
             popup.remove();
         };
 
-        const cancelBtn = document.createElement('button');
-        cancelBtn.textContent = 'Cancel';
-        cancelBtn.style.marginLeft = '0.5rem';
-        cancelBtn.onclick = () => popup.remove();
+        const cancelBtnEl = document.createElement('button');
+        cancelBtnEl.textContent = 'Cancel';
+        cancelBtnEl.style.marginLeft = '0.5rem';
+        cancelBtnEl.onclick = () => popup.remove();
 
-        // Assemble popup
-        buttonContainer.appendChild(cancelBtn);
+        buttonContainer.appendChild(cancelBtnEl);
         buttonContainer.appendChild(proceedBtn);
-        popupContent.appendChild(closeBtn);
+        popupContent.appendChild(closeBtnEl);
         popupContent.appendChild(title);
         popupContent.appendChild(text);
         popupContent.appendChild(warning);
         popupContent.appendChild(buttonContainer);
         popup.appendChild(popupContent);
-
-        // Add popup to body
         document.body.appendChild(popup);
 
-         // Add listener to close if clicking outside the modal content
         popup.addEventListener('click', (event) => {
             if (event.target === popup) {
                 popup.remove();
@@ -324,9 +401,8 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-
     function renderModelOptions(models, selectedModel) {
-        modelSelect.innerHTML = ''; // Clear existing options
+        modelSelect.innerHTML = '';
         if (!Array.isArray(models) || models.length === 0) {
             const option = document.createElement('option');
             option.value = '';
@@ -347,29 +423,27 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-
     // --- Loading Functions ---
-
     async function loadSubforums() {
         try {
             const subforums = await apiRequest('/api/subforums');
             renderSubforumList(subforums);
-            showSection('subforum-nav'); // Show only subforum list initially
+            showSection('subforum-nav');
         } catch (error) {
-            // Error already logged by apiRequest
+            // Error logged by apiRequest
         }
     }
 
     async function loadTopics(subforumId, subforumName) {
         currentSubforumId = subforumId;
-        currentTopicId = null; // Reset topic when viewing topic list
+        currentTopicId = null;
         try {
             const topics = await apiRequest(`/api/subforums/${subforumId}/topics`);
-            currentSubforumName.textContent = subforumName; // Update heading
+            currentSubforumName.textContent = subforumName;
             renderTopicList(topics);
             showSection('topic-list');
         } catch (error) {
-            // Error already logged by apiRequest
+            // Error logged by apiRequest
         }
     }
 
@@ -377,53 +451,68 @@ document.addEventListener('DOMContentLoaded', () => {
         currentTopicId = topicId;
         try {
             const posts = await apiRequest(`/api/topics/${topicId}/posts`);
-            currentTopicTitle.textContent = topicTitle; // Update heading
+            currentTopicTitle.textContent = topicTitle;
             renderPosts(posts);
             showSection('topic-view');
-            hideReplyForm(); // Ensure reply form is hidden initially
+            hideReplyForm();
         } catch (error) {
-            // Error already logged by apiRequest
+            // Error logged by apiRequest
         }
     }
 
-    async function loadSchedule() {
+    async function loadSchedules() {
         try {
-            const schedule = await apiRequest('/api/schedule');
-            renderSchedule(schedule);
+            const scheduleData = await apiRequest('/api/schedules');
+            renderSchedules(scheduleData);
         } catch (error) {
-            scheduleDisplay.textContent = "Error loading schedule.";
+            scheduleError.textContent = "Error loading schedules.";
+            console.error("Error in loadSchedules:", error);
+            renderSchedules([]);
         }
     }
 
-     async function loadSettings() {
+     async function loadNextSchedule() {
+         try {
+             const nextInfo = await apiRequest('/api/schedule/next');
+             renderNextSchedule(nextInfo);
+         } catch (error) {
+             scheduleDisplay.textContent = "Error loading next schedule info.";
+             console.error("Error loading next schedule:", error);
+         }
+     }
+
+     async function loadCurrentStatus() {
+         try {
+             const statusInfo = await apiRequest('/api/schedule/status');
+             renderCurrentStatus(statusInfo);
+         } catch (error) {
+             renderCurrentStatus(null); // Indicate error state
+             console.error("Error loading current status:", error);
+         }
+     }
+
+    async function loadSettings() {
         try {
             const settings = await apiRequest('/api/settings');
-            // Ensure all expected keys are present, using defaults if necessary
             currentSettings = {
                 darkMode: settings.darkMode === 'true' ? 'true' : 'false',
                 selectedModel: settings.selectedModel || null,
-                llmLinkSecurity: settings.llmLinkSecurity === 'true' ? 'true' : 'false' // Default to false if missing/invalid? Plan says default true. Let's stick to true.
+                llmLinkSecurity: settings.llmLinkSecurity === 'true' ? 'true' : 'false'
             };
-             // Ensure default is true if missing from backend response for some reason
             if (settings.llmLinkSecurity === undefined) {
                  currentSettings.llmLinkSecurity = 'true';
             }
 
-
             applyDarkMode(currentSettings.darkMode === 'true');
-            // Update llmLinkSecurity checkbox in settings modal (implementation needed after HTML update)
             const llmSecurityToggle = document.getElementById('llm-link-security-toggle');
             if (llmSecurityToggle) {
                  llmSecurityToggle.checked = currentSettings.llmLinkSecurity === 'true';
             }
-
-            // Load models *after* getting settings so we know which one to pre-select
             await loadOllamaModels();
         } catch (error) {
             console.error("Error loading settings:", error);
-            // Apply default dark mode (false) and attempt to load models anyway
             applyDarkMode(false);
-            await loadOllamaModels(); // Try loading models even if settings fail
+            await loadOllamaModels();
         }
     }
 
@@ -432,27 +521,23 @@ document.addEventListener('DOMContentLoaded', () => {
             const modelsResult = await apiRequest('/api/ollama/models');
             let models = [];
             if (Array.isArray(modelsResult)) {
-                // Direct array of names if successful
                 models = modelsResult;
             } else if (modelsResult && Array.isArray(modelsResult.models)) {
-                 // Handle the case where Ollama might be down and we return {error, models: [DEFAULT_MODEL]}
                 models = modelsResult.models;
                 console.warn("Ollama connection issue, using default model list:", modelsResult.error);
             } else {
                  console.error("Unexpected format for Ollama models:", modelsResult);
-                 models = [currentSettings.selectedModel || 'default']; // Fallback
+                 models = [currentSettings.selectedModel || 'default'];
             }
             renderModelOptions(models, currentSettings.selectedModel);
         } catch (error) {
             console.error("Error fetching Ollama models:", error);
-            renderModelOptions([currentSettings.selectedModel || 'default'], currentSettings.selectedModel); // Show current/default on error
-            settingsError.textContent = "Could not fetch models from Ollama."; // Show error in modal
+            renderModelOptions([currentSettings.selectedModel || 'default'], currentSettings.selectedModel);
+            settingsError.textContent = "Could not fetch models from Ollama.";
         }
     }
 
-
     // --- Action Functions ---
-
     async function addSubforum() {
         const name = newSubforumNameInput.value.trim();
         if (!name) {
@@ -462,7 +547,6 @@ document.addEventListener('DOMContentLoaded', () => {
         try {
             const newSubforum = await apiRequest('/api/subforums', 'POST', { name });
             if (newSubforum) {
-                // Add to list visually without full reload
                  const li = document.createElement('li');
                  const a = document.createElement('a');
                  a.href = '#';
@@ -475,17 +559,16 @@ document.addEventListener('DOMContentLoaded', () => {
                  });
                  li.appendChild(a);
                  subforumList.appendChild(li);
-                 newSubforumNameInput.value = ''; // Clear input
+                 newSubforumNameInput.value = '';
             }
         } catch (error) {
-            // Error already handled by apiRequest
+            // Error handled by apiRequest
         }
     }
 
     async function addTopic() {
         const title = newTopicTitleInput.value.trim();
-        // Get content from EasyMDE editor
-        const content = newTopicEditor ? newTopicEditor.value().trim() : newTopicContentInput.value.trim(); // Fallback if editor not init
+        const content = newTopicEditor ? newTopicEditor.value().trim() : newTopicContentInput.value.trim();
         if (!title || !content) {
             alert('Please enter both a title and content for the new topic.');
             return;
@@ -497,7 +580,6 @@ document.addEventListener('DOMContentLoaded', () => {
         try {
             const newTopic = await apiRequest(`/api/subforums/${currentSubforumId}/topics`, 'POST', { title, content });
              if (newTopic) {
-                // Add to list visually without full reload
                 const li = document.createElement('li');
                 const a = document.createElement('a');
                 a.href = '#';
@@ -510,56 +592,50 @@ document.addEventListener('DOMContentLoaded', () => {
                 });
                  const meta = document.createElement('div');
                  meta.className = 'topic-meta';
-                 // We don't have all meta details immediately, show basic info
                  meta.textContent = `Started by You | Posts: 1 | Last post: Just now`;
                  li.appendChild(a);
                  li.appendChild(meta);
-                 topicList.appendChild(li); // Add to top or bottom? Maybe bottom for now.
+                 topicList.appendChild(li);
 
                 newTopicTitleInput.value = '';
-                // Clear EasyMDE editor
                 if (newTopicEditor) {
                     newTopicEditor.value('');
                 } else {
-                    newTopicContentInput.value = ''; // Fallback
+                    newTopicContentInput.value = '';
                 }
             }
         } catch (error) {
-            // Error already handled by apiRequest
+            // Error handled by apiRequest
         }
     }
 
     function showReplyForm(postId) {
         replyToPostIdSpan.textContent = postId;
-        // Clear EasyMDE editor
         if (replyEditor) {
             replyEditor.value('');
         } else {
-            replyContentInput.value = ''; // Fallback
+            replyContentInput.value = '';
         }
         replyFormContainer.style.display = 'block';
-        // Focus the editor instance if available
         if (replyEditor) {
             replyEditor.codemirror.focus();
         } else {
-            replyContentInput.focus(); // Fallback
+            replyContentInput.focus();
         }
     }
 
     function hideReplyForm() {
         replyFormContainer.style.display = 'none';
         replyToPostIdSpan.textContent = '';
-        // Clear EasyMDE editor
         if (replyEditor) {
             replyEditor.value('');
         } else {
-            replyContentInput.value = ''; // Fallback
+            replyContentInput.value = '';
         }
     }
 
     async function submitReply() {
-        // Get content from EasyMDE editor
-        const content = replyEditor ? replyEditor.value().trim() : replyContentInput.value.trim(); // Fallback
+        const content = replyEditor ? replyEditor.value().trim() : replyContentInput.value.trim();
         const parentPostId = parseInt(replyToPostIdSpan.textContent, 10);
 
         if (!content) {
@@ -574,9 +650,8 @@ document.addEventListener('DOMContentLoaded', () => {
         try {
             const newPost = await apiRequest(`/api/topics/${currentTopicId}/posts`, 'POST', { content, parent_post_id: parentPostId });
             if (newPost) {
-                // Reload posts for the topic to show the new reply in the correct thread position
                 hideReplyForm();
-                loadPosts(currentTopicId, currentTopicTitle.textContent); // Reload posts
+                loadPosts(currentTopicId, currentTopicTitle.textContent);
             }
         } catch (error) {
             // Error handled by apiRequest
@@ -588,49 +663,142 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
         try {
-            // 202 Accepted is expected, response body might be null
             await apiRequest(`/api/posts/${postId}/request_llm`, 'POST');
             alert(`LLM response request queued for post ${postId}. It will be processed during scheduled hours.`);
-            // Optionally, update UI to show request is pending (Phase 2/3 feature)
         } catch (error) {
             // Error handled by apiRequest
         }
     }
 
-     async function saveSchedule() {
-        const startHour = parseInt(startHourInput.value, 10);
-        const endHour = parseInt(endHourInput.value, 10);
-        const enabled = scheduleEnabledCheckbox.checked;
-
-        if (isNaN(startHour) || startHour < 0 || startHour > 23 ||
-            isNaN(endHour) || endHour < 0 || endHour > 23) {
-            scheduleError.textContent = "Hours must be between 0 and 23.";
-            return;
-        }
-        scheduleError.textContent = ""; // Clear error
-
-        try {
-            const updatedSchedule = await apiRequest('/api/schedule', 'PUT', {
-                start_hour: startHour,
-                end_hour: endHour,
-                enabled: enabled
-            });
-            if (updatedSchedule) {
-                renderSchedule(updatedSchedule);
-                scheduleModal.style.display = 'none'; // Close modal on success
-            }
-        } catch (error) {
-             scheduleError.textContent = `Error saving schedule: ${error.message}`;
+    // --- Schedule Actions ---
+    function addScheduleRow() {
+        const newRow = createScheduleRowElement();
+        scheduleListContainer.appendChild(newRow);
+        newRow.querySelector('.delete-schedule-btn').addEventListener('click', handleDeleteSchedule);
+         // Check if placeholder needs to be removed
+        const placeholder = scheduleListContainer.querySelector('p');
+        if (placeholder && placeholder.textContent.startsWith('No schedules configured')) {
+            placeholder.remove();
         }
     }
 
+    async function handleDeleteSchedule(event) {
+        const rowToDelete = event.target.closest('.schedule-row');
+        const scheduleId = rowToDelete.dataset.scheduleId;
+
+        if (scheduleId) {
+            if (!confirm(`Are you sure you want to delete schedule ${scheduleId}? This cannot be undone.`)) {
+                return;
+            }
+            try {
+                await apiRequest(`/api/schedules/${scheduleId}`, 'DELETE');
+                rowToDelete.remove();
+                 if (!scheduleListContainer.querySelector('.schedule-row')) {
+                    scheduleListContainer.innerHTML = '<p>No schedules configured. Click "+" to add one.</p>';
+                 }
+            } catch (error) {
+                scheduleError.textContent = `Error deleting schedule: ${error.message}`;
+            }
+        } else {
+            rowToDelete.remove();
+             if (!scheduleListContainer.querySelector('.schedule-row')) {
+                scheduleListContainer.innerHTML = '<p>No schedules configured. Click "+" to add one.</p>';
+             }
+        }
+    }
+
+     async function saveSchedules() {
+        scheduleError.textContent = "";
+        const scheduleRows = scheduleListContainer.querySelectorAll('.schedule-row');
+        const promises = [];
+        let validationError = false;
+
+        if (scheduleRows.length === 0) { // No schedules to save
+            scheduleModal.style.display = 'none'; // Just close modal
+            await loadSchedules(); // Ensure UI reflects empty state if needed
+            await loadCurrentStatus();
+            await loadNextSchedule();
+            return;
+        }
+
+        scheduleRows.forEach((row, index) => {
+            const scheduleId = row.dataset.scheduleId || null;
+            const startHourInput = row.querySelector('.schedule-start-hour');
+            const endHourInput = row.querySelector('.schedule-end-hour');
+            const enabledCheckbox = row.querySelector('.schedule-enabled');
+            const dayCheckboxes = row.querySelectorAll('.days-selector input[type="checkbox"]:checked');
+
+            const startHour = parseInt(startHourInput.value, 10);
+            const endHour = parseInt(endHourInput.value, 10);
+            const enabled = enabledCheckbox.checked;
+            const daysActive = Array.from(dayCheckboxes).map(cb => cb.value);
+
+            startHourInput.style.borderColor = '';
+            endHourInput.style.borderColor = '';
+            row.querySelector('.days-selector').style.border = '';
+
+            if (isNaN(startHour) || startHour < 0 || startHour > 23 ||
+                isNaN(endHour) || endHour < 0 || endHour > 23) {
+                scheduleError.textContent += `Invalid hours in row ${index + 1}. Must be 0-23. `;
+                validationError = true;
+                startHourInput.style.borderColor = 'red';
+                endHourInput.style.borderColor = 'red';
+            }
+            if (daysActive.length === 0) {
+                 scheduleError.textContent += `Select at least one day in row ${index + 1}. `;
+                 validationError = true;
+                 row.querySelector('.days-selector').style.border = '1px solid red';
+            }
+
+            if (!validationError) {
+                const scheduleData = {
+                    start_hour: startHour,
+                    end_hour: endHour,
+                    days_active: daysActive,
+                    enabled: enabled
+                };
+                if (scheduleId) {
+                    promises.push(apiRequest(`/api/schedules/${scheduleId}`, 'PUT', scheduleData));
+                } else {
+                    promises.push(apiRequest('/api/schedules', 'POST', scheduleData));
+                }
+            }
+        });
+
+        if (validationError) return;
+        if (promises.length === 0) {
+             // This case might happen if all rows had validation errors but were not new,
+             // or if there were no actual changes to existing rows.
+             // For simplicity, if no promises, assume no valid changes to save.
+             // scheduleError.textContent = "No valid changes to save.";
+             return;
+        }
+
+        try {
+            saveSchedulesBtn.disabled = true;
+            saveSchedulesBtn.textContent = 'Saving...';
+            await Promise.all(promises);
+            await loadSchedules();
+            await loadCurrentStatus();
+            await loadNextSchedule();
+            scheduleModal.style.display = 'none';
+        } catch (error) {
+            scheduleError.textContent = `Error saving schedules: ${error.message}`;
+            console.error("Error saving schedules:", error);
+        } finally {
+             saveSchedulesBtn.disabled = false;
+             saveSchedulesBtn.textContent = 'Save All Schedules';
+        }
+    }
+
+    // --- Settings Actions ---
     async function saveSettings() {
         const newDarkMode = darkModeToggle.checked;
         const newSelectedModel = modelSelect.value;
-        const llmSecurityToggle = document.getElementById('llm-link-security-toggle'); // Get the new toggle
-        const newLlmLinkSecurity = llmSecurityToggle ? llmSecurityToggle.checked : true; // Default to true if element not found yet
+        const llmSecurityToggle = document.getElementById('llm-link-security-toggle');
+        const newLlmLinkSecurity = llmSecurityToggle ? llmSecurityToggle.checked : true;
 
-        settingsError.textContent = ""; // Clear previous errors
+        settingsError.textContent = "";
 
         if (!newSelectedModel) {
             settingsError.textContent = "Please select a model.";
@@ -638,25 +806,24 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         const settingsToSave = {
-            darkMode: newDarkMode.toString(), // Save as string 'true'/'false'
+            darkMode: newDarkMode.toString(),
             selectedModel: newSelectedModel,
-            llmLinkSecurity: newLlmLinkSecurity.toString() // Save as string 'true'/'false'
+            llmLinkSecurity: newLlmLinkSecurity.toString()
         };
 
         try {
             const updatedSettings = await apiRequest('/api/settings', 'PUT', settingsToSave);
             if (updatedSettings) {
-                currentSettings = updatedSettings; // Update global state
+                currentSettings = updatedSettings;
                 applyDarkMode(currentSettings.darkMode === 'true');
-                // Update llmLinkSecurity toggle state visually
                  if (llmSecurityToggle) {
                     llmSecurityToggle.checked = currentSettings.llmLinkSecurity === 'true';
                  }
-                renderModelOptions( // Re-render options to ensure selection is correct
-                    Array.from(modelSelect.options).map(opt => opt.value), // Get current options
+                renderModelOptions(
+                    Array.from(modelSelect.options).map(opt => opt.value),
                     currentSettings.selectedModel
                 );
-                settingsModal.style.display = 'none'; // Close modal on success
+                settingsModal.style.display = 'none';
             } else {
                  settingsError.textContent = "Failed to save settings. Server response was empty.";
             }
@@ -665,22 +832,19 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-
     // --- UI Navigation ---
     function showSection(section) {
-        // Hide all main content sections first
         subforumNav.style.display = 'none';
         topicListSection.style.display = 'none';
         topicViewSection.style.display = 'none';
 
-        // Show the requested section(s)
         if (section === 'subforum-nav') {
             subforumNav.style.display = 'block';
         } else if (section === 'topic-list') {
-            subforumNav.style.display = 'block'; // Keep subforum nav visible
+            subforumNav.style.display = 'block';
             topicListSection.style.display = 'block';
         } else if (section === 'topic-view') {
-            subforumNav.style.display = 'block'; // Keep subforum nav visible
+            subforumNav.style.display = 'block';
             topicViewSection.style.display = 'block';
         }
     }
@@ -701,116 +865,111 @@ document.addEventListener('DOMContentLoaded', () => {
     backToTopicsBtn.addEventListener('click', (e) => {
         e.preventDefault();
         if (currentSubforumId) {
-            // Need the name again - ideally store it when loading topics
-            // Find the name from the link dataset if possible
             const subforumLink = subforumList.querySelector(`a[data-subforum-id="${currentSubforumId}"]`);
             const subforumName = subforumLink ? subforumLink.dataset.subforumName : 'Selected Subforum';
-            loadTopics(currentSubforumId, subforumName); // Reload topics for the current subforum
+            loadTopics(currentSubforumId, subforumName);
         } else {
-            showSection('subforum-nav'); // Fallback
+            showSection('subforum-nav');
         }
     });
 
-     // Schedule Modal Listeners
-    editScheduleBtn.addEventListener('click', () => {
-        scheduleError.textContent = ""; // Clear previous errors
+    // Schedule Modal Listeners
+    editScheduleBtn.addEventListener('click', async () => {
+        scheduleError.textContent = "";
+        statusDot.classList.remove('status-error'); // Clear potential error state on dot
+        statusDot.classList.add('status-loading');
+        statusIndicatorContainer.title = 'Schedule status: Loading...';
+        await loadSchedules(); // Load current schedules into modal before showing
         scheduleModal.style.display = 'block';
     });
 
-    closeBtn.addEventListener('click', () => {
+    scheduleCloseBtn.addEventListener('click', () => {
         scheduleModal.style.display = 'none';
     });
 
-    saveScheduleBtn.addEventListener('click', saveSchedule);
+    addScheduleRowBtn.addEventListener('click', addScheduleRow);
+    saveSchedulesBtn.addEventListener('click', saveSchedules);
+
+    // Settings Modal Listeners
+    settingsBtn.addEventListener('click', () => {
+        settingsError.textContent = "";
+        loadOllamaModels().then(() => {
+             settingsModal.style.display = 'block';
+        });
+    });
+
+    settingsCloseBtn.addEventListener('click', () => {
+        settingsModal.style.display = 'none';
+    });
+
+    saveSettingsBtn.addEventListener('click', saveSettings);
+
+    darkModeToggle.addEventListener('change', () => {
+        applyDarkMode(darkModeToggle.checked);
+    });
 
     // Close modals if clicking outside of them
     window.addEventListener('click', (event) => {
         if (event.target == scheduleModal) {
             scheduleModal.style.display = 'none';
         }
-        // Also close settings modal if clicking outside
         if (event.target == settingsModal) {
             settingsModal.style.display = 'none';
         }
     });
 
-// Settings Modal Listeners
-settingsBtn.addEventListener('click', () => {
-    settingsError.textContent = ""; // Clear previous errors
-    // Ensure model list and selection are up-to-date when opening
-    loadOllamaModels().then(() => {
-         settingsModal.style.display = 'block';
-    });
-});
-
-settingsCloseBtn.addEventListener('click', () => {
-    settingsModal.style.display = 'none';
-});
-
-saveSettingsBtn.addEventListener('click', saveSettings);
-
-// Apply dark mode immediately on toggle for better UX
-darkModeToggle.addEventListener('change', () => {
-    applyDarkMode(darkModeToggle.checked);
-});
-
-// --- Link Interception ---
-// Add event listener to the post list container
-postList.addEventListener('click', (event) => {
-    // Find the closest ancestor anchor tag
-    const link = event.target.closest('a');
-
-    // Check if it's an LLM link and if security is enabled
-    if (link && link.classList.contains('llm-link')) {
-         // Check global setting state
-        if (currentSettings.llmLinkSecurity === 'true') {
-            event.preventDefault(); // Stop the browser from navigating immediately
-            const url = link.href;
-            const text = link.textContent;
-            showLinkWarningPopup(url, text); // Show the custom warning
+    // Link Interception
+    postList.addEventListener('click', (event) => {
+        const link = event.target.closest('a');
+        if (link && link.classList.contains('llm-link')) {
+            if (currentSettings.llmLinkSecurity === 'true') {
+                event.preventDefault();
+                const url = link.href;
+                const text = link.textContent;
+                showLinkWarningPopup(url, text);
+            }
         }
-        // If security is disabled, do nothing and let the link proceed normally
+    });
+
+    // --- EasyMDE Configuration & Initialization ---
+    const easyMDEConfig = {
+        element: null,
+        spellChecker: false,
+        status: ["lines", "words"],
+        toolbar: [
+            "bold", "italic", "|",
+            "heading-1", "heading-2", "heading-3", "|",
+            "quote", "unordered-list", "ordered-list", "|",
+            "code", "link", "|",
+            "preview", "side-by-side", "fullscreen", "|",
+            "guide"
+        ],
+    };
+
+    if (newTopicContentInput) {
+        newTopicEditor = new EasyMDE({
+            ...easyMDEConfig,
+            element: newTopicContentInput
+        });
     }
-});
 
+    if (replyContentInput) {
+         replyEditor = new EasyMDE({
+            ...easyMDEConfig,
+            element: replyContentInput
+        });
+    }
 
-// --- EasyMDE Configuration & Initialization ---
-const easyMDEConfig = {
-    element: null, // Will be set per instance
-    spellChecker: false, // Disable spell checker
-    status: ["lines", "words"], // Show line and word count
-    toolbar: [
-        "bold", "italic", "|",
-        "heading-1", "heading-2", "heading-3", "|",
-        "quote", "unordered-list", "ordered-list", "|",
-        "code", "link", "|", // Supported features
-        "preview", "side-by-side", "fullscreen", "|", // Utility buttons
-        "guide" // Help
-    ],
-     // Ensure toolbar icons match supported features from md_plan.md
-     // Note: 'strikethrough', 'horizontal-rule', 'image', 'table' are excluded
-};
+    // --- Initial Load & Periodic Updates ---
+    function initialLoad() {
+        loadSubforums();
+        loadSettings(); // Loads settings, then models
+        loadCurrentStatus();
+        loadNextSchedule();
+        setInterval(loadCurrentStatus, 30000); // Update status every 30 seconds
+        setInterval(loadNextSchedule, 30000); // Update next schedule every 30 seconds
+    }
 
-// Initialize EasyMDE for New Topic
-if (newTopicContentInput) {
-    newTopicEditor = new EasyMDE({
-        ...easyMDEConfig,
-        element: newTopicContentInput
-    });
-}
-
-// Initialize EasyMDE for Reply
-if (replyContentInput) {
-     replyEditor = new EasyMDE({
-        ...easyMDEConfig,
-        element: replyContentInput
-    });
-}
-
-
-// --- Initial Load ---
-loadSubforums();
-loadSchedule();
-loadSettings(); // Load settings and models on page load
+    initialLoad();
 
 });
