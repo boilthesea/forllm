@@ -7,6 +7,8 @@ import datetime
 import requests
 import json # For settings
 from flask import Flask, request, jsonify, render_template, g, send_from_directory
+from markdown_it import MarkdownIt
+from bs4 import BeautifulSoup
 
 # --- Configuration ---
 DATABASE = 'forllm_data.db'
@@ -22,6 +24,15 @@ DEFAULT_MODEL = "llama3" # A sensible default
 # --- Flask App Initialization ---
 app = Flask(__name__, template_folder='templates', static_folder='static')
 app.config['SECRET_KEY'] = os.urandom(24) # For potential future session use
+
+# --- Markdown Setup ---
+# Configure markdown-it
+md = (
+    MarkdownIt('commonmark', {'breaks': True, 'html': False, 'linkify': True})
+    .enable('table')
+    # Add other plugins or rules as needed
+)
+
 
 # --- Database Setup ---
 def get_db():
@@ -123,6 +134,7 @@ def init_db():
         # Insert default settings if not present
         cursor.execute("INSERT OR IGNORE INTO settings (setting_key, setting_value) VALUES (?, ?)", ('darkMode', 'false'))
         cursor.execute("INSERT OR IGNORE INTO settings (setting_key, setting_value) VALUES (?, ?)", ('selectedModel', DEFAULT_MODEL))
+        cursor.execute("INSERT OR IGNORE INTO settings (setting_key, setting_value) VALUES (?, ?)", ('llmLinkSecurity', 'true')) # Added default
         print("Database schema verified/created.")
         db.commit() # Commit after initial schema creation/verification
     else:
@@ -140,6 +152,7 @@ def init_db():
             # Insert default settings only if table was just created
             cursor.execute("INSERT OR IGNORE INTO settings (setting_key, setting_value) VALUES (?, ?)", ('darkMode', 'false'))
             cursor.execute("INSERT OR IGNORE INTO settings (setting_key, setting_value) VALUES (?, ?)", ('selectedModel', DEFAULT_MODEL))
+            cursor.execute("INSERT OR IGNORE INTO settings (setting_key, setting_value) VALUES (?, ?)", ('llmLinkSecurity', 'true')) # Added default
             print("Settings table created with defaults.")
             db.commit() # Commit after creating settings table
         else:
@@ -523,8 +536,40 @@ def handle_posts(topic_id):
             )
             SELECT * FROM ThreadCTE ORDER BY sort_key;
         """, (topic_id, topic_id))
-        posts = cursor.fetchall()
-        return jsonify([dict(row) for row in posts])
+        posts_raw = cursor.fetchall()
+
+        processed_posts = []
+        for row in posts_raw:
+            post_dict = dict(row)
+            # Render markdown content to HTML
+            html_content = md.render(post_dict['content']) # Render raw markdown first
+
+            # Add security class to links if it's an LLM response
+            if post_dict.get('is_llm_response'): # Use .get for safety
+                try:
+                    # Use html.parser for robustness, less dependencies than lxml
+                    soup = BeautifulSoup(html_content, 'html.parser')
+                    links = soup.find_all('a')
+                    if links: # Only proceed if links are found
+                        link_modified = False
+                        for link in links:
+                            # Ensure 'class' attribute exists and is a list
+                            current_classes = link.get('class', [])
+                            if 'llm-link' not in current_classes:
+                                link['class'] = current_classes + ['llm-link']
+                                link_modified = True
+                        # Only convert back to string if modifications were made
+                        if link_modified:
+                            html_content = str(soup)
+                except Exception as e:
+                    # Log error but don't crash; use the originally rendered HTML
+                    print(f"Error parsing or modifying HTML for LLM post {post_dict.get('post_id', 'N/A')}: {e}")
+
+            # Replace original content TEXT with processed HTML string
+            post_dict['content'] = html_content
+            processed_posts.append(post_dict)
+
+        return jsonify(processed_posts)
 
 
 @app.route('/api/posts/<int:post_id>/request_llm', methods=['POST'])
@@ -636,11 +681,30 @@ def handle_settings():
         try:
             for key, value in data.items():
                 # Basic validation/sanitization could go here
-                if key in ['darkMode', 'selectedModel']: # Only allow known keys
-                     # Convert boolean strings for darkMode
-                    if key == 'darkMode':
-                        value = str(value).lower() # Store as string 'true' or 'false'
-                    cursor.execute("INSERT OR REPLACE INTO settings (setting_key, setting_value) VALUES (?, ?)", (key, value))
+                # Only process known keys to prevent injection
+                if key in ['darkMode', 'selectedModel', 'llmLinkSecurity']:
+                    processed_value = value # Default to original value
+                    # Convert boolean-like values to string 'true' or 'false' for DB consistency
+                    if key == 'darkMode' or key == 'llmLinkSecurity':
+                        if isinstance(value, bool):
+                            processed_value = 'true' if value else 'false'
+                        else:
+                            # Handle common string representations of boolean
+                            bool_val = str(value).strip().lower() in ['true', '1', 'yes', 'on']
+                            processed_value = 'true' if bool_val else 'false'
+                    elif key == 'selectedModel':
+                        # Basic validation: ensure it's a non-empty string?
+                        # More robust validation would check against available models if feasible here.
+                        processed_value = str(value).strip()
+                        if not processed_value:
+                             # Handle empty model selection if needed, maybe revert to default or raise error
+                             print(f"Warning: Attempted to save empty string for selectedModel.")
+                             continue # Skip saving this key if invalid
+
+                    # Use the processed_value for the database operation
+                    cursor.execute("INSERT OR REPLACE INTO settings (setting_key, setting_value) VALUES (?, ?)", (key, processed_value))
+                else:
+                    print(f"Warning: Ignoring unknown setting key during update: {key}")
             db.commit()
             # Fetch updated settings to return
             cursor.execute("SELECT setting_key, setting_value FROM settings")
@@ -655,8 +719,13 @@ def handle_settings():
             cursor.execute("SELECT setting_key, setting_value FROM settings")
             settings = {row['setting_key']: row['setting_value'] for row in cursor.fetchall()}
             # Ensure defaults if somehow missing
-            if 'darkMode' not in settings: settings['darkMode'] = 'false'
-            if 'selectedModel' not in settings: settings['selectedModel'] = DEFAULT_MODEL
+            # Ensure defaults are present if missing from DB
+            if 'darkMode' not in settings:
+                settings['darkMode'] = 'false'
+            if 'selectedModel' not in settings:
+                settings['selectedModel'] = DEFAULT_MODEL
+            if 'llmLinkSecurity' not in settings:
+                settings['llmLinkSecurity'] = 'true' # Ensure default is added if missing
             return jsonify(settings)
         except Exception as e:
             print(f"Error fetching settings: {e}")

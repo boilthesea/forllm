@@ -355,3 +355,139 @@ body.dark-mode #schedule-display {
 body.dark-mode .add-item-form {
      border-top-color: var(--post-border);
 }
+
+/* --- Markdown Element Styles --- */
+
+.post-content h1,
+.post-content h2,
+.post-content h3,
+.post-content h4,
+.post-content h5,
+.post-content h6 {
+margin-top: 1.2em;
+margin-bottom: 0.6em;
+font-weight: 600;
+color: var(--text-color, #333); /* Use CSS var for dark mode */
+}
+
+.post-content h1 { font-size: 1.8em; }
+.post-content h2 { font-size: 1.5em; }
+.post-content h3 { font-size: 1.3em; }
+.post-content h4 { font-size: 1.1em; }
+
+.post-content p {
+margin-bottom: 1em;
+}
+
+.post-content ul,
+.post-content ol {
+margin-left: 2em;
+margin-bottom: 1em;
+padding-left: 1em; /* Add padding for list markers */
+}
+
+.post-content li {
+margin-bottom: 0.4em;
+}
+
+.post-content blockquote {
+margin: 1em 0;
+padding: 0.5em 1em;
+border-left: 4px solid #ccc;
+background-color: #f9f9f9;
+color: #666;
+}
+
+body.dark-mode .post-content blockquote {
+border-left-color: var(--input-border, #777);
+background-color: var(--post-bg, #444);
+color: var(--post-meta-color, #bbb);
+}
+
+.post-content code:not(pre code) { /* Inline code */
+background-color: #eee;
+padding: 0.2em 0.4em;
+border-radius: 3px;
+font-family: monospace;
+font-size: 0.9em;
+color: #c7254e; /* Bootstrap-like color */
+}
+
+body.dark-mode .post-content code:not(pre code) {
+background-color: var(--input-bg, #555);
+color: #ff8b8b; /* Lighter red for dark mode */
+}
+
+.post-content pre {
+background-color: #f5f5f5;
+border: 1px solid #ccc;
+border-radius: 4px;
+padding: 1em;
+overflow-x: auto; /* Allow horizontal scrolling for long lines */
+margin-bottom: 1em;
+font-size: 0.9em;
+line-height: 1.4;
+}
+
+.post-content pre code {
+padding: 0;
+background-color: transparent;
+border: none;
+color: inherit; /* Inherit color from pre */
+font-size: inherit; /* Inherit size from pre */
+}
+
+body.dark-mode .post-content pre {
+background-color: #2d2d2d; /* Darker background for code blocks */
+border-color: var(--input-border, #777);
+color: #ccc; /* Default text color in code block */
+}
+
+/* Basic Pygments Syntax Highlighting Styles (Adapt as needed) */
+/* These are generic, specific themes might require more classes */
+.post-content .highlight .k { color: #0077aa; font-weight: bold; } /* Keyword */
+.post-content .highlight .s, .post-content .highlight .s1, .post-content .highlight .s2 { color: #dd1144; } /* String */
+.post-content .highlight .c, .post-content .highlight .c1 { color: #999988; font-style: italic; } /* Comment */
+.post-content .highlight .o { color: #aa22ff; font-weight: bold; } /* Operator */
+.post-content .highlight .nf { color: #990000; } /* Function name */
+.post-content .highlight .n { color: #333; } /* Name */
+.post-content .highlight .mi { color: #009999; } /* Number.Integer */
+
+body.dark-mode .post-content .highlight .k { color: #569cd6; }
+body.dark-mode .post-content .highlight .s, body.dark-mode .post-content .highlight .s1, body.dark-mode .post-content .highlight .s2 { color: #ce9178; }
+body.dark-mode .post-content .highlight .c, body.dark-mode .post-content .highlight .c1 { color: #6a9955; }
+body.dark-mode .post-content .highlight .o { color: #d4d4d4; }
+body.dark-mode .post-content .highlight .nf { color: #dcdcaa; }
+body.dark-mode .post-content .highlight .n { color: #d4d4d4; }
+body.dark-mode .post-content .highlight .mi { color: #b5cea8; }
+
+/* --- Link Security Popup Styles --- */
+.link-warning-content {
+max-width: 600px; /* Slightly wider for better readability */
+}
+
+.link-warning-content .link-url {
+word-break: break-all; /* Break long URLs */
+font-family: monospace;
+font-size: 0.9em;
+background-color: #eee;
+padding: 0.1em 0.3em;
+border-radius: 2px;
+}
+
+body.dark-mode .link-warning-content .link-url {
+background-color: var(--input-bg, #555);
+color: var(--input-text, #eee);
+}
+
+.link-warning-content p strong { /* Make nested strong tags stand out */
+color: var(--text-color, #333);
+}
+
+body.dark-mode .link-warning-content p strong {
+color: var(--text-color, #eee);
+}
+
+.link-warning-content p:last-of-type { /* Spacing before buttons */
+margin-bottom: 1.5rem;
+}
