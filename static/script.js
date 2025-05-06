@@ -3,6 +3,8 @@ document.addEventListener('DOMContentLoaded', () => {
     let currentSubforumId = null;
     let currentTopicId = null;
     let currentPosts = []; // Store posts for the current topic to build threads
+    let newTopicEditor = null; // To hold the EasyMDE instance for new topics
+    let replyEditor = null; // To hold the EasyMDE instance for replies
 
     // --- DOM Elements ---
     const subforumNav = document.getElementById('subforum-nav');
@@ -482,7 +484,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
     async function addTopic() {
         const title = newTopicTitleInput.value.trim();
-        const content = newTopicContentInput.value.trim();
+        // Get content from EasyMDE editor
+        const content = newTopicEditor ? newTopicEditor.value().trim() : newTopicContentInput.value.trim(); // Fallback if editor not init
         if (!title || !content) {
             alert('Please enter both a title and content for the new topic.');
             return;
@@ -514,7 +517,12 @@ document.addEventListener('DOMContentLoaded', () => {
                  topicList.appendChild(li); // Add to top or bottom? Maybe bottom for now.
 
                 newTopicTitleInput.value = '';
-                newTopicContentInput.value = '';
+                // Clear EasyMDE editor
+                if (newTopicEditor) {
+                    newTopicEditor.value('');
+                } else {
+                    newTopicContentInput.value = ''; // Fallback
+                }
             }
         } catch (error) {
             // Error already handled by apiRequest
@@ -523,19 +531,35 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function showReplyForm(postId) {
         replyToPostIdSpan.textContent = postId;
-        replyContentInput.value = ''; // Clear previous content
+        // Clear EasyMDE editor
+        if (replyEditor) {
+            replyEditor.value('');
+        } else {
+            replyContentInput.value = ''; // Fallback
+        }
         replyFormContainer.style.display = 'block';
-        replyContentInput.focus();
+        // Focus the editor instance if available
+        if (replyEditor) {
+            replyEditor.codemirror.focus();
+        } else {
+            replyContentInput.focus(); // Fallback
+        }
     }
 
     function hideReplyForm() {
         replyFormContainer.style.display = 'none';
         replyToPostIdSpan.textContent = '';
-        replyContentInput.value = '';
+        // Clear EasyMDE editor
+        if (replyEditor) {
+            replyEditor.value('');
+        } else {
+            replyContentInput.value = ''; // Fallback
+        }
     }
 
     async function submitReply() {
-        const content = replyContentInput.value.trim();
+        // Get content from EasyMDE editor
+        const content = replyEditor ? replyEditor.value().trim() : replyContentInput.value.trim(); // Fallback
         const parentPostId = parseInt(replyToPostIdSpan.textContent, 10);
 
         if (!content) {
@@ -748,6 +772,40 @@ postList.addEventListener('click', (event) => {
         // If security is disabled, do nothing and let the link proceed normally
     }
 });
+
+
+// --- EasyMDE Configuration & Initialization ---
+const easyMDEConfig = {
+    element: null, // Will be set per instance
+    spellChecker: false, // Disable spell checker
+    status: ["lines", "words"], // Show line and word count
+    toolbar: [
+        "bold", "italic", "|",
+        "heading-1", "heading-2", "heading-3", "|",
+        "quote", "unordered-list", "ordered-list", "|",
+        "code", "link", "|", // Supported features
+        "preview", "side-by-side", "fullscreen", "|", // Utility buttons
+        "guide" // Help
+    ],
+     // Ensure toolbar icons match supported features from md_plan.md
+     // Note: 'strikethrough', 'horizontal-rule', 'image', 'table' are excluded
+};
+
+// Initialize EasyMDE for New Topic
+if (newTopicContentInput) {
+    newTopicEditor = new EasyMDE({
+        ...easyMDEConfig,
+        element: newTopicContentInput
+    });
+}
+
+// Initialize EasyMDE for Reply
+if (replyContentInput) {
+     replyEditor = new EasyMDE({
+        ...easyMDEConfig,
+        element: replyContentInput
+    });
+}
 
 
 // --- Initial Load ---
