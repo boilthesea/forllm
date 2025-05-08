@@ -8,15 +8,6 @@
 <link rel="stylesheet" href="https://unpkg.com/easymde/dist/easymde.min.css">
 </head>
 <body>
-    <header>
-        <h1>FORLLM</h1>
-        <p>Asynchronous Forum for Local LLM Interaction</p>
-        <div id="schedule-display">
-            Next schedule: Loading...
-        </div>
-        <button id="edit-schedule-btn">Edit Schedules</button> <!-- Renamed -->
-        <button id="settings-btn">Settings</button>
-    </header>
 
     <!-- Schedule Modal (Redesigned for Multiple Schedules) -->
     <div id="schedule-modal" class="modal" style="display: none;">
@@ -84,6 +75,15 @@
 
     <main>
         <nav id="subforum-nav">
+            <h1>FORLLM</h1>
+            <p id="site-subtitle">Asynchronous Forum for Local LLM Interaction</p>
+            <div id="schedule-display">
+                Next schedule: Loading...
+            </div>
+            <button id="edit-schedule-btn">Edit Schedules</button>
+            <button id="settings-btn">Settings</button>
+            <button id="queue-btn">Queue</button>
+            <hr class="sidebar-separator">
             <h2>Subforums</h2>
             <ul id="subforum-list">
                 <!-- Subforums will be loaded here -->
@@ -95,11 +95,16 @@
                 <input type="text" id="new-subforum-name" placeholder="New subforum name">
                 <button id="add-subforum-btn">Add Subforum</button>
             </div>
+            <div id="processing-status-indicator-container" title="Schedule status: Loading...">
+                <div class="status-dot-background">
+                     <div id="processing-status-dot" class="status-dot status-loading"></div>
+                </div>
+            </div>
         </nav>
 
         <section id="topic-list-section" style="display: none;">
             <h2 id="current-subforum-name"></h2>
-            <button id="back-to-subforums-btn">< Back to Subforums</button>
+            <button id="back-to-subforums-btn">< Exit</button>
             <h3>Topics</h3>
             <ul id="topic-list">
                 <!-- Topics will be loaded here -->
@@ -127,21 +132,27 @@
              </div>
         </section>
 
+        <section id="settings-page-section" style="display: none;">
+            <h2>Settings</h2>
+            <button id="exit-settings-btn" class="exit-section-btn">< Exit</button>
+            <div id="settings-page-content">
+                <!-- Settings content will be loaded here by JS -->
+            </div>
+        </section>
+
+        <section id="queue-page-section" style="display: none;">
+            <h2>Queue</h2>
+            <button id="exit-queue-btn" class="exit-section-btn">< Exit</button>
+            <div id="queue-page-content">
+                <!-- Queue content will be loaded here by JS -->
+            </div>
+        </section>
     </main>
 
-    <footer>
-        <p>FORLLM MVP</p>
-    </footer>
 
     <script src="{{ url_for('static', filename='script.js') }}"></script>
     <script src="https://unpkg.com/easymde/dist/easymde.min.js"></script>
 
-    <!-- Fixed Status Indicator -->
-    <div id="processing-status-indicator-container" title="Schedule status: Loading...">
-        <div class="status-dot-background">
-             <div id="processing-status-dot" class="status-dot status-loading"></div> <!-- Start with loading state -->
-        </div>
-    </div>
 
 </body>
 </html>

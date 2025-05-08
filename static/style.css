@@ -1,23 +1,17 @@
+/* @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap'); */ /* Example Font */
+
 body {
-    font-family: sans-serif;
+    /* font-family: 'Inter', sans-serif; */ /* Uncomment after choosing a font */
+    font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, "Open Sans", "Helvetica Neue", sans-serif;
     line-height: 1.6;
     margin: 0;
     padding: 0;
     background-color: #f4f4f4;
     color: #333;
+    font-size: 16px; /* Base font size */
 }
 
-header {
-    background-color: #333;
-    color: #fff;
-    padding: 1rem 0;
-    text-align: center;
-    margin-bottom: 1rem;
-}
-
-header h1 {
-    margin: 0;
-}
+/* Header styles removed as element is deleted */
 
 main {
     display: flex;
@@ -28,12 +22,41 @@ main {
 }
 
 nav#subforum-nav {
-    flex: 1;
+    flex: 0 0 280px; /* Fixed width for the sidebar */
     background: #fff;
-    padding: 1rem;
-    border-radius: 5px;
-    box-shadow: 0 0 5px rgba(0,0,0,0.1);
-    align-self: flex-start; /* Keep nav from stretching */
+    padding: 1.5rem; /* Increased padding */
+    border-right: 1px solid #e0e0e0; /* Subtle border */
+    box-shadow: 2px 0 5px rgba(0,0,0,0.05); /* Softer shadow */
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh; /* Make sidebar full height */
+    max-height: 100vh; /* Ensure it doesn't exceed viewport */
+    overflow-y: auto; /* Allow sidebar to scroll if content overflows */
+    position: relative; /* For positioning status indicator */
+}
+
+nav#subforum-nav h1 {
+    font-size: 1.8em;
+    margin-bottom: 0.2em;
+    color: #333; /* Matches general heading color */
+}
+
+#site-subtitle {
+    font-size: 0.65em; /* Reduced font size */
+    color: #666;
+    margin-top: -0.5em;
+    margin-bottom: 1.5em;
+}
+
+nav#subforum-nav button { /* Specificity for buttons inside the nav if needed */
+    margin-bottom: 0.75rem; /* Spacing between sidebar buttons */
+    width: 100%; /* Make sidebar buttons full width */
+}
+
+hr.sidebar-separator {
+    border: none;
+    border-top: 1px solid #eee;
+    margin: 1.5rem 0;
 }
 
 section {
@@ -66,18 +89,71 @@ a:hover {
     text-decoration: underline;
 }
 
-button {
-    background-color: #3498db;
-    color: white;
-    border: none;
-    padding: 0.5rem 1rem;
-    border-radius: 3px;
+button,
+input[type="submit"],
+input[type="button"] {
+    background: linear-gradient(to bottom, #f9f9f9 0%, #e0e0e0 100%); /* Light silver gradient */
+    color: #333; /* Dark text for light buttons */
+    border: 1px solid #ccc; /* Subtle border */
+    padding: 0.6rem 1.2rem; /* Increased padding */
+    border-radius: 6px; /* More rounded */
     cursor: pointer;
     margin-top: 0.5rem;
+    font-size: 0.95em;
+    font-weight: 500;
+    transition: background 0.2s ease, box-shadow 0.2s ease, transform 0.1s ease;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.05);
 }
 
-button:hover {
-    background-color: #2980b9;
+button:hover,
+input[type="submit"]:hover,
+input[type="button"]:hover {
+    background: linear-gradient(to bottom, #ffffff 0%, #e8e8e8 100%); /* Slightly lighter on hover */
+    border-color: #bbb;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.08);
+}
+
+button:active,
+input[type="submit"]:active,
+input[type="button"]:active {
+    background: linear-gradient(to bottom, #dcdcdc 0%, #c8c8c8 100%); /* Pressed effect */
+    box-shadow: inset 0 1px 2px rgba(0,0,0,0.1);
+    transform: translateY(1px);
+}
+
+/* Specific button types that should retain brand color or semantic colors */
+/* Example: A primary action button could be styled differently if needed */
+/* .button-primary { background: #3498db; color: white; ... } */
+
+/* Delete/Remove buttons (like in schedule modal) */
+.delete-schedule-btn, #add-schedule-row-btn { /* Keep existing semantic colors for these */
+    /* These will be overridden by the general button style above. */
+    /* We need to re-apply their specific colors with higher specificity or adjust. */
+    /* For now, let's assume they get the silver style and we'll refine if needed. */
+}
+/* Re-styling for delete/add to ensure they stand out if desired */
+.schedule-row .delete-schedule-btn,
+#add-schedule-row-btn {
+    background: #e74c3c; /* Red for delete */
+    color: white;
+    border: 1px solid #d62c1a;
+}
+.schedule-row .delete-schedule-btn:hover {
+    background: #c0392b;
+}
+#add-schedule-row-btn {
+    background: #2ecc71; /* Green for add */
+    color: white;
+    border: 1px solid #25a25a;
+}
+#add-schedule-row-btn:hover {
+    background: #27ae60;
+}
+
+/* Exit buttons for new sections */
+.exit-section-btn {
+    margin-bottom: 1rem;
+    /* Uses general button styling */
 }
 
 input[type="text"], textarea {
@@ -149,13 +225,7 @@ textarea {
     background-color: #f0f0f0;
 }
 
-footer {
-    text-align: center;
-    margin-top: 2rem;
-    padding: 1rem;
-    background-color: #ddd;
-    color: #333;
-}
+/* Footer styles removed as element is deleted */
 
 /* Modal Styles */
 .modal {
@@ -206,9 +276,13 @@ footer {
 }
 
 #schedule-display {
-    margin-top: 0.5rem;
-    font-size: 0.9em;
-    color: #ccc;
+    font-size: 0.85em; /* Slightly smaller */
+    color: #555; /* Darker for better readability on white */
+    margin-bottom: 1em;
+    padding: 0.5em;
+    background-color: #f9f9f9;
+    border-radius: 4px;
+    border: 1px solid #eee;
 }
 
 /* Schedule Modal Specific Styles */
@@ -373,9 +447,7 @@ input:checked + .slider:before {
     border-radius: 3px;
 }
 
-#settings-btn { /* Style settings button like schedule button */
-    margin-left: 1rem;
-}
+/* #settings-btn specific style removed, covered by general button or nav button styles */
 
 
 /* Dark Mode Styles */
@@ -393,8 +465,8 @@ body.dark-mode {
     --llm-response-border: #1abc9c;
     --llm-meta-color: #1abc9c;
     --link-color: #5dade2;
-    --button-bg: #5dade2;
-    --button-hover-bg: #3498db;
+    --button-bg: #5dade2; /* This is now the DARK mode button base color */
+    --button-hover-bg: #3498db; /* This is now the DARK mode button hover color */
     --input-bg: #555;
     --input-border: #777;
     --input-text: #eee;
@@ -411,17 +483,26 @@ body.dark-mode {
     color: var(--text-color);
 }
 
-body.dark-mode header {
-    background-color: var(--header-bg);
-    color: var(--header-text);
+body.dark-mode header { /* Keep for potential future use? Or remove? Removed for now */
+    /* background-color: var(--header-bg); */
+    /* color: var(--header-text); */
+}
+body.dark-mode nav#subforum-nav h1 {
+    color: var(--text-color);
 }
 
 body.dark-mode nav#subforum-nav,
 body.dark-mode section {
     background: var(--nav-bg);
     box-shadow: 0 0 5px rgba(255,255,255,0.1);
+    border-right-color: var(--post-border); /* Adjust border for dark mode */
+}
+body.dark-mode nav#subforum-nav {
+     border-right-color: var(--post-border);
 }
 
+
+body.dark-mode h1,
 body.dark-mode h2,
 body.dark-mode h3,
 body.dark-mode h4 {
@@ -432,14 +513,51 @@ body.dark-mode a {
     color: var(--link-color);
 }
 
-body.dark-mode button {
-    background-color: var(--button-bg);
-    color: var(--header-text); /* Usually white/light */
+/* Dark mode general button override */
+body.dark-mode button,
+body.dark-mode input[type="submit"],
+body.dark-mode input[type="button"] {
+    background: linear-gradient(to bottom, #5a5a5a 0%, #484848 100%); /* Dark silver gradient */
+    color: var(--text-color, #eee);
+    border-color: #666;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.3);
 }
 
-body.dark-mode button:hover {
-    background-color: var(--button-hover-bg);
+body.dark-mode button:hover,
+body.dark-mode input[type="submit"]:hover,
+body.dark-mode input[type="button"]:hover {
+    background: linear-gradient(to bottom, #626262 0%, #505050 100%);
+    border-color: #777;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.4);
 }
+
+body.dark-mode button:active,
+body.dark-mode input[type="submit"]:active,
+body.dark-mode input[type="button"]:active {
+    background: linear-gradient(to bottom, #454545 0%, #383838 100%);
+    box-shadow: inset 0 1px 2px rgba(0,0,0,0.5);
+    border-color: #555;
+}
+
+/* Dark mode semantic buttons need overrides too */
+body.dark-mode .schedule-row .delete-schedule-btn,
+body.dark-mode #add-schedule-row-btn {
+    background: #c0392b; /* Darker Red */
+    color: white;
+    border: 1px solid #a03021;
+}
+body.dark-mode .schedule-row .delete-schedule-btn:hover {
+    background: #a03021;
+}
+body.dark-mode #add-schedule-row-btn {
+    background: #27ae60; /* Darker Green */
+    color: white;
+    border: 1px solid #1f8a4c;
+}
+body.dark-mode #add-schedule-row-btn:hover {
+    background: #1f8a4c;
+}
+
 
 body.dark-mode input[type="text"],
 body.dark-mode textarea,
@@ -478,9 +596,9 @@ body.dark-mode #reply-form-container {
     border-color: var(--input-border);
 }
 
-body.dark-mode footer {
-    background-color: var(--footer-bg);
-    color: var(--footer-text);
+body.dark-mode footer { /* Keep for potential future use? Or remove? Removed for now */
+    /* background-color: var(--footer-bg); */
+    /* color: var(--footer-text); */
 }
 
 body.dark-mode .modal-content {
@@ -500,6 +618,8 @@ body.dark-mode .close-btn:focus {
 
 body.dark-mode #schedule-display {
     color: var(--schedule-display-color);
+    background-color: #2e2e2e; /* Darker background for schedule display */
+    border-color: var(--post-border);
 }
 
 body.dark-mode .schedule-row {
@@ -529,17 +649,18 @@ body.dark-mode .add-item-form {
 }
 
 
-/* --- Fixed Status Indicator --- */
+/* --- Status Indicator (Relocated) --- */
 #processing-status-indicator-container {
-    position: fixed;
-    bottom: 20px;
-    right: 20px;
-    z-index: 1000; /* Ensure it's above other content */
-    padding: 5px; /* Space for the gray background area */
-    border-radius: 50%; /* Make the background area round */
-    background-color: rgba(128, 128, 128, 0.7); /* Medium gray, slightly transparent */
+    position: absolute; /* Positioned relative to nav#subforum-nav */
+    bottom: 1.5rem;     /* Consistent with sidebar padding */
+    right: 1.5rem;      /* Consistent with sidebar padding */
+    padding: 5px;
+    border-radius: 50%;
+    background-color: rgba(128, 128, 128, 0.7);
     box-shadow: 0 0 8px rgba(0,0,0,0.3);
-    cursor: default; /* Indicate it's not clickable but has a tooltip */
+    cursor: default;
+    margin-top: auto; /* Push to bottom if sidebar content is short */
+    /* z-index might not be needed or can be lower if only within sidebar */
 }
 
 /* Removed empty .status-dot-background ruleset */
@@ -854,28 +975,48 @@ margin-bottom: 1.5rem;
 
 /* Toolbar */
 .editor-toolbar {
-   border: 1px solid #ccc;
+   border: 1px solid var(--input-border, #ccc);
    border-bottom: none;
    border-top-left-radius: 3px;
    border-top-right-radius: 3px;
-   background-color: #f9f9f9; /* Light mode toolbar background */
-   padding: 4px; /* Add some padding */
+   background-color: var(--input-bg, #f0f0f0); /* Slightly off-white for toolbar itself */
+   padding: 4px;
 }
 
 .editor-toolbar button {
-   color: #333 !important; /* Ensure buttons are visible in light mode */
-   border: 1px solid transparent; /* Remove default borders */
-   margin: 0 2px; /* Spacing */
+    background: linear-gradient(to bottom, #fdfdfd 0%, #e9e9e9 100%) !important;
+    color: #333 !important;
+    border: 1px solid #c5c5c5 !important;
+    padding: 0.3rem 0.6rem !important;
+    border-radius: 4px !important;
+    cursor: pointer;
+    margin: 2px !important;
+    font-size: 0.9em !important;
+    box-shadow: 0 1px 1px rgba(0,0,0,0.06) !important;
+    transition: background 0.2s ease, box-shadow 0.2s ease, transform 0.1s ease !important;
+    height: auto !important;
+    line-height: normal !important;
+    vertical-align: middle !important; /* Better icon alignment */
 }
 
 .editor-toolbar button:hover {
-   background: #eee; /* Light hover */
-   border-color: #ddd;
+    background: linear-gradient(to bottom, #ffffff 0%, #f0f0f0 100%) !important;
+    border-color: #b5b5b5 !important;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.1) !important;
 }
 
-.editor-toolbar button.active {
-   background: #e0e0e0; /* Active button */
-   border-color: #ccc;
+.editor-toolbar button.active,
+.editor-toolbar button:active { /* Combined active and :active for consistency */
+    background: linear-gradient(to bottom, #e0e0e0 0%, #d0d0d0 100%) !important;
+    box-shadow: inset 0 1px 2px rgba(0,0,0,0.12) !important;
+    border-color: #adadad !important;
+    transform: translateY(1px) !important;
+}
+
+/* Ensure icons are visible and aligned */
+.editor-toolbar button i.fa {
+    color: #333 !important;
+    vertical-align: middle !important;
 }
 
 /* Status Bar */
@@ -898,22 +1039,32 @@ body.dark-mode .EasyMDEContainer .CodeMirror {
 }
 
 body.dark-mode .editor-toolbar {
-   border-color: var(--input-border, #777);
-   background-color: var(--nav-bg, #333); /* Match nav background */
+   border-color: var(--input-border, #505050);
+   background-color: var(--nav-bg, #2e2e2e); /* Darker toolbar bg */
 }
 
 body.dark-mode .editor-toolbar button {
-   color: var(--text-color, #eee) !important; /* Ensure buttons visible in dark mode */
+    background: linear-gradient(to bottom, #4a4a4a 0%, #3c3c3c 100%) !important; /* Dark silver gradient */
+    color: var(--text-color, #ddd) !important;
+    border-color: var(--input-border, #585858) !important;
+    box-shadow: 0 1px 1px rgba(0,0,0,0.25) !important;
 }
 
 body.dark-mode .editor-toolbar button:hover {
-   background: #444; /* Dark hover */
-   border-color: #555;
+    background: linear-gradient(to bottom, #525252 0%, #454545 100%) !important;
+    border-color: var(--input-border, #606060) !important;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.35) !important;
 }
 
-body.dark-mode .editor-toolbar button.active {
-   background: #555; /* Dark active button */
-   border-color: #666;
+body.dark-mode .editor-toolbar button.active,
+body.dark-mode .editor-toolbar button:active {
+    background: linear-gradient(to bottom, #3a3a3a 0%, #2f2f2f 100%) !important;
+    box-shadow: inset 0 1px 2px rgba(0,0,0,0.4) !important;
+    border-color: var(--input-border, #484848) !important;
+}
+
+body.dark-mode .editor-toolbar button i.fa {
+    color: var(--text-color, #ddd) !important;
 }
 
 body.dark-mode .editor-statusbar {
@@ -934,4 +1085,42 @@ hr {
 }
 body.dark-mode hr {
    border-top-color: var(--input-border, #777);
+}
+
+
+/* Styling for new page sections */
+#settings-page-section,
+#queue-page-section {
+    flex: 3; /* Same as other content sections */
+    background: var(--section-bg, #fff);
+    padding: 1.5rem; /* Consistent padding */
+    border-radius: 5px;
+    box-shadow: 0 0 5px rgba(0,0,0,0.1);
+    /* display: none; is handled inline or by JS */
+}
+
+#settings-page-section h2,
+#queue-page-section h2 {
+    color: var(--text-color, #333);
+    margin-top: 0; /* Remove default margin for h2 if it's the first child */
+    margin-bottom: 1.5rem;
+}
+
+#settings-page-content,
+#queue-page-content {
+    height: calc(100% - 5.5em); /* Adjust based on h2 (font-size + margin-bottom) and button (font-size + padding + margin) height, approx */
+    overflow-y: auto;
+}
+
+
+/* Dark mode for new sections */
+body.dark-mode #settings-page-section,
+body.dark-mode #queue-page-section {
+    background: var(--section-bg, #333);
+    box-shadow: 0 0 5px rgba(255,255,255,0.1);
+}
+
+body.dark-mode #settings-page-section h2,
+body.dark-mode #queue-page-section h2 {
+    color: var(--text-color, #eee);
 }
