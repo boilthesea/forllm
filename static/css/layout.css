@@ -1,0 +1,104 @@
+main {
+    display: flex;
+    gap: 1rem;
+    padding: 1rem;
+    max-width: 1200px;
+    margin: auto;
+}
+
+nav#subforum-nav {
+    flex: 0 0 280px; /* Fixed width for the sidebar */
+    background: #fff;
+    padding: 1.5rem; /* Increased padding */
+    border-right: 1px solid #e0e0e0; /* Subtle border */
+    box-shadow: 2px 0 5px rgba(0,0,0,0.05); /* Softer shadow */
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh; /* Make sidebar full height */
+    max-height: 100vh; /* Ensure it doesn't exceed viewport */
+    overflow-y: auto; /* Allow sidebar to scroll if content overflows */
+    position: relative; /* For positioning status indicator */
+}
+
+nav#subforum-nav h1 {
+    font-size: 1.8em;
+    margin-bottom: 0.2em;
+    color: #333; /* Matches general heading color */
+}
+
+#site-subtitle {
+    font-size: 0.65em; /* Reduced font size */
+    color: #666;
+    margin-top: -0.5em;
+    margin-bottom: 1.5em;
+}
+
+hr.sidebar-separator {
+    border: none;
+    border-top: 1px solid #eee;
+    margin: 1.5rem 0;
+}
+
+section {
+    flex: 3;
+    background: #fff;
+    padding: 1rem;
+    border-radius: 5px;
+    box-shadow: 0 0 5px rgba(0,0,0,0.1);
+}
+
+/* Styling for new page sections */
+#settings-page-section,
+#queue-page-section {
+    flex: 3; /* Same as other content sections */
+    background: var(--section-bg, #fff);
+    padding: 1.5rem; /* Consistent padding */
+    border-radius: 5px;
+    box-shadow: 0 0 5px rgba(0,0,0,0.1);
+    /* display: none; is handled inline or by JS */
+}
+
+#settings-page-section h2,
+#queue-page-section h2 {
+    color: var(--text-color, #333);
+    margin-top: 0; /* Remove default margin for h2 if it's the first child */
+    margin-bottom: 1.5rem;
+}
+
+#settings-page-content,
+#queue-page-content {
+    height: calc(100% - 5.5em); /* Adjust based on h2 (font-size + margin-bottom) and button (font-size + padding + margin) height, approx */
+    overflow-y: auto;
+}
+
+/* Dark Mode Styles */
+body.dark-mode nav#subforum-nav h1 {
+    color: var(--text-color);
+}
+
+body.dark-mode nav#subforum-nav,
+body.dark-mode section {
+    background: var(--nav-bg);
+    box-shadow: 0 0 5px rgba(255,255,255,0.1);
+    border-right-color: var(--post-border); /* Adjust border for dark mode */
+}
+
+body.dark-mode nav#subforum-nav {
+     border-right-color: var(--post-border);
+}
+
+body.dark-mode #reply-form-container {
+    background-color: var(--nav-bg); /* Match nav/section bg */
+    border-color: var(--input-border);
+}
+
+body.dark-mode #settings-page-section,
+body.dark-mode #queue-page-section {
+    background: var(--section-bg, #333);
+    box-shadow: 0 0 5px rgba(255,255,255,0.1);
+}
+
+body.dark-mode #settings-page-section h2,
+body.dark-mode #queue-page-section h2 {
+    color: var(--text-color, #eee);
+}

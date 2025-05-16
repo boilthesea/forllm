@@ -1,0 +1,176 @@
+/* Modal Styles */
+.modal {
+    position: fixed;
+    z-index: 1;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    overflow: auto;
+    background-color: rgba(0,0,0,0.4);
+}
+
+.modal-content {
+    background-color: #fefefe;
+    margin: 15% auto;
+    padding: 20px;
+    border: 1px solid #888;
+    width: 80%;
+    max-width: 500px; /* Default max-width */
+    border-radius: 5px;
+}
+
+/* Wider modal for schedules */
+.schedule-modal-content {
+    max-width: 700px;
+}
+
+
+.close-btn {
+    color: #aaa;
+    float: right;
+    font-size: 28px;
+    font-weight: bold;
+}
+
+.close-btn:hover,
+.close-btn:focus {
+    color: black;
+    text-decoration: none;
+    cursor: pointer;
+}
+
+.error-message {
+    color: red;
+    font-size: 0.9em;
+    margin-top: 0.5rem;
+}
+
+#schedule-display {
+    font-size: 0.85em; /* Slightly smaller */
+    color: #555; /* Darker for better readability on white */
+    margin-bottom: 1em;
+    padding: 0.5em;
+    background-color: #f9f9f9;
+    border-radius: 4px;
+    border: 1px solid #eee;
+}
+
+/* Schedule Modal Specific Styles */
+#schedule-list-container {
+    max-height: 40vh; /* Limit height and make scrollable if many schedules */
+    overflow-y: auto;
+    margin-bottom: 1rem;
+    padding-right: 10px; /* Space for scrollbar */
+}
+
+.schedule-row {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.75rem;
+    border: 1px solid #eee;
+    border-radius: 4px;
+    margin-bottom: 0.75rem;
+    background-color: #f9f9f9;
+}
+
+.schedule-row .time-inputs {
+    display: flex;
+    align-items: center;
+    gap: 0.3rem;
+}
+.schedule-row .time-inputs input[type="number"] {
+    width: 50px; /* Smaller width for hour inputs */
+    padding: 0.4rem;
+    text-align: center;
+}
+
+.schedule-row .days-selector {
+    display: flex;
+    gap: 0.3rem;
+    border: 1px solid #ccc;
+    padding: 0.3rem 0.5rem;
+    border-radius: 3px;
+    flex-wrap: wrap; /* Allow days to wrap if not enough space */
+}
+.schedule-row .days-selector label {
+    display: inline-flex; /* Align checkbox and text */
+    align-items: center;
+    font-size: 0.9em;
+    cursor: pointer;
+}
+.schedule-row .days-selector input[type="checkbox"] {
+    margin-right: 0.2rem;
+}
+
+/* Link Security Popup Styles */
+.link-warning-content {
+    max-width: 600px; /* Slightly wider for better readability */
+}
+
+.link-warning-content .link-url {
+    word-break: break-all; /* Break long URLs */
+    font-family: monospace;
+    font-size: 0.9em;
+    background-color: #eee;
+    padding: 0.1em 0.3em;
+    border-radius: 2px;
+}
+
+.link-warning-content p strong { /* Make nested strong tags stand out */
+    color: var(--text-color, #333);
+}
+
+.link-warning-content p:last-of-type { /* Spacing before buttons */
+    margin-bottom: 1.5rem;
+}
+
+
+/* Dark Mode Styles */
+body.dark-mode .modal-content {
+    background-color: var(--modal-bg);
+    border-color: var(--modal-border);
+    color: var(--modal-text);
+}
+
+body.dark-mode .close-btn {
+    color: var(--close-btn-color);
+}
+
+body.dark-mode .close-btn:hover,
+body.dark-mode .close-btn:focus {
+    color: var(--close-btn-hover-color);
+}
+
+body.dark-mode #schedule-display {
+    color: var(--schedule-display-color);
+    background-color: #2e2e2e; /* Darker background for schedule display */
+    border-color: var(--post-border);
+}
+
+body.dark-mode .schedule-row {
+    background-color: var(--post-bg, #444);
+    border-color: var(--post-border, #555);
+}
+body.dark-mode .schedule-row .time-inputs input[type="number"] {
+    background-color: var(--input-bg, #555);
+    border-color: var(--input-border, #777);
+    color: var(--input-text, #eee);
+}
+body.dark-mode .schedule-row .days-selector {
+    border-color: var(--input-border, #777);
+    color: var(--text-color, #eee);
+}
+body.dark-mode .schedule-row .days-selector label {
+    color: var(--text-color, #eee);
+}
+
+body.dark-mode .link-warning-content .link-url {
+    background-color: var(--input-bg, #555);
+    color: var(--input-text, #eee);
+}
+
+body.dark-mode .link-warning-content p strong {
+    color: var(--text-color, #eee);
+}

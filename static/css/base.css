@@ -1,0 +1,70 @@
+/* @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap'); */ /* Example Font */
+
+body {
+    /* font-family: 'Inter', sans-serif; */ /* Uncomment after choosing a font */
+    font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, "Open Sans", "Helvetica Neue", sans-serif;
+    line-height: 1.6;
+    margin: 0;
+    padding: 0;
+    background-color: #f4f4f4;
+    color: #333;
+    font-size: 16px; /* Base font size */
+}
+
+/* Dark Mode Styles */
+body.dark-mode {
+    --bg-color: #222;
+    --text-color: #eee;
+    --header-bg: #111;
+    --header-text: #eee;
+    --nav-bg: #333;
+    --section-bg: #333;
+    --post-bg: #444;
+    --post-border: #555;
+    --post-meta-color: #bbb;
+    --llm-response-bg: #2a3f3c;
+    --llm-response-border: #1abc9c;
+    --llm-meta-color: #1abc9c;
+    --link-color: #5dade2;
+    --button-bg: #5dade2; /* This is now the DARK mode button base color */
+    --button-hover-bg: #3498db; /* This is now the DARK mode button hover color */
+    --input-bg: #555;
+    --input-border: #777;
+    --input-text: #eee;
+    --modal-bg: #444;
+    --modal-border: #666;
+    --modal-text: #eee;
+    --close-btn-color: #ccc;
+    --close-btn-hover-color: #fff;
+    --footer-bg: #111;
+    --footer-text: #ccc;
+    --schedule-display-color: #888;
+
+    background-color: var(--bg-color);
+    color: var(--text-color);
+}
+
+body.dark-mode header { /* Keep for potential future use? Or remove? Removed for now */
+    /* background-color: var(--header-bg); */
+    /* color: var(--header-text); */
+}
+
+body.dark-mode h1,
+body.dark-mode h2,
+body.dark-mode h3,
+body.dark-mode h4 {
+    color: var(--text-color);
+}
+
+body.dark-mode a {
+    color: var(--link-color);
+}
+
+hr {
+   border: none;
+   border-top: 1px solid #eee;
+   margin: 1rem 0;
+}
+body.dark-mode hr {
+   border-top-color: var(--input-border, #777);
+}

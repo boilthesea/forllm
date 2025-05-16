@@ -1,0 +1,97 @@
+ul {
+    list-style: none;
+    padding: 0;
+}
+
+li {
+    margin-bottom: 0.5rem;
+}
+
+.add-item-form {
+    margin-top: 1rem;
+    padding-top: 1rem;
+    border-top: 1px solid #eee;
+}
+
+#topic-list li, #post-list .post {
+    border: 1px solid #eee;
+    padding: 1rem;
+    margin-bottom: 1rem;
+    border-radius: 4px;
+    background-color: #f9f9f9;
+}
+
+.post-meta {
+    font-size: 0.9em;
+    color: #666;
+    margin-bottom: 0.5rem;
+}
+
+.post-content {
+    margin-bottom: 0.5rem;
+}
+
+.post-actions button {
+    margin-right: 0.5rem;
+    padding: 0.3rem 0.6rem;
+    font-size: 0.9em;
+}
+
+.llm-response {
+    border-left: 4px solid #1abc9c; /* Teal border for LLM responses */
+    background-color: #e8f8f5;
+}
+
+.llm-meta {
+    font-style: italic;
+    font-size: 0.85em;
+    color: #16a085;
+}
+
+/* Basic Threading Indentation */
+.post-replies {
+    margin-left: 2rem;
+    border-left: 2px solid #ddd;
+    padding-left: 1rem;
+    margin-top: 1rem;
+}
+
+#reply-form-container {
+    margin-top: 1rem;
+    padding: 1rem;
+    border: 1px dashed #ccc;
+    background-color: #f0f0f0;
+}
+
+/* Dark Mode Styles */
+body.dark-mode #topic-list li,
+body.dark-mode #post-list .post {
+    background-color: var(--post-bg);
+    border: 1px solid var(--post-border);
+}
+
+body.dark-mode .post-meta {
+    color: var(--post-meta-color);
+}
+
+body.dark-mode .llm-response {
+    background-color: var(--llm-response-bg);
+    border-left-color: var(--llm-response-border);
+}
+
+body.dark-mode .llm-meta {
+    color: var(--llm-meta-color);
+}
+
+body.dark-mode .post-replies {
+    border-left-color: var(--post-border);
+}
+
+body.dark-mode #reply-form-container {
+    background-color: var(--nav-bg); /* Match nav/section bg */
+    border-color: var(--input-border);
+}
+
+body.dark-mode .add-item-form {
+     border-top-color: var(--post-border);
+}

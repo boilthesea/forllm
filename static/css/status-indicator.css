@@ -1,0 +1,45 @@
+/* --- Status Indicator (Relocated) --- */
+#processing-status-indicator-container {
+    position: absolute; /* Positioned relative to nav#subforum-nav */
+    bottom: 1.5rem;     /* Consistent with sidebar padding */
+    right: 1.5rem;      /* Consistent with sidebar padding */
+    padding: 5px;
+    border-radius: 50%;
+    background-color: rgba(128, 128, 128, 0.7);
+    box-shadow: 0 0 8px rgba(0,0,0,0.3);
+    cursor: default;
+    margin-top: auto; /* Push to bottom if sidebar content is short */
+    /* z-index might not be needed or can be lower if only within sidebar */
+}
+
+/* Removed empty .status-dot-background ruleset */
+
+.status-dot {
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    transition: background-color 0.3s ease;
+}
+
+.status-dot.status-active {
+    background-color: #2ecc71; /* Green */
+}
+
+.status-dot.status-inactive {
+    background-color: #e74c3c; /* Red */
+}
+
+.status-dot.status-loading {
+    background-color: #f39c12; /* Orange for loading/unknown */
+    animation: pulse 1.5s infinite ease-in-out;
+}
+.status-dot.status-error {
+    background-color: #d35400; /* Darker orange/brown for error */
+}
+
+
+@keyframes pulse {
+    0% { transform: scale(0.9); opacity: 0.7; }
+    50% { transform: scale(1.1); opacity: 1; }
+    100% { transform: scale(0.9); opacity: 0.7; }
+}
