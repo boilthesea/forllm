@@ -25,6 +25,30 @@
     max-width: 700px;
 }
 
+/* Wider modal for full prompt */
+#full-prompt-modal .modal-content {
+    max-width: 800px; /* Adjust as needed */
+}
+
+#full-prompt-content {
+    margin-top: 1rem;
+    padding: 1rem;
+    border: 1px solid #eee;
+    background-color: #f9f9f9;
+    max-height: 60vh; /* Limit height */
+    overflow-y: auto; /* Add scroll if content overflows */
+    white-space: pre-wrap; /* Preserve whitespace and wrap */
+    word-wrap: break-word; /* Break long words */
+    font-family: monospace; /* Monospace font for prompt */
+    font-size: 0.9em;
+}
+
+#full-prompt-content pre {
+    margin: 0; /* Remove default pre margin */
+    white-space: pre-wrap; /* Ensure preformatted text wraps */
+    word-wrap: break-word;
+}
+
 
 .close-btn {
     color: #aaa;
@@ -173,4 +197,10 @@ body.dark-mode .link-warning-content .link-url {
 
 body.dark-mode .link-warning-content p strong {
     color: var(--text-color, #eee);
+}
+
+body.dark-mode #full-prompt-content {
+    border-color: var(--post-border);
+    background-color: var(--post-bg);
+    color: var(--text-color);
 }

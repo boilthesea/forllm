@@ -63,6 +63,72 @@ li {
     background-color: #f0f0f0;
 }
 
+/* Queue List Styles */
+.queue-list {
+    list-style: none;
+    padding: 0;
+}
+
+.queue-item {
+    border: 1px solid #ddd;
+    padding: 1rem;
+    margin-bottom: 1rem;
+    border-radius: 4px;
+    background-color: #fff;
+    cursor: pointer; /* Indicate clickable */
+    transition: background-color 0.2s ease;
+}
+
+.queue-item:hover {
+    background-color: #f0f0f0;
+}
+
+.queue-item-summary strong {
+    display: inline-block;
+    margin-bottom: 0.3rem;
+}
+
+.queue-item-snippet {
+    font-size: 0.9em;
+    color: #555;
+    margin-top: 0.5rem;
+    font-style: italic;
+}
+
+.queue-meta {
+    font-size: 0.8em;
+    color: #777;
+}
+
+.queue-status {
+    font-weight: bold;
+    padding: 0.2em 0.5em;
+    border-radius: 3px;
+    color: #fff;
+    font-size: 0.8em;
+}
+
+.queue-status.status-pending {
+    background-color: #f39c12; /* Orange */
+}
+
+.queue-status.status-processing {
+    background-color: #3498db; /* Blue */
+}
+
+.queue-status.status-complete {
+    background-color: #2ecc71; /* Green */
+}
+
+.queue-status.status-error {
+    background-color: #e74c3c; /* Red */
+}
+
+.queue-status.status-unknown {
+    background-color: #95a5a6; /* Gray */
+}
+
+
 /* Dark Mode Styles */
 body.dark-mode #topic-list li,
 body.dark-mode #post-list .post {
@@ -94,4 +160,22 @@ body.dark-mode #reply-form-container {
 
 body.dark-mode .add-item-form {
      border-top-color: var(--post-border);
+}
+
+body.dark-mode .queue-item {
+    border-color: var(--post-border);
+    background-color: var(--post-bg);
+    color: var(--text-color);
+}
+
+body.dark-mode .queue-item:hover {
+    background-color: var(--hover-bg);
+}
+
+body.dark-mode .queue-item-snippet {
+    color: var(--post-meta-color);
+}
+
+body.dark-mode .queue-meta {
+    color: var(--post-meta-color);
 }

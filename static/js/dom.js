@@ -28,7 +28,7 @@ export const cancelReplyBtn = document.getElementById('cancel-reply-btn');
 export const scheduleDisplay = document.getElementById('schedule-display'); // For next schedule text
 export const editScheduleBtn = document.getElementById('edit-schedule-btn');
 export const scheduleModal = document.getElementById('schedule-modal');
-export const scheduleCloseBtn = scheduleModal.querySelector('.close-btn'); // Specific close button
+export const scheduleCloseBtn = scheduleModal ? scheduleModal.querySelector('.close-btn') : null; // Specific close button
 export const scheduleListContainer = document.getElementById('schedule-list-container');
 export const addScheduleRowBtn = document.getElementById('add-schedule-row-btn');
 export const saveSchedulesBtn = document.getElementById('save-schedules-btn'); // Renamed save button
@@ -49,3 +49,8 @@ export const queueBtn = document.getElementById('queue-btn');
 export const queuePageSection = document.getElementById('queue-page-section');
 export const queuePageContent = document.getElementById('queue-page-content');
 export const exitQueueBtn = document.getElementById('exit-queue-btn');
+
+// Full Prompt Modal Elements
+export const fullPromptModal = document.getElementById('full-prompt-modal');
+export const fullPromptContent = document.getElementById('full-prompt-content');
+export const fullPromptClose = fullPromptModal ? fullPromptModal.querySelector('.close-btn') : null;

@@ -50,3 +50,63 @@ def get_ollama_models():
     except Exception as e:
         print(f"Unexpected error fetching Ollama models: {e}")
         return jsonify({'error': 'An unexpected error occurred'}), 500
+
+# New route to get the list of queued requests
+@llm_api_bp.route('/queue', methods=['GET'])
+def get_queue():
+    db = get_db()
+    cursor = db.cursor()
+    # Fetch llm_requests, joining with posts to get a snippet of the original post
+    cursor.execute("""
+        SELECT
+            lr.request_id,
+            lr.post_id_to_respond_to,
+            lr.requested_at,
+            lr.status,
+            lr.llm_model,
+            lr.llm_persona,
+            p.content AS post_snippet
+        FROM llm_requests lr
+        JOIN posts p ON lr.post_id_to_respond_to = p.post_id
+        ORDER BY lr.requested_at DESC
+    """)
+    queue_items = cursor.fetchall() # fetchall returns a list of Row objects (like dicts)
+
+    # Convert Row objects to dictionaries for jsonify
+    queue_list = [dict(item) for item in queue_items]
+
+    return jsonify(queue_list)
+
+# New route to get the full prompt for a specific queued request
+@llm_api_bp.route('/queue/<int:request_id>/prompt', methods=['GET'])
+def get_queue_prompt(request_id):
+    db = get_db()
+    cursor = db.cursor()
+
+    try:
+        # 1. Get the request details
+        cursor.execute("SELECT post_id_to_respond_to, llm_model, llm_persona FROM llm_requests WHERE request_id = ?", (request_id,))
+        request_details = cursor.fetchone()
+        if not request_details:
+            return jsonify({'error': f'Queue request {request_id} not found'}), 404
+
+        post_id = request_details['post_id_to_respond_to']
+        # model = request_details['llm_model'] # Not strictly needed for prompt construction based on current llm_processing.py
+        # persona = request_details['llm_persona'] # Not strictly needed for prompt construction based on current llm_processing.py
+
+        # 2. Get the content of the post to respond to
+        cursor.execute("SELECT content FROM posts WHERE post_id = ?", (post_id,))
+        original_post = cursor.fetchone()
+        if not original_post:
+            # This should ideally not happen if llm_requests is consistent with posts
+            return jsonify({'error': f'Original post {post_id} for request {request_id} not found'}), 404
+
+        # 3. Construct the prompt (replicating logic from llm_processing.py)
+        # TODO: Add persona instructions and potentially more thread context later, matching llm_processing.py
+        prompt_content = f"User wrote: {original_post['content']}\n\nRespond to this post."
+
+        return jsonify({'prompt': prompt_content})
+
+    except Exception as e:
+        print(f"Error fetching prompt for request {request_id}: {e}")
+        return jsonify({'error': f'Failed to fetch prompt: {e}'}), 500
