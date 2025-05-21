@@ -252,13 +252,83 @@ def init_db():
             'darkMode': 'false',
             'selectedModel': DEFAULT_MODEL,
             'llmLinkSecurity': 'true'
+            # globalDefaultPersonaId is handled below
         }
         for key, default_value in default_settings_to_check.items():
             cursor.execute("SELECT setting_value FROM settings WHERE setting_key = ?", (key,))
             if cursor.fetchone() is None:
                 print(f"Setting '{key}' missing. Adding with default value '{default_value}'.")
                 cursor.execute("INSERT INTO settings (setting_key, setting_value) VALUES (?, ?)", (key, default_value))
-                db.commit()
+                db.commit() # Commit each missing setting individually
+
+    # --- Persona Management Tables (Ensure these always exist and have defaults) ---
+    # This section is now outside the initial if/else, so it runs every time.
+    print("Verifying/Creating Persona management tables and defaults...")
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS personas (
+            persona_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            prompt_instructions TEXT NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            created_by_user INTEGER,
+            version INTEGER DEFAULT 1,
+            is_active BOOLEAN DEFAULT TRUE,
+            FOREIGN KEY (created_by_user) REFERENCES users(user_id)
+        )
+    ''')
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS persona_versions (
+            version_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            persona_id INTEGER NOT NULL,
+            name TEXT NOT NULL,
+            prompt_instructions TEXT NOT NULL,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_by_user INTEGER,
+            version INTEGER NOT NULL,
+            FOREIGN KEY (persona_id) REFERENCES personas(persona_id),
+            FOREIGN KEY (updated_by_user) REFERENCES users(user_id)
+        )
+    ''')
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS subforum_personas (
+            subforum_persona_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            subforum_id INTEGER NOT NULL,
+            persona_id INTEGER NOT NULL,
+            assigned_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            is_default_for_subforum BOOLEAN DEFAULT FALSE,
+            FOREIGN KEY (subforum_id) REFERENCES subforums(subforum_id),
+            FOREIGN KEY (persona_id) REFERENCES personas(persona_id)
+        )
+    ''')
+    # Add indexes for fast persona lookup and assignment
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_subforum_personas_subforum ON subforum_personas(subforum_id)')
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_subforum_personas_persona ON subforum_personas(persona_id)')
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_personas_active ON personas(is_active)')
+
+    # Ensure settings table exists before trying to insert globalDefaultPersonaId (it should by this point)
+    cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='settings'")
+    if cursor.fetchone():
+        # Add global default persona ID to settings if not present
+        cursor.execute("INSERT OR IGNORE INTO settings (setting_key, setting_value) VALUES (?, ?)", ('globalDefaultPersonaId', '1'))
+    else:
+        # This case should ideally not be reached if the preceding logic is correct.
+        print("CRITICAL ERROR: Settings table does not exist when attempting to set globalDefaultPersonaId.")
+
+
+    # Add built-in fallback persona (ID 1) if not present.
+    cursor.execute("INSERT OR IGNORE INTO personas (persona_id, name, prompt_instructions, created_by_user, is_active) VALUES (?, ?, ?, ?, ?)",
+                   (1, 'fallback', 'You are a helpful assistant.', CURRENT_USER_ID, True))
+    # Also ensure its version 1 is in persona_versions (if persona_versions table is used for this)
+    # Assuming the fallback persona (ID 1) should also have a corresponding version 1 entry.
+    # If the persona was just inserted by IGNORE, this will also be ignored if it exists.
+    # If the persona already existed, this ensures its version 1 is also there.
+    cursor.execute("INSERT OR IGNORE INTO persona_versions (persona_id, version, name, prompt_instructions, updated_by_user) VALUES (?, ?, ?, ?, ?)",
+                   (1, 1, 'fallback', 'You are a helpful assistant.', CURRENT_USER_ID))
+
+
+    db.commit() # Commit after ensuring all persona tables, indexes, and default data.
+    print("Persona management tables and defaults verified/created.")
 
     print("Database initialization complete.")
     db.close()

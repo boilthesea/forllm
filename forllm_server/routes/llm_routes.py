@@ -1,7 +1,7 @@
 import sqlite3
 import requests
 from flask import Blueprint, request, jsonify
-from ..database import get_db, get_effective_persona_for_subforum
+from ..database import get_db, get_effective_persona_for_subforum, get_persona # Import get_persona
 from ..config import OLLAMA_TAGS_URL, DEFAULT_MODEL # Removed unused llm_request_queue, processing_active
 
 llm_api_bp = Blueprint('llm_api', __name__, url_prefix='/api')
@@ -100,21 +100,30 @@ def get_queue_prompt(request_id):
             return jsonify({'error': f'Queue request {request_id} not found'}), 404
 
         post_id = request_details['post_id_to_respond_to']
-        # model = request_details['llm_model'] # Not strictly needed for prompt construction based on current llm_processing.py
-        # persona = request_details['llm_persona'] # Not strictly needed for prompt construction based on current llm_processing.py
+        persona_id = request_details['llm_persona']
 
         # 2. Get the content of the post to respond to
         cursor.execute("SELECT content FROM posts WHERE post_id = ?", (post_id,))
-        original_post = cursor.fetchone()
-        if not original_post:
-            # This should ideally not happen if llm_requests is consistent with posts
+        original_post_row = cursor.fetchone()
+        if not original_post_row:
             return jsonify({'error': f'Original post {post_id} for request {request_id} not found'}), 404
+        original_post_content = original_post_row['content']
 
-        # 3. Construct the prompt (replicating logic from llm_processing.py)
-        # TODO: Add persona instructions and potentially more thread context later, matching llm_processing.py
-        prompt_content = f"User wrote: {original_post['content']}\n\nRespond to this post."
+        # 3. Get persona instructions
+        persona_instructions = "Default persona instructions / No specific instructions." # Default
+        if persona_id is not None:
+            persona_details = get_persona(persona_id) # Assuming get_persona takes db and persona_id
+            if persona_details:
+                persona_instructions = persona_details['instructions']
+            else:
+                # Persona ID was specified but not found, could log this.
+                # Using default instructions as per requirement for "invalid".
+                pass # persona_instructions remains default
 
-        return jsonify({'prompt': prompt_content})
+        # 4. Construct the prompt
+        full_prompt_string = f"{persona_instructions}\n\nUser wrote: {original_post_content}\n\nRespond to this post."
+
+        return jsonify(prompt=full_prompt_string)
 
     except Exception as e:
         print(f"Error fetching prompt for request {request_id}: {e}")
