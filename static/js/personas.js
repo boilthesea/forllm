@@ -333,6 +333,62 @@ export function attachHandlers(container) {
       }
     });
   }
+
+  // Prompt Preview button handler
+  const previewBtn = Elements.personaPromptPreviewBtn();
+  const previewDiv = Elements.personaPromptPreview();
+
+  if (previewBtn && previewDiv) {
+    debugLog('attachHandlers', 'Setting up Prompt Preview button');
+    previewBtn.addEventListener('click', async (e) => {
+      e.preventDefault();
+      debugLog('previewBtn.click', 'Preview button clicked');
+
+      const nameInput = Elements.personaNameInput();
+      const instructionsInput = Elements.personaInstructionsInput();
+
+      if (!nameInput || !instructionsInput) {
+        console.error('[Personas:Preview] Name or instructions input not found.');
+        previewDiv.textContent = 'Error: Form inputs not found.';
+        return;
+      }
+
+      const personaName = nameInput.value.trim();
+      const personaInstructions = instructionsInput.value.trim();
+
+      if (!personaInstructions) {
+        previewDiv.textContent = 'Please enter instructions to preview.';
+        return;
+      }
+      // Name is optional for preview, backend might use a default or just show instructions.
+
+      previewDiv.textContent = 'Loading preview...';
+      try {
+        const response = await safeApiRequest(
+          null, // Pass null as container for this specific call, error messages go to console via safeApiRequest's own debugLog
+          '/api/personas/preview', 
+          'POST', 
+          { name: personaName, prompt_instructions: personaInstructions }
+        );
+        if (response && response.preview_text) {
+          previewDiv.textContent = response.preview_text;
+        } else if (response && response.error) {
+          previewDiv.textContent = `Error: ${response.error}`;
+        } 
+        else {
+          previewDiv.textContent = 'Failed to load preview. No preview text received.';
+        }
+      } catch (error) {
+        // This catch block might be redundant if safeApiRequest handles all errors and showMessage(null,...) is acceptable.
+        // However, it's good for specific error formatting in the previewDiv.
+        console.error('[Personas:Preview] Error fetching prompt preview:', error);
+        previewDiv.textContent = `Error: ${error.message || 'Failed to load preview.'}`;
+      }
+    });
+  } else {
+    if (!previewBtn) debugLog('attachHandlers', 'Preview button not found in modal.');
+    if (!previewDiv) debugLog('attachHandlers', 'Preview div not found in modal.');
+  }
 }
 
 // Export needed functions
