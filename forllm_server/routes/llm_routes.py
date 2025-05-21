@@ -1,7 +1,7 @@
 import sqlite3
 import requests
 from flask import Blueprint, request, jsonify
-from ..database import get_db
+from ..database import get_db, get_effective_persona_for_subforum
 from ..config import OLLAMA_TAGS_URL, DEFAULT_MODEL # Removed unused llm_request_queue, processing_active
 
 llm_api_bp = Blueprint('llm_api', __name__, url_prefix='/api')
@@ -10,27 +10,36 @@ llm_api_bp = Blueprint('llm_api', __name__, url_prefix='/api')
 def request_llm_response(post_id):
     db = get_db()
     cursor = db.cursor()
-    cursor.execute("SELECT post_id FROM posts WHERE post_id = ? AND is_llm_response = FALSE", (post_id,))
-    if not cursor.fetchone():
+    cursor.execute("SELECT post_id, topic_id FROM posts WHERE post_id = ? AND is_llm_response = FALSE", (post_id,))
+    post_row = cursor.fetchone()
+    if not post_row:
         return jsonify({'error': 'Post not found or is already an LLM response'}), 404
+    topic_id = post_row['topic_id']
 
-    # For MVP, use default model/persona from config or settings
     # Fetch selected model from settings
-    settings_cursor = db.cursor() # Use the same db connection
+    settings_cursor = db.cursor()
     settings_cursor.execute("SELECT setting_value FROM settings WHERE setting_key = 'selectedModel'")
     model_setting = settings_cursor.fetchone()
     llm_model_to_use = model_setting['setting_value'] if model_setting else DEFAULT_MODEL
 
-    default_persona = "helpful_assistant" # Placeholder, could also be a setting
+    # Persona selection logic
+    data = request.get_json(silent=True) or {}
+    persona_id = data.get('persona_id')
+    if persona_id:
+        persona_row = get_effective_persona_for_subforum(topic_id, persona_id)
+        persona_id_to_use = persona_row['persona_id'] if persona_row else 1
+    else:
+        persona_row = get_effective_persona_for_subforum(topic_id)
+        persona_id_to_use = persona_row['persona_id'] if persona_row else 1
 
     try:
         cursor.execute("""
             INSERT INTO llm_requests (post_id_to_respond_to, status, llm_model, llm_persona)
             VALUES (?, 'pending', ?, ?)
-        """, (post_id, llm_model_to_use, default_persona))
+        """, (post_id, llm_model_to_use, persona_id_to_use))
         request_id = cursor.lastrowid
         db.commit()
-        print(f"Queued LLM request {request_id} for post {post_id} using model {llm_model_to_use}")
+        print(f"Queued LLM request {request_id} for post {post_id} using model {llm_model_to_use} and persona {persona_id_to_use}")
         return jsonify({'message': 'LLM response requested successfully', 'request_id': request_id}), 202
     except Exception as e:
         db.rollback()
@@ -110,3 +119,12 @@ def get_queue_prompt(request_id):
     except Exception as e:
         print(f"Error fetching prompt for request {request_id}: {e}")
         return jsonify({'error': f'Failed to fetch prompt: {e}'}), 500
+
+# --- Persona Override for LLM Request ---
+@llm_api_bp.route('/subforums/<int:subforum_id>/effective-persona', methods=['GET'])
+def api_get_effective_persona(subforum_id):
+    override_persona_id = request.args.get('override_persona_id', type=int)
+    persona = get_effective_persona_for_subforum(subforum_id, override_persona_id)
+    if not persona:
+        return jsonify({'error': 'No persona found'}), 404
+    return jsonify(dict(persona))

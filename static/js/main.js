@@ -7,7 +7,8 @@ import {
     submitReply,
     hideReplyForm,
     loadTopics, // Needed for backToTopicsBtn
-    currentSubforumId // Needed for backToTopicsBtn
+    currentSubforumId, // Needed for backToTopicsBtn
+    loadSubforumPersonas
 } from './forum.js';
 
 import {
@@ -147,3 +148,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
 // window click listener for modals is now in ui.js
 // postList click listener for link interception is now in forum.js
+
+// Example: when a topic is loaded, call loadSubforumPersonas(subforumId)
+window.loadTopic = async function(topicId, subforumId) {
+  // ...existing code to load topic...
+  await loadSubforumPersonas(subforumId);
+  // ...existing code...
+};

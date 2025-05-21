@@ -24,6 +24,7 @@ import { newTopicEditor, replyEditor } from './editor.js'; // Import editor inst
 let currentSubforumId = null;
 let currentTopicId = null;
 let currentPosts = []; // Store posts for the current topic
+let currentPersonaId = null;
 
 // --- Rendering Functions ---
 
@@ -195,6 +196,26 @@ export async function loadPosts(topicId, topicTitle) {
     }
 }
 
+export async function loadSubforumPersonas(subforumId) {
+    currentSubforumId = subforumId;
+    const personas = await apiRequest(`/api/subforums/${subforumId}/personas`);
+    llmPersonaSelect.innerHTML = '';
+    personas.forEach(p => {
+        const opt = document.createElement('option');
+        opt.value = p.persona_id;
+        opt.textContent = p.name + (p.is_default_for_subforum ? ' (default)' : '');
+        llmPersonaSelect.appendChild(opt);
+        if (p.is_default_for_subforum) currentPersonaId = p.persona_id;
+    });
+    if (personas.length > 0) {
+        subforumPersonasBar.style.display = '';
+        llmPersonaSelect.value = currentPersonaId;
+        llmPersonaCurrentLabel.textContent = 'Current: ' + personas.find(p => p.persona_id == currentPersonaId)?.name;
+    } else {
+        subforumPersonasBar.style.display = 'none';
+    }
+}
+
 // --- Action Functions ---
 export async function addSubforum() {
     const name = newSubforumNameInput.value.trim();
@@ -321,10 +342,14 @@ export async function requestLlm(postId) {
         return;
     }
     try {
-        await apiRequest(`/api/posts/${postId}/request_llm`, 'POST');
+        let payload = {};
+        if (typeof llmPersonaSelect !== 'undefined' && llmPersonaSelect && llmPersonaSelect.value) {
+            payload.persona_id = llmPersonaSelect.value;
+        }
+        await apiRequest(`/api/posts/${postId}/request_llm`, 'POST', payload);
         alert(`LLM response request queued for post ${postId}. It will be processed during scheduled hours.`);
     } catch (error) {
-        // Error handled by apiRequest
+        alert('Failed to queue LLM response: ' + (error.message || error));
     }
 }
 

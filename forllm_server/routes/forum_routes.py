@@ -1,7 +1,11 @@
 import sqlite3
 from flask import Blueprint, request, jsonify
 from bs4 import BeautifulSoup # For link modification in LLM responses
-from ..database import get_db
+from ..database import (
+    get_db,
+    assign_persona_to_subforum, unassign_persona_from_subforum, list_personas_for_subforum,
+    set_subforum_default_persona, get_subforum_default_persona
+)
 from ..markdown_config import md
 from ..config import CURRENT_USER_ID
 
@@ -144,3 +148,65 @@ def handle_posts(topic_id):
             post_dict['content'] = html_content
             processed_posts.append(post_dict)
         return jsonify(processed_posts)
+
+# --- Persona Assignment Endpoints ---
+@forum_api_bp.route('/subforums/<int:subforum_id>/personas', methods=['GET'])
+def api_list_personas_for_subforum(subforum_id):
+    db = get_db()
+    cursor = db.cursor()
+    cursor.execute("SELECT persona_id, name FROM personas WHERE subforum_id = ?", (subforum_id,))
+    personas = cursor.fetchall()
+    return jsonify([dict(p) for p in personas])
+
+@forum_api_bp.route('/subforums/<int:subforum_id>/personas', methods=['POST'])
+def api_assign_persona_to_subforum(subforum_id):
+    data = request.json
+    persona_id = data.get('persona_id')
+    is_default = bool(data.get('is_default', False))
+    if not persona_id:
+        return jsonify({'error': 'persona_id required'}), 400
+    db = get_db()
+    try:
+        with db:
+            assign_persona_to_subforum(subforum_id, persona_id, is_default)
+        return jsonify({'success': True})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 400
+
+@forum_api_bp.route('/subforums/<int:subforum_id>/personas/<int:persona_id>', methods=['DELETE'])
+def api_unassign_persona_from_subforum(subforum_id, persona_id):
+    db = get_db()
+    try:
+        with db:
+            ok = unassign_persona_from_subforum(subforum_id, persona_id)
+        if not ok:
+            return jsonify({'error': 'Assignment not found'}), 404
+        return jsonify({'success': True})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 400
+
+@forum_api_bp.route('/subforums/<int:subforum_id>/personas/default', methods=['POST'])
+def api_set_subforum_default_persona(subforum_id):
+    data = request.json
+    persona_id = data.get('persona_id')
+    if not persona_id:
+        return jsonify({'error': 'persona_id required'}), 400
+    db = get_db()
+    try:
+        with db:
+            ok = set_subforum_default_persona(subforum_id, persona_id)
+        if not ok:
+            return jsonify({'error': 'Failed to set default'}), 400
+        return jsonify({'success': True})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 400
+
+@forum_api_bp.route('/subforums/<int:subforum_id>/personas/default', methods=['GET'])
+def api_get_subforum_default_persona(subforum_id):
+    db = get_db()
+    cursor = db.cursor()
+    cursor.execute("SELECT persona_id, name FROM personas WHERE subforum_id = ? AND is_default = 1", (subforum_id,))
+    p = cursor.fetchone()
+    if not p:
+        return jsonify({'error': 'No default persona'}), 404
+    return jsonify(dict(p))

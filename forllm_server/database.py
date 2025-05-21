@@ -198,6 +198,54 @@ def init_db():
             ''')
             db.commit()
 
+        # --- Persona Management Tables (NEW) ---
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS personas (
+                persona_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                prompt_instructions TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                created_by_user INTEGER,
+                version INTEGER DEFAULT 1,
+                is_active BOOLEAN DEFAULT TRUE,
+                FOREIGN KEY (created_by_user) REFERENCES users(user_id)
+            )
+        ''')
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS persona_versions (
+                version_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                persona_id INTEGER NOT NULL,
+                name TEXT NOT NULL,
+                prompt_instructions TEXT NOT NULL,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_by_user INTEGER,
+                version INTEGER NOT NULL,
+                FOREIGN KEY (persona_id) REFERENCES personas(persona_id),
+                FOREIGN KEY (updated_by_user) REFERENCES users(user_id)
+            )
+        ''')
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS subforum_personas (
+                subforum_persona_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                subforum_id INTEGER NOT NULL,
+                persona_id INTEGER NOT NULL,
+                assigned_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                is_default_for_subforum BOOLEAN DEFAULT FALSE,
+                FOREIGN KEY (subforum_id) REFERENCES subforums(subforum_id),
+                FOREIGN KEY (persona_id) REFERENCES personas(persona_id)
+            )
+        ''')
+        # Add indexes for fast persona lookup and assignment
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_subforum_personas_subforum ON subforum_personas(subforum_id)')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_subforum_personas_persona ON subforum_personas(persona_id)')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_personas_active ON personas(is_active)')
+        # Add global default persona to settings if not present
+        cursor.execute("INSERT OR IGNORE INTO settings (setting_key, setting_value) VALUES (?, ?)", ('globalDefaultPersonaId', '1'))
+        # Add built-in fallback persona if not present (editable)
+        cursor.execute("INSERT OR IGNORE INTO personas (persona_id, name, prompt_instructions, created_by_user, is_active) VALUES (?, ?, ?, ?, ?)", (1, 'fallback', 'You are a helpful assistant.', CURRENT_USER_ID, True))
+        db.commit()
+
         # Ensure all default settings are present if the settings table already existed
         # This is a good place to add new settings with defaults if they are introduced later
         default_settings_to_check = {
@@ -214,3 +262,201 @@ def init_db():
 
     print("Database initialization complete.")
     db.close()
+
+# ------------------- PERSONA MANAGEMENT LOGIC -------------------
+
+def create_persona(name, prompt_instructions, created_by_user):
+    db = get_db()
+    cursor = db.cursor()
+    cursor.execute('''
+        INSERT INTO personas (name, prompt_instructions, created_by_user, is_active)
+        VALUES (?, ?, ?, 1)
+    ''', (name, prompt_instructions, created_by_user))
+    persona_id = cursor.lastrowid
+    # Save initial version
+    cursor.execute('''
+        INSERT INTO persona_versions (persona_id, name, prompt_instructions, updated_by_user, version)
+        VALUES (?, ?, ?, ?, 1)
+    ''', (persona_id, name, prompt_instructions, created_by_user))
+    db.commit()
+    return persona_id
+
+def get_persona(persona_id, active_only=True):
+    db = get_db()
+    cursor = db.cursor()
+    q = 'SELECT * FROM personas WHERE persona_id = ?'
+    if active_only:
+        q += ' AND is_active = 1'
+    cursor.execute(q, (persona_id,))
+    return cursor.fetchone()
+
+def list_personas(active_only=True):
+    db = get_db()
+    cursor = db.cursor()
+    q = 'SELECT * FROM personas'
+    if active_only:
+        q += ' WHERE is_active = 1'
+    cursor.execute(q)
+    return cursor.fetchall()
+
+def update_persona(persona_id, name, prompt_instructions, updated_by_user):
+    db = get_db()
+    cursor = db.cursor()
+    # Get current version
+    cursor.execute('SELECT version FROM personas WHERE persona_id = ?', (persona_id,))
+    row = cursor.fetchone()
+    if not row:
+        return False
+    new_version = row['version'] + 1
+    cursor.execute('''
+        UPDATE personas SET name = ?, prompt_instructions = ?, updated_at = CURRENT_TIMESTAMP, version = ?
+        WHERE persona_id = ?
+    ''', (name, prompt_instructions, new_version, persona_id))
+    # Save version
+    cursor.execute('''
+        INSERT INTO persona_versions (persona_id, name, prompt_instructions, updated_by_user, version)
+        VALUES (?, ?, ?, ?, ?)
+    ''', (persona_id, name, prompt_instructions, updated_by_user, new_version))
+    db.commit()
+    return True
+
+def soft_delete_persona(persona_id):
+    db = get_db()
+    cursor = db.cursor()
+    cursor.execute('UPDATE personas SET is_active = 0 WHERE persona_id = ?', (persona_id,))
+    db.commit()
+    return cursor.rowcount > 0
+
+def revert_persona_to_version(persona_id, version, updated_by_user):
+    db = get_db()
+    cursor = db.cursor()
+    cursor.execute('''
+        SELECT name, prompt_instructions FROM persona_versions
+        WHERE persona_id = ? AND version = ?
+    ''', (persona_id, version))
+    row = cursor.fetchone()
+    if not row:
+        return False
+    name, prompt_instructions = row['name'], row['prompt_instructions']
+    return update_persona(persona_id, name, prompt_instructions, updated_by_user)
+
+def list_persona_versions(persona_id):
+    db = get_db()
+    cursor = db.cursor()
+    cursor.execute('''
+        SELECT * FROM persona_versions WHERE persona_id = ? ORDER BY version DESC
+    ''', (persona_id,))
+    return cursor.fetchall()
+
+# --- Persona Assignment Logic ---
+def assign_persona_to_subforum(subforum_id, persona_id, is_default=False):
+    db = get_db()
+    cursor = db.cursor()
+    # If is_default, unset previous default for this subforum
+    if is_default:
+        cursor.execute('''
+            UPDATE subforum_personas SET is_default_for_subforum = 0 WHERE subforum_id = ?
+        ''', (subforum_id,))
+    # Insert or update assignment
+    cursor.execute('''
+        INSERT OR IGNORE INTO subforum_personas (subforum_id, persona_id, is_default_for_subforum)
+        VALUES (?, ?, ?)
+    ''', (subforum_id, persona_id, int(is_default)))
+    # If already assigned, update default flag
+    if not cursor.rowcount and is_default:
+        cursor.execute('''
+            UPDATE subforum_personas SET is_default_for_subforum = 1 WHERE subforum_id = ? AND persona_id = ?
+        ''', (subforum_id, persona_id))
+    db.commit()
+    return True
+
+def unassign_persona_from_subforum(subforum_id, persona_id):
+    db = get_db()
+    cursor = db.cursor()
+    cursor.execute('''
+        DELETE FROM subforum_personas WHERE subforum_id = ? AND persona_id = ?
+    ''', (subforum_id, persona_id))
+    db.commit()
+    return cursor.rowcount > 0
+
+def list_personas_for_subforum(subforum_id, active_only=True):
+    db = get_db()
+    cursor = db.cursor()
+    q = '''
+        SELECT p.*, sp.is_default_for_subforum FROM personas p
+        JOIN subforum_personas sp ON p.persona_id = sp.persona_id
+        WHERE sp.subforum_id = ?
+    '''
+    if active_only:
+        q += ' AND p.is_active = 1'
+    cursor.execute(q, (subforum_id,))
+    return cursor.fetchall()
+
+def set_subforum_default_persona(subforum_id, persona_id):
+    db = get_db()
+    cursor = db.cursor()
+    # Unset all defaults for this subforum
+    cursor.execute('''
+        UPDATE subforum_personas SET is_default_for_subforum = 0 WHERE subforum_id = ?
+    ''', (subforum_id,))
+    # Set new default
+    cursor.execute('''
+        UPDATE subforum_personas SET is_default_for_subforum = 1 WHERE subforum_id = ? AND persona_id = ?
+    ''', (subforum_id, persona_id))
+    db.commit()
+    return cursor.rowcount > 0
+
+def get_subforum_default_persona(subforum_id, active_only=True):
+    db = get_db()
+    cursor = db.cursor()
+    q = '''
+        SELECT p.* FROM personas p
+        JOIN subforum_personas sp ON p.persona_id = sp.persona_id
+        WHERE sp.subforum_id = ? AND sp.is_default_for_subforum = 1
+    '''
+    if active_only:
+        q += ' AND p.is_active = 1'
+    cursor.execute(q, (subforum_id,))
+    return cursor.fetchone()
+
+def get_global_default_persona_id():
+    db = get_db()
+    cursor = db.cursor()
+    cursor.execute("SELECT setting_value FROM settings WHERE setting_key = 'globalDefaultPersonaId'")
+    row = cursor.fetchone()
+    return int(row['setting_value']) if row else 1
+
+def set_global_default_persona_id(persona_id):
+    db = get_db()
+    cursor = db.cursor()
+    cursor.execute("UPDATE settings SET setting_value = ? WHERE setting_key = 'globalDefaultPersonaId'", (str(persona_id),))
+    db.commit()
+    return cursor.rowcount > 0
+
+def get_effective_persona_for_subforum(subforum_id, override_persona_id=None):
+    """
+    Returns the persona row to use for a subforum, following override > subforum default > global default > fallback.
+    """
+    db = get_db()
+    cursor = db.cursor()
+    # 1. If override_persona_id is provided and valid for this subforum, use it
+    if override_persona_id:
+        cursor.execute('''
+            SELECT p.* FROM personas p
+            JOIN subforum_personas sp ON p.persona_id = sp.persona_id
+            WHERE sp.subforum_id = ? AND p.persona_id = ? AND p.is_active = 1
+        ''', (subforum_id, override_persona_id))
+        row = cursor.fetchone()
+        if row:
+            return row
+    # 2. Subforum default
+    row = get_subforum_default_persona(subforum_id)
+    if row:
+        return row
+    # 3. Global default
+    global_id = get_global_default_persona_id()
+    row = get_persona(global_id)
+    if row:
+        return row
+    # 4. Fallback (persona_id=1)
+    return get_persona(1)

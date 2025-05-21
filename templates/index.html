@@ -56,26 +56,43 @@
             <span class="close-btn">&times;</span>
             <h2>Settings</h2>
 
-            <div class="setting-item">
-                <label for="dark-mode-toggle">Dark Mode:</label>
-                <input type="checkbox" id="dark-mode-toggle">
-            </div>
-
-            <div class="setting-item">
-                <label for="model-select">Select LLM Model:</label>
-                <select id="model-select">
-                    <!-- Options will be loaded by JS -->
-                    <option value="">Loading models...</option>
-                </select>
-            </div>
-
-            <div class="setting-item"> <!-- Added LLM Link Security Toggle -->
-                <label for="llm-link-security-toggle">LLM Link Security:</label>
-                <input type="checkbox" id="llm-link-security-toggle">
-            </div>
-
-            <button id="save-settings-btn">Save Settings</button>
-            <p id="settings-error" class="error-message"></p>
+            <!-- Settings Navigation -->
+<nav id="settings-nav">
+  <ul>
+    <li id="settings-nav-general">General</li>
+    <li id="settings-nav-llm">LLM</li>
+    <li id="settings-nav-schedule">Schedule</li>
+    <li id="settings-nav-personas">Personas</li>
+  </ul>
+</nav>
+<div id="settings-general-section" class="settings-tab-section">
+    <div class="setting-item">
+        <label for="dark-mode-toggle">Dark Mode:</label>
+        <input type="checkbox" id="dark-mode-toggle">
+    </div>
+    <div class="setting-item">
+        <label for="model-select">Select LLM Model:</label>
+        <select id="model-select">
+            <option value="">Loading models...</option>
+        </select>
+    </div>
+    <div class="setting-item">
+        <label for="llm-link-security-toggle">LLM Link Security:</label>
+        <input type="checkbox" id="llm-link-security-toggle">
+    </div>
+    <button id="save-settings-btn">Save Settings</button>
+    <p id="settings-error" class="error-message"></p>
+</div>
+<div id="settings-llm-section" class="settings-tab-section" style="display:none"></div>
+<div id="settings-schedule-section" class="settings-tab-section" style="display:none"></div>
+<div id="settings-personas-section" class="settings-tab-section" style="display:none">
+    <h2>Personas</h2>
+    <button id="add-persona-btn">Add Persona</button>
+    <div id="personas-list-container"></div>
+    <h3>Global Default Persona</h3>
+    <select id="global-default-persona-select"></select>
+    <button id="save-global-default-persona-btn">Save Global Default</button>
+</div>
         </div>
     </div>
     <!-- End Settings Modal -->
@@ -149,6 +166,12 @@
                  <button id="submit-reply-btn">Submit Reply</button>
                  <button id="cancel-reply-btn">Cancel</button>
              </div>
+  <div id="subforum-personas-bar" style="display:none">
+    <label for="llm-persona-select">Persona for LLM Response:</label>
+    <select id="llm-persona-select"></select>
+    <button id="llm-persona-override-btn">Override Persona</button>
+    <span id="llm-persona-current-label"></span>
+  </div>
         </section>
 
         <section id="settings-page-section" style="display: none;">
@@ -179,6 +202,25 @@
     <script type="module" src="{{ url_for('static', filename='js/ui.js') }}"></script>
     <script type="module" src="{{ url_for('static', filename='js/main.js') }}"></script>
     <script src="https://unpkg.com/easymde/dist/easymde.min.js"></script>
+
+    <!-- Persona Modal -->
+<div id="persona-modal" class="modal" style="display:none">
+  <div class="modal-content">
+    <span class="close" id="close-persona-modal">&times;</span>
+    <h2 id="persona-modal-title">Persona</h2>
+    <form id="persona-form">
+      <label>Name: <input type="text" id="persona-name-input" required></label><br>
+      <label>Prompt Instructions:<br>
+        <textarea id="persona-instructions-input" rows="6" required></textarea>
+      </label><br>
+      <button type="button" id="persona-prompt-preview-btn">Preview Prompt</button>
+      <div id="persona-prompt-preview" style="margin:8px 0;"></div>
+      <button type="submit" id="save-persona-btn">Save</button>
+      <button type="button" id="delete-persona-btn" style="display:none">Delete</button>
+    </form>
+    <div id="persona-versions-container" style="margin-top:16px;"></div>
+  </div>
+</div>
 
 </body>
 </html>

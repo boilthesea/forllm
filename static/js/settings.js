@@ -15,71 +15,158 @@ export let currentSettings = { // Store loaded settings
     llmLinkSecurity: 'true' // Added default
 };
 
+// --- DEBUG: Global click logger ---
+document.addEventListener('click', (e) => {
+  console.debug('[Global] Click at', e.target);
+});
+
 // --- Settings Page Rendering ---
 export function renderSettingsPage() {
-    // Check if content already exists to avoid duplication
-    if (settingsPageContent.querySelector('#settings-form')) {
-        return;
-    }
-    settingsPageContent.innerHTML = ''; // Clear previous content if any
+    console.debug('[Settings] Starting renderSettingsPage()');
+    // Only render HTML if not already present
+    let firstRender = false;
+    // Get both possible settings containers
+    const modalContent = document.querySelector('#settings-modal .modal-content');
+    console.debug('[Settings] Found modal content:', modalContent);
+    const pageContent = document.querySelector('#settings-page-section #settings-page-content');
+    console.debug('[Settings] Found page content:', pageContent);    // Import personas module right away to ensure it's loaded
+    console.debug('[Settings] Loading personas module...');
+    import('./personas.js').then(module => {
+        console.debug('[Settings] Loaded personas module, calling attachHandlers');
+        // Store personas module for later use
+        window.personasModule = module.default;
+        // Continue with rendering - note: handlers already attached in module
+        renderContainers();
+    }).catch(err => {
+        console.error('[Settings] Failed to load personas module:', err);
+    });
 
-    const form = document.createElement('form');
-    form.id = 'settings-form';
-
-    // Dark Mode
-    const darkModeItem = document.createElement('div');
-    darkModeItem.className = 'setting-item';
-    darkModeItem.innerHTML = `
+    function renderContainers() {
+        // Function to render settings content into a container
+        const renderIntoContainer = (container) => {
+            console.debug('[Settings] Rendering into container:', container);
+            if (!container.querySelector('#settings-nav')) {
+                container.innerHTML = `
+<nav id="settings-nav">
+  <ul>
+    <li id="settings-nav-general">General</li>
+    <li id="settings-nav-llm">LLM</li>
+    <li id="settings-nav-schedule">Schedule</li>
+    <li id="settings-nav-personas">Personas</li>
+  </ul>
+</nav>
+<div id="settings-general-section" class="settings-tab-section">
+    <div class="setting-item">
         <label for="dark-mode-toggle">Dark Mode:</label>
         <input type="checkbox" id="dark-mode-toggle">
-    `;
-    const darkModeToggleInput = darkModeItem.querySelector('#dark-mode-toggle');
-    darkModeToggleInput.checked = currentSettings.darkMode === 'true';
-    darkModeToggleInput.addEventListener('change', () => {
-        applyDarkMode(darkModeToggleInput.checked);
-    });
-    form.appendChild(darkModeItem);
-
-    // Model Select
-    const modelSelectItem = document.createElement('div');
-    modelSelectItem.className = 'setting-item';
-    modelSelectItem.innerHTML = `
+    </div>
+    <div class="setting-item">
         <label for="model-select">Select LLM Model:</label>
         <select id="model-select">
-            <option value="">Loading models...</option> <!-- Initial loading state -->
+            <option value="">Loading models...</option>
         </select>
-    `;
-    form.appendChild(modelSelectItem);
-
-    // LLM Link Security
-    const linkSecurityItem = document.createElement('div');
-    linkSecurityItem.className = 'setting-item';
-    linkSecurityItem.innerHTML = `
+    </div>
+    <div class="setting-item">
         <label for="llm-link-security-toggle">LLM Link Security:</label>
         <input type="checkbox" id="llm-link-security-toggle">
-    `;
-    const linkSecurityToggleInput = linkSecurityItem.querySelector('#llm-link-security-toggle');
-    linkSecurityToggleInput.checked = currentSettings.llmLinkSecurity === 'true';
-    form.appendChild(linkSecurityItem);
+    </div>
+    <button id="save-settings-btn">Save Settings</button>
+    <p id="settings-error" class="error-message"></p>
+</div>
+<div id="settings-llm-section" class="settings-tab-section" style="display:none"></div>
+<div id="settings-schedule-section" class="settings-tab-section" style="display:none"></div>
+<div id="settings-personas-section" class="settings-tab-section" style="display:none">
+    <h2>Personas</h2>
+    <button id="add-persona-btn">Add Persona</button>
+    <div id="personas-list-container"></div>
+    <h3>Global Default Persona</h3>
+    <select id="global-default-persona-select"></select>
+    <button id="save-global-default-persona-btn">Save Global Default</button>
+</div>
+`;
+                firstRender = true;
+            }
 
-    // Save Button
-    const saveButton = document.createElement('button');
-    saveButton.type = 'button'; // Prevent default form submission
-    saveButton.id = 'save-settings-btn';
-    saveButton.textContent = 'Save Settings';
-    saveButton.addEventListener('click', saveSettings); // Add listener here
-    form.appendChild(saveButton);
+            // Set up tab navigation within this container
+            const settingsNav = container.querySelector('#settings-nav');
+            if (settingsNav) {
+                const navLis = settingsNav.querySelectorAll('li');
+                navLis.forEach(li => console.debug('[Settings] Nav item in container:', li.id, li.textContent, 'display:', getComputedStyle(li).display));
+                
+                // Attach click handler to each li
+                navLis.forEach(li => {
+                    li.onclick = (e) => {
+                        console.debug('[Settings] Nav click in container:', e.target.id);
+                        // Remove active class from all tabs in THIS container
+                        container.querySelectorAll('#settings-nav li').forEach(li2 => li2.classList.remove('active'));
+                        e.target.classList.add('active');
+                        
+                        const tabId = e.target.id.replace('settings-nav-', 'settings-') + '-section';
+                        console.debug('[Settings] Looking for tab section:', tabId, 'in container:', container);
+                        
+                        // Only toggle tabs in THIS container
+                        container.querySelectorAll('.settings-tab-section').forEach(tab => {
+                            const shouldShow = tab.id === tabId;
+                            tab.style.display = shouldShow ? '' : 'none';
+                            if (shouldShow) {
+                                console.debug('[Settings] Showing tab section:', tab.id, 'in container:', container);                                if (tab.id === 'settings-personas-section') {
+                                    console.debug('[Settings] Loading personas list...');
+                                    if (window.personasModule && window.personasModule.loadPersonasList) {
+                                        window.personasModule.loadPersonasList();
+                                    } else {
+                                        console.error('[Settings] Personas module not loaded or missing loadPersonasList function');
+                                    }
+                                }
+                            }
+                        });
+                    };
+                });
 
-    // Error Message Area
-    const errorP = document.createElement('p');
-    errorP.id = 'settings-error';
-    errorP.className = 'error-message';
-    form.appendChild(errorP);
+                // Set initial active tab
+                const generalTab = settingsNav.querySelector('#settings-nav-general');
+                if (generalTab) {
+                    console.debug('[Settings] Setting initial active tab in container');
+                    navLis.forEach(li => li.classList.remove('active'));
+                    generalTab.classList.add('active');
+                    
+                    // Show general section, hide others in THIS container
+                    container.querySelectorAll('.settings-tab-section').forEach(tab => {
+                        tab.style.display = (tab.id === 'settings-general-section') ? '' : 'none';
+                    });
+                }
 
-    settingsPageContent.appendChild(form);
+                // Re-attach listeners for this container
+                const darkModeToggleInput = container.querySelector('#dark-mode-toggle');
+                if (darkModeToggleInput) {
+                    darkModeToggleInput.checked = currentSettings.darkMode === 'true';
+                    darkModeToggleInput.addEventListener('change', () => {
+                        applyDarkMode(darkModeToggleInput.checked);
+                    });
+                }
+                
+                const linkSecurityToggleInput = container.querySelector('#llm-link-security-toggle');
+                if (linkSecurityToggleInput) {
+                    linkSecurityToggleInput.checked = currentSettings.llmLinkSecurity === 'true';
+                }
+                
+                const saveButton = container.querySelector('#save-settings-btn');
+                if (saveButton) {
+                    saveButton.addEventListener('click', saveSettings);
+                }
+            }
+        };
 
-    // Trigger model loading now that the select element exists
-    loadOllamaModels();
+        // Render in both places if they exist
+        if (modalContent) {
+            renderIntoContainer(modalContent);
+        }
+        if (pageContent) {
+            renderIntoContainer(pageContent);
+        }
+        
+        // Trigger model loading
+        loadOllamaModels();
+    }
 }
 
 function renderModelOptions(modelSelectElement, models, selectedModel) {

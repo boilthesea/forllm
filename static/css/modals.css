@@ -1,7 +1,7 @@
 /* Modal Styles */
 .modal {
     position: fixed;
-    z-index: 1;
+    z-index: 1000; /* Increased to ensure it's above other content */
     left: 0;
     top: 0;
     width: 100%;
@@ -18,6 +18,7 @@
     width: 80%;
     max-width: 500px; /* Default max-width */
     border-radius: 5px;
+    position: relative; /* Added for close button positioning */
 }
 
 /* Wider modal for schedules */
@@ -50,15 +51,21 @@
 }
 
 
-.close-btn {
+.close-btn, .close {
     color: #aaa;
     float: right;
     font-size: 28px;
     font-weight: bold;
+    cursor: pointer;
+    position: absolute;
+    right: 1rem;
+    top: 0.5rem;
 }
 
 .close-btn:hover,
-.close-btn:focus {
+.close-btn:focus,
+.close:hover,
+.close:focus {
     color: black;
     text-decoration: none;
     cursor: pointer;
@@ -203,4 +210,77 @@ body.dark-mode #full-prompt-content {
     border-color: var(--post-border);
     background-color: var(--post-bg);
     color: var(--text-color);
+}
+
+/* Persona Modal Specific Styles */
+#persona-modal {
+    z-index: 1001; /* Ensure it's above other modals */
+}
+
+#persona-modal .modal-content {
+    max-width: 600px;
+    padding: 2rem;
+}
+
+#persona-form {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+#persona-form label {
+    display: block;
+    margin-bottom: 0.5rem;
+    font-weight: bold;
+}
+
+#persona-name-input {
+    width: 100%;
+    padding: 0.5rem;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    margin-bottom: 1rem;
+}
+
+#persona-instructions-input {
+    width: 100%;
+    min-height: 150px;
+    padding: 0.5rem;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    resize: vertical;
+    margin-bottom: 1rem;
+}
+
+#persona-prompt-preview {
+    margin: 1rem 0;
+    padding: 1rem;
+    background-color: #f5f5f5;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    white-space: pre-wrap;
+}
+
+/* Dark mode overrides */
+html[data-theme="dark"] #persona-modal .modal-content {
+    background-color: #2d2d2d;
+    color: #e0e0e0;
+    border-color: #444;
+}
+
+html[data-theme="dark"] .persona-list-item {
+    background-color: #2d2d2d;
+    border-color: #444;
+}
+
+html[data-theme="dark"] #persona-instructions-input,
+html[data-theme="dark"] #persona-name-input {
+    background-color: #1f1f1f;
+    color: #e0e0e0;
+    border-color: #444;
+}
+
+html[data-theme="dark"] #persona-prompt-preview {
+    background-color: #1f1f1f;
+    border-color: #444;
 }

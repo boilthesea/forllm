@@ -1,11 +1,15 @@
 import sqlite3
 from flask import Blueprint, request, jsonify
+from ..database import (
+    list_personas, get_persona, create_persona, update_persona, soft_delete_persona,
+    revert_persona_to_version, list_persona_versions, get_global_default_persona_id, set_global_default_persona_id
+)
+from ..config import CURRENT_USER_ID, DEFAULT_MODEL
 from ..database import get_db
-from ..config import DEFAULT_MODEL
 
-settings_api_bp = Blueprint('settings_api', __name__, url_prefix='/api')
+settings_bp = Blueprint('settings', __name__, url_prefix='/api')
 
-@settings_api_bp.route('/settings', methods=['GET', 'PUT'])
+@settings_bp.route('/settings', methods=['GET', 'PUT'])
 def handle_settings():
     db = get_db()
     cursor = db.cursor()
@@ -57,3 +61,88 @@ def handle_settings():
         except Exception as e:
             print(f"Error fetching settings: {e}")
             return jsonify({'error': f'Failed to fetch settings: {e}'}), 500
+
+# --- Persona Management Endpoints ---
+@settings_bp.route('/personas', methods=['GET'])
+def api_list_personas():
+    personas = list_personas()
+    return jsonify([dict(p) for p in personas])
+
+@settings_bp.route('/personas/<int:persona_id>', methods=['GET'])
+def api_get_persona(persona_id):
+    p = get_persona(persona_id, active_only=False)
+    if not p:
+        return jsonify({'error': 'Persona not found'}), 404
+    return jsonify(dict(p))
+
+@settings_bp.route('/personas', methods=['POST'])
+def api_create_persona():
+    data = request.json
+    name = data.get('name')
+    prompt_instructions = data.get('prompt_instructions')
+    if not name or not prompt_instructions:
+        return jsonify({'error': 'Name and prompt_instructions required'}), 400
+    persona_id = create_persona(name, prompt_instructions, CURRENT_USER_ID)
+    return jsonify({'persona_id': persona_id}), 201
+
+@settings_bp.route('/personas/<int:persona_id>', methods=['PUT'])
+def api_update_persona(persona_id):
+    data = request.json
+    name = data.get('name')
+    prompt_instructions = data.get('prompt_instructions')
+    if not name or not prompt_instructions:
+        return jsonify({'error': 'Name and prompt_instructions required'}), 400
+    ok = update_persona(persona_id, name, prompt_instructions, CURRENT_USER_ID)
+    if not ok:
+        return jsonify({'error': 'Persona not found'}), 404
+    return jsonify({'success': True})
+
+@settings_bp.route('/personas/<int:persona_id>', methods=['DELETE'])
+def api_delete_persona(persona_id):
+    ok = soft_delete_persona(persona_id)
+    if not ok:
+        return jsonify({'error': 'Persona not found'}), 404
+    return jsonify({'success': True})
+
+@settings_bp.route('/personas/<int:persona_id>/versions', methods=['GET'])
+def api_list_persona_versions(persona_id):
+    versions = list_persona_versions(persona_id)
+    return jsonify([dict(v) for v in versions])
+
+@settings_bp.route('/personas/<int:persona_id>/revert', methods=['POST'])
+def api_revert_persona(persona_id):
+    data = request.json
+    version = data.get('version')
+    if not version:
+        return jsonify({'error': 'Version required'}), 400
+    ok = revert_persona_to_version(persona_id, version, CURRENT_USER_ID)
+    if not ok:
+        return jsonify({'error': 'Version not found'}), 404
+    return jsonify({'success': True})
+
+@settings_bp.route('/personas/global-default', methods=['GET'])
+def api_get_global_default_persona():
+    persona_id = get_global_default_persona_id()
+    return jsonify({'globalDefaultPersonaId': persona_id})
+
+@settings_bp.route('/personas/global-default', methods=['POST'])
+def api_set_global_default_persona():
+    data = request.json
+    persona_id = data.get('persona_id')
+    if not persona_id:
+        return jsonify({'error': 'persona_id required'}), 400
+    ok = set_global_default_persona_id(persona_id)
+    if not ok:
+        return jsonify({'error': 'Failed to set global default'}), 400
+    return jsonify({'success': True})
+
+@settings_bp.route('/personas/<int:persona_id>/prompt-preview', methods=['POST'])
+def api_persona_prompt_preview(persona_id):
+    # For now, just return the prompt_instructions as-is (could expand to show full prompt context)
+    p = get_persona(persona_id)
+    if not p:
+        return jsonify({'error': 'Persona not found'}), 404
+    return jsonify({'prompt_preview': p['prompt_instructions']})
+
+# Export for forllm.py compatibility
+settings_api_bp = settings_bp

@@ -158,5 +158,5 @@ cython_debug/
 #  option (not recommended) you can uncomment the following to ignore the entire idea folder.
 #.idea/
 md_plan.md
-blueprint.md
+
 blueprint.md.old

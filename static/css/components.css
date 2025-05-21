@@ -193,6 +193,96 @@ input:checked + .slider:before {
 
 /* #settings-btn specific style removed, covered by general button or nav button styles */
 
+/* Settings Navigation Tabs */
+#settings-nav {
+    margin-bottom: 1.5rem;
+}
+
+#settings-nav ul {
+    display: flex;
+    flex-direction: row;
+    gap: 1.5rem;
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    border-bottom: 2px solid #eee;
+}
+
+#settings-nav li {
+    padding: 0.5rem 1.2rem;
+    cursor: pointer;
+    background: none;
+    border: none;
+    border-radius: 6px 6px 0 0;
+    font-weight: 500;
+    color: #333;
+    transition: background 0.2s, color 0.2s;
+    margin-bottom: -2px;
+    border-bottom: 2px solid transparent; /* Always reserve space for border */
+}
+
+#settings-nav li.active {
+    background: #e0f7f4;
+    color: #1abc9c;
+    border-bottom: 2px solid #1abc9c;
+    font-weight: 700;
+    box-shadow: 0 -2px 8px rgba(26,188,156,0.08);
+    z-index: 1;
+}
+
+/* --- Increased specificity for settings tab active state --- */
+#settings-nav > ul > li.active {
+    background: #e0f7f4;
+    color: #1abc9c;
+    border-bottom: 2px solid #1abc9c;
+    font-weight: 700;
+    box-shadow: 0 -2px 8px rgba(26,188,156,0.08);
+    z-index: 1;
+}
+
+#settings-nav li:hover {
+    background: #f4f4f4;
+    color: #1abc9c;
+    border-bottom: 2px solid #1abc9c;
+}
+
+body.dark-mode #settings-nav {
+    /* No change, inherits general dark mode styles */
+}
+
+body.dark-mode #settings-nav ul {
+    border-bottom: 2px solid #444;
+}
+
+body.dark-mode #settings-nav li {
+    color: #eee;
+    border-bottom: 2px solid transparent;
+}
+
+body.dark-mode #settings-nav li.active {
+    background: #222;
+    color: #1abc9c;
+    border-bottom: 2px solid #1abc9c;
+    font-weight: 700;
+    box-shadow: 0 -2px 8px rgba(26,188,156,0.12);
+    z-index: 1;
+}
+
+/* --- Increased specificity for settings tab active state in dark mode --- */
+body.dark-mode #settings-nav > ul > li.active {
+    background: #222;
+    color: #1abc9c;
+    border-bottom: 2px solid #1abc9c;
+    font-weight: 700;
+    box-shadow: 0 -2px 8px rgba(26,188,156,0.12);
+    z-index: 1;
+}
+
+body.dark-mode #settings-nav li:hover {
+    background: #333;
+    color: #1abc9c;
+    border-bottom: 2px solid #1abc9c;
+}
 
 /* Dark Mode Styles */
 body.dark-mode nav#subforum-nav button { /* Specificity for buttons inside the nav if needed */
