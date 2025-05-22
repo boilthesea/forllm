@@ -34,18 +34,20 @@ def llm_worker():
                     request_id = db_request['request_id']
                     post_id = db_request['post_id_to_respond_to']
                     model = db_request['llm_model']
-                    persona = db_request['llm_persona']
-                    print(f"Found pending request in DB: {request_id}")
+                    persona = db_request['llm_persona'] # This is the persona_id
+                    print(f"Found pending request in DB: {request_id}. Persona ID from DB: {persona}")
                     # Mark as processing in DB immediately
                     cursor.execute("UPDATE llm_requests SET status = 'processing' WHERE request_id = ?", (request_id,))
                     db.commit()
                     db.close()
+                    
+                    print(f"LLM Worker: Preparing to process request_id {request_id} with model '{model}' and persona_id '{persona}'")
                     # Process the request found in the DB
                     process_llm_request({
                         'request_id': request_id,
                         'post_id': post_id,
-                        'model': model or "default_model", # Use defaults if needed
-                        'persona': persona or "default_persona"
+                        'model': model or "default_model", 
+                        'persona': persona # Pass the persona_id directly (it can be None)
                     })
                 else:
                     db.close()

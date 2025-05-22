@@ -26,14 +26,22 @@ export function renderQueueList(queueItems) {
         const queuedAt = item.requested_at ? new Date(item.requested_at).toLocaleString() : 'Unknown time';
         const status = item.status || 'unknown';
         const model = item.llm_model || 'default';
-        const persona = item.llm_persona || 'default';
+        let personaDisplay = 'default'; // Default text
+        if (item.llm_persona) { // Check if persona ID exists
+            if (item.persona_name) {
+                personaDisplay = `${item.persona_name} (ID: ${item.llm_persona})`;
+            } else {
+                // If persona_name is null/undefined but ID exists (e.g., persona deleted, or ID was invalid)
+                personaDisplay = `ID: ${item.llm_persona} (Name not found)`;
+            }
+        }
         const snippet = item.post_snippet ? item.post_snippet.substring(0, 150) + '...' : 'No snippet available'; // Display a snippet
 
         li.innerHTML = `
             <div class="queue-item-summary">
                 <strong>Request ID: ${item.request_id}</strong><br>
                 Status: <span class="queue-status status-${status}">${status}</span><br>
-                Model: ${model}, Persona: ${persona}<br>
+                Model: ${model}, Persona: ${personaDisplay}<br> 
                 Queued: <span class="queue-meta">${queuedAt}</span>
             </div>
             <div class="queue-item-snippet">

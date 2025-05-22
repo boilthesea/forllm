@@ -39,7 +39,7 @@ def request_llm_response(post_id):
         """, (post_id, llm_model_to_use, persona_id_to_use))
         request_id = cursor.lastrowid
         db.commit()
-        print(f"Queued LLM request {request_id} for post {post_id} using model {llm_model_to_use} and persona {persona_id_to_use}")
+        print(f"Queued LLM request {request_id} for post {post_id} using model {llm_model_to_use} and persona_id {persona_id_to_use}")
         return jsonify({'message': 'LLM response requested successfully', 'request_id': request_id}), 202
     except Exception as e:
         db.rollback()
@@ -73,10 +73,12 @@ def get_queue():
             lr.requested_at,
             lr.status,
             lr.llm_model,
-            lr.llm_persona,
-            p.content AS post_snippet
+            lr.llm_persona, -- This is the persona_id
+            p_orig.content AS post_snippet,
+            pers.name AS persona_name -- Fetch persona name
         FROM llm_requests lr
-        JOIN posts p ON lr.post_id_to_respond_to = p.post_id
+        JOIN posts p_orig ON lr.post_id_to_respond_to = p_orig.post_id
+        LEFT JOIN personas pers ON lr.llm_persona = pers.persona_id -- Use LEFT JOIN in case persona is null or ID is invalid
         ORDER BY lr.requested_at DESC
     """)
     queue_items = cursor.fetchall() # fetchall returns a list of Row objects (like dicts)
@@ -93,46 +95,53 @@ def get_queue_prompt(request_id):
     cursor = db.cursor()
 
     try:
-        # 1. Get the request details
-        cursor.execute("SELECT post_id_to_respond_to, llm_model, llm_persona FROM llm_requests WHERE request_id = ?", (request_id,))
-        request_details = cursor.fetchone()
-        if not request_details:
-            return jsonify(error="LLM request not found"), 404
+        cursor.execute("SELECT full_prompt_sent, post_id_to_respond_to, llm_persona FROM llm_requests WHERE request_id = ?", (request_id,))
+        request_data = cursor.fetchone()
 
-        post_id = request_details['post_id_to_respond_to']
-        persona_id = request_details['llm_persona']
+        if not request_data:
+            return jsonify(error=f"No item with that key: Request ID {request_id} not found."), 404
 
-        # 2. Get the content of the post to respond to
-        cursor.execute("SELECT content FROM posts WHERE post_id = ?", (post_id,))
-        original_post_row = cursor.fetchone()
-        if not original_post_row:
-            # Using the exact error message string as requested.
-            return jsonify(error="Original post not found"), 404
-        original_post_content = original_post_row['content']
+        full_prompt = request_data['full_prompt_sent']
 
-        # 3. Get persona instructions
-        persona_instructions = "[No persona instructions found or specified for this request]" # Default
-        if persona_id is not None:
-            # Assuming get_persona is imported and available.
-            # It takes persona_id and optionally db, but usually handles db via get_db() internally.
-            persona_data = get_persona(persona_id) 
-            if persona_data:
-                # Using 'instructions' as per the refactored database.py schema for personas table
-                # and assuming get_persona returns a dict/Row with this key.
-                persona_instructions = persona_data['instructions'] 
+        if full_prompt is not None and full_prompt != "":
+            return jsonify(prompt=full_prompt)
+        else:
+            # Attempt to reconstruct for older records or if somehow still null
+            print(f"Reconstructing prompt for request {request_id} as full_prompt_sent was empty.")
+            post_id = request_data['post_id_to_respond_to']
+            persona_id_for_reconstruction = request_data['llm_persona'] 
+
+            cursor.execute("SELECT content FROM posts WHERE post_id = ?", (post_id,))
+            original_post_row = cursor.fetchone()
+            if not original_post_row:
+                return jsonify(error=f"Original post (ID: {post_id}) for request {request_id} not found for prompt reconstruction."), 404
+            
+            original_post_content = original_post_row['content']
+            
+            reconstructed_persona_instructions = "You are a helpful assistant." # Default
+            if persona_id_for_reconstruction is not None: # Check if it's not None before trying to use it
+                try:
+                    # get_persona is already imported at the top of the file
+                    persona_data_reconstruction = get_persona(int(persona_id_for_reconstruction))
+                    if persona_data_reconstruction and persona_data_reconstruction['prompt_instructions']:
+                        reconstructed_persona_instructions = persona_data_reconstruction['prompt_instructions']
+                        print(f"Successfully fetched instructions for persona_id {persona_id_for_reconstruction} for prompt reconstruction of request {request_id}.")
+                    else:
+                        print(f"Warning: Could not fetch instructions for persona_id {persona_id_for_reconstruction} (or instructions were empty) during prompt reconstruction for request {request_id}. Using default instructions.")
+                except (ValueError, TypeError):
+                    print(f"Warning: Invalid persona_id '{persona_id_for_reconstruction}' during prompt reconstruction for request {request_id}. Using default instructions.")
+                except Exception as e_rec: 
+                    print(f"Error fetching persona for reconstruction for request {request_id}: {e_rec}. Using default instructions.")
             else:
-                # Persona ID was specified but not found, could log this.
-                # Using default instructions as per requirement for "invalid".
-                pass # persona_instructions remains default
+                print(f"No persona_id found for request {request_id} during prompt reconstruction. Using default instructions.")
 
-        # 4. Construct the prompt
-        full_prompt_string = f"{persona_instructions}\n\nUser wrote: {original_post_content}\n\nRespond to this post."
-
-        return jsonify(prompt=full_prompt_string)
+            reconstructed_prompt = f"{reconstructed_persona_instructions}\n\nUser wrote: {original_post_content}\n\nRespond to this post."
+            print(f"Reconstructing prompt for request {request_id} (with persona) as full_prompt_sent was empty. Preview: {reconstructed_prompt[:200]}...")
+            return jsonify(prompt=reconstructed_prompt, notice="Prompt reconstructed (with persona details) as it was not pre-stored.")
 
     except Exception as e:
         print(f"Error fetching prompt for request {request_id}: {e}")
-        return jsonify({'error': f'Failed to fetch prompt: {e}'}), 500
+        return jsonify({'error': f'Failed to fetch prompt: {str(e)}'}), 500
 
 # --- Persona Override for LLM Request ---
 @llm_api_bp.route('/subforums/<int:subforum_id>/effective-persona', methods=['GET'])

@@ -78,6 +78,21 @@ def init_db():
                 FOREIGN KEY (post_id_to_respond_to) REFERENCES posts(post_id)
             )
         ''')
+
+        # Check and add 'full_prompt_sent' to 'llm_requests'
+        cursor.execute("PRAGMA table_info(llm_requests)")
+        columns = [col[1] for col in cursor.fetchall()]
+        if 'full_prompt_sent' not in columns:
+            print("Updating llm_requests table: Adding 'full_prompt_sent' column...")
+            try:
+                # Ensure this alter statement is applied to the correct 'db' connection cursor
+                cursor.execute("ALTER TABLE llm_requests ADD COLUMN full_prompt_sent TEXT")
+                db.commit() # Commit this specific change
+                print("'full_prompt_sent' column added to llm_requests.")
+            except Exception as e:
+                print(f"Error adding 'full_prompt_sent' column to llm_requests: {e}")
+                db.rollback() # Rollback if alter fails
+
         cursor.execute('''
              CREATE TABLE IF NOT EXISTS schedule (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
