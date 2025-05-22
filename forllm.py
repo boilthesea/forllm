@@ -37,7 +37,8 @@ if __name__ == '__main__':
     init_db() # Ensure DB exists and schema is created/verified
 
     print("Starting LLM Worker thread...")
-    worker_thread = threading.Thread(target=llm_worker, daemon=True)
+    # Pass the Flask 'app' instance to the llm_worker thread
+    worker_thread = threading.Thread(target=llm_worker, args=(app,), daemon=True)
     worker_thread.start()
 
     print("Starting Flask server...")

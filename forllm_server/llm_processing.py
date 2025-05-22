@@ -5,19 +5,12 @@ import sqlite3
 from requests.exceptions import ConnectionError, RequestException
 from datetime import datetime
 
-# --- Flask App Context Import ---
-import sys
-import os
-# Add parent dir to path for 'from forllm import app'
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-from forllm import app # Assuming forllm.py is in the parent directory
-sys.path.pop(0) # Clean up path
-# --- End Flask App Context Import ---
+# Removed sys.path manipulation and direct 'from forllm import app' import
 
 from .config import DATABASE, OLLAMA_GENERATE_URL, DEFAULT_MODEL, CURRENT_USER_ID
 from .database import get_persona 
 
-def process_llm_request(request_details):
+def process_llm_request(request_details, flask_app): # Added flask_app parameter
     """Handles the actual LLM interaction for a given request."""
     request_id = request_details['request_id']
     post_id = request_details['post_id']
@@ -52,8 +45,8 @@ def process_llm_request(request_details):
 
         persona_instructions = "You are a helpful assistant." # Default
         
-        # Fetch persona instructions *WITHIN APP CONTEXT*
-        with app.app_context():
+        # Fetch persona instructions *WITHIN APP CONTEXT* using flask_app
+        with flask_app.app_context():
             if persona_id:
                 persona_data = get_persona(persona_id) # get_persona uses Flask's g for DB
                 if persona_data and persona_data['prompt_instructions']:
@@ -154,11 +147,11 @@ def process_llm_request(request_details):
 
         except (ConnectionError, requests.exceptions.Timeout) as e: # Combined ConnectionError and Timeout
             print(f"Ollama connection failed or timed out: {type(e).__name__}. Using dummy LLM processor for request {request_id}.")
-            _dummy_llm_processor(request_id, post_id, model, persona_id, prompt_content, DATABASE) # Pass persona_id
+            _dummy_llm_processor(request_id, post_id, model, persona_id, prompt_content, DATABASE, flask_app) # Pass flask_app
             # _dummy_llm_processor handles updating request status, so no 'raise' here unless _dummy_llm_processor itself fails
         except requests.exceptions.RequestException as e: # General RequestException
             print(f"Ollama API request failed: {type(e).__name__}. Using dummy LLM processor for request {request_id}.")
-            _dummy_llm_processor(request_id, post_id, model, persona_id, prompt_content, DATABASE) # Pass persona_id
+            _dummy_llm_processor(request_id, post_id, model, persona_id, prompt_content, DATABASE, flask_app) # Pass flask_app
             # _dummy_llm_processor handles updating request status
         except TimeoutError as stream_timeout_err: # This is our custom timeout for stream inactivity
             print(f"Ollama streaming error for request {request_id}: {stream_timeout_err}")
@@ -181,8 +174,9 @@ def process_llm_request(request_details):
     finally:
         db.close()
 
-def _dummy_llm_processor(request_id, post_id, model, persona, prompt_content, db_path):
-    print(f"Dummy LLM processing request {request_id} for post {post_id} with model '{model}' and persona_id '{persona_id}'...")
+# Changed signature to accept flask_app
+def _dummy_llm_processor(request_id, post_id, model, persona_id, prompt_content, db_path, flask_app):
+    print(f"Dummy LLM processing request {request_id} for post {post_id} with model '{model}' and persona_id '{persona_id}'. Flask_app: {flask_app}")
     # prompt_content already includes persona instructions from the caller (process_llm_request)
     dummy_response_content = f"This is a dummy LLM response for post {post_id} using model {model} and persona_id {persona_id}. The intended prompt was: {prompt_content}"
 
