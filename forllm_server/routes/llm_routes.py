@@ -97,7 +97,7 @@ def get_queue_prompt(request_id):
         cursor.execute("SELECT post_id_to_respond_to, llm_model, llm_persona FROM llm_requests WHERE request_id = ?", (request_id,))
         request_details = cursor.fetchone()
         if not request_details:
-            return jsonify({'error': f'Queue request {request_id} not found'}), 404
+            return jsonify(error="LLM request not found"), 404
 
         post_id = request_details['post_id_to_respond_to']
         persona_id = request_details['llm_persona']
@@ -106,15 +106,20 @@ def get_queue_prompt(request_id):
         cursor.execute("SELECT content FROM posts WHERE post_id = ?", (post_id,))
         original_post_row = cursor.fetchone()
         if not original_post_row:
-            return jsonify({'error': f'Original post {post_id} for request {request_id} not found'}), 404
+            # Using the exact error message string as requested.
+            return jsonify(error="Original post not found"), 404
         original_post_content = original_post_row['content']
 
         # 3. Get persona instructions
-        persona_instructions = "Default persona instructions / No specific instructions." # Default
+        persona_instructions = "[No persona instructions found or specified for this request]" # Default
         if persona_id is not None:
-            persona_details = get_persona(persona_id) # Assuming get_persona takes db and persona_id
-            if persona_details:
-                persona_instructions = persona_details['instructions']
+            # Assuming get_persona is imported and available.
+            # It takes persona_id and optionally db, but usually handles db via get_db() internally.
+            persona_data = get_persona(persona_id) 
+            if persona_data:
+                # Using 'instructions' as per the refactored database.py schema for personas table
+                # and assuming get_persona returns a dict/Row with this key.
+                persona_instructions = persona_data['instructions'] 
             else:
                 # Persona ID was specified but not found, could log this.
                 # Using default instructions as per requirement for "invalid".
