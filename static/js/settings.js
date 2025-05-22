@@ -32,10 +32,10 @@ export function renderSettingsPage() {
     console.debug('[Settings] Found page content:', pageContent);    // Import personas module right away to ensure it's loaded
     console.debug('[Settings] Loading personas module...');
     import('./personas.js').then(module => {
-        console.debug('[Settings] Loaded personas module, calling attachHandlers');
+        console.debug('[Settings] Loaded personas module.'); // Removed "calling attachHandlers"
         // Store personas module for later use
         window.personasModule = module.default;
-        // Continue with rendering - note: handlers already attached in module
+        // Continue with rendering
         renderContainers();
     }).catch(err => {
         console.error('[Settings] Failed to load personas module:', err);
@@ -112,7 +112,7 @@ export function renderSettingsPage() {
                                 console.debug('[Settings] Showing tab section:', tab.id, 'in container:', container);                                if (tab.id === 'settings-personas-section') {
                                     console.debug('[Settings] Loading personas list...');
                                     if (window.personasModule && window.personasModule.loadPersonasList) {
-                                        window.personasModule.loadPersonasList();
+                                        window.personasModule.loadPersonasList(container); // Pass container
                                     } else {
                                         console.error('[Settings] Personas module not loaded or missing loadPersonasList function');
                                     }
@@ -121,6 +121,14 @@ export function renderSettingsPage() {
                         });
                     };
                 });
+
+                // Attach persona handlers for this container
+                if (window.personasModule && window.personasModule.attachHandlers) {
+                    console.debug('[Settings] Attaching persona handlers for container:', container);
+                    window.personasModule.attachHandlers(container);
+                } else {
+                    console.error('[Settings] Personas module or attachHandlers not available for container:', container);
+                }
 
                 // Set initial active tab
                 const generalTab = settingsNav.querySelector('#settings-nav-general');

@@ -56,16 +56,16 @@ graph TD
 
 *   **`forllm_server/`** (Core Server Logic Package):
     *   **`config.py`**: Manages all static configuration values and constants for the application (database paths, API URLs, default settings, etc.).
-    *   **`database.py`**: Handles all aspects of database interaction: provides connection objects (`get_db`), manages connection teardown (`close_db`), and contains the initial database schema creation and migration logic (`init_db`).
+    *   **`database.py`**: Handles all aspects of database interaction: provides connection objects (`get_db`), manages connection teardown (`close_db`), and contains the initial database schema creation and migration logic (`init_db`). Also includes logic for persona CRUD, versioning, assignment, and fallback.
     *   **`markdown_config.py`**: Configures and provides the `MarkdownIt` instance used for rendering Markdown content to HTML, including custom Pygments syntax highlighting.
     *   **`llm_queue.py`**: Manages the in-memory queue for LLM requests (`llm_request_queue`) and contains the main loop for the background LLM processing thread (`llm_worker`), which polls both the in-memory and database queues.
-    *   **`llm_processing.py`**: Contains the core logic for interacting with the LLM service (currently Ollama), including prompt construction, API call execution (`process_llm_request`), streaming response handling, and error management for LLM communication.
+    *   **`llm_processing.py`**: Contains the core logic for interacting with the LLM service (currently Ollama), including prompt construction, API call execution (`process_llm_request`), streaming response handling, and error management for LLM communication. Includes logic to determine and fetch the appropriate persona prompt instructions for an LLM request based on user override, subforum default, global default, or built-in fallback.
     *   **`scheduler.py`**: Implements the logic to determine if the LLM processor should be active based on defined schedules (`is_processing_time`), and provides utility functions to get current status and next schedule information.
     *   **`routes/main_routes.py`**: Defines Flask Blueprint for main application routes, including serving the `index.html` and static assets.
-    *   **`routes/forum_routes.py`**: Defines Flask Blueprint for API endpoints related to forum management: subforums, topics, and posts (CRUD operations, listing).
-    *   **`routes/llm_routes.py`**: Defines Flask Blueprint for API endpoints related to LLM interactions: requesting an LLM response for a post and fetching available Ollama models.
+    *   **`routes/forum_routes.py`**: Defines Flask Blueprint for API endpoints related to forum management: subforums, topics, and posts (CRUD operations, listing). Includes endpoints for assigning/unassigning multiple personas per subforum and setting the per-subforum default persona.
+    *   **`routes/llm_routes.py`**: Defines Flask Blueprint for API endpoints related to LLM interactions: requesting an LLM response for a post and fetching available Ollama models. Allows persona override at LLM request time.
     *   **`routes/schedule_routes.py`**: Defines Flask Blueprint for API endpoints managing LLM processing schedules: CRUD operations for schedules, and status/next schedule information.
-    *   **`routes/settings_routes.py`**: Defines Flask Blueprint for API endpoints to get and update application-wide settings.
+    *   **`routes/settings_routes.py`**: Defines Flask Blueprint for API endpoints to get and update application-wide settings. Includes endpoints for persona management (list, create, update, delete, get, version history) and global default persona.
 
 *   **`templates/index.html`**:
     *   The single HTML page that forms the entire frontend structure.
@@ -78,12 +78,13 @@ graph TD
 
 *   **`static/js/`** (Frontend JavaScript Modules):
     *   **`main.js`**: The main application entry point. Initializes the application, sets up global event listeners (like `DOMContentLoaded`, window events, periodic updates), and orchestrates the loading and interaction of other modules.
+    *   **`personas.js`**: Implements the frontend logic for managing personas, including CRUD operations, version history display, assignment to subforums, and global default persona management.
     *   **`api.js`**: Contains the `apiRequest` helper function and potentially other utilities for interacting with the backend API.
     *   **`dom.js`**: Centralizes references to key DOM elements used across different modules to avoid repeated `document.getElementById` calls.
     *   **`ui.js`**: Handles general user interface logic, including switching between different sections of the page (`showSection`) and managing UI components like the LLM link warning popup (`showLinkWarningPopup`).
-    *   **`forum.js`**: Encapsulates all logic related to the forum features: loading, rendering, and handling user interactions for subforums, topics, and posts (including replies and LLM response requests).
+    *   **`forum.js`**: Encapsulates all logic related to the forum features: loading, rendering, and handling user interactions for subforums, topics, and posts (including replies and LLM response requests). Displays assigned personas for a subforum, indicates the default persona, and allows persona selection/override when requesting an LLM response.
     *   **`schedule.js`**: Manages the scheduling functionality, including loading, rendering, and saving user-defined processing schedules, as well as displaying the next scheduled time and the current processor status.
-    *   **`settings.js`**: Deals with application-wide settings, including loading, rendering, and saving user preferences like dark mode, selected LLM model, and LLM link security. Also handles loading available Ollama models.
+    *   **`settings.js`**: Deals with application-wide settings, including loading, rendering, and saving user preferences like dark mode, selected LLM model, and LLM link security. Also handles loading available Ollama models. Integrates persona management into the settings navigation and display.
     *   **`queue.js`**: Manages the display of the LLM processing queue, including fetching and rendering the list of queued tasks.
     *   **`editor.js`**: Responsible for initializing and configuring the EasyMDE Markdown editor instances used for creating new topics and replies.
 
@@ -105,7 +106,10 @@ graph TD
         *   `posts`: User-generated content and LLM responses, forming threaded discussions.
         *   `llm_requests`: Queue for LLM processing, tracking status, model, and persona.
         *   `schedule`: Defines active hours and days for the LLM processor.
-        *   `settings`: Stores application-wide settings like dark mode preference and selected LLM model.
+        *   `settings`: Stores application-wide settings like dark mode preference and selected LLM model. Also stores the global default persona ID.
+        *   `personas`: Stores persona details, including name, prompt instructions, creation/update timestamps, and creator.
+        *   `subforum_personas`: Links subforums and personas, indicating which personas are assigned to a subforum and the default for that subforum.
+        *   `persona_versions`: Stores historical versions of persona details for versioning and revert capability.
 
 ## 3. Phased Development Plan
 
@@ -169,7 +173,7 @@ graph TD
     *   Refactor Ollama integration into a modular class structure. [TODO]
     *   Add support for at least one other backend type (e.g., LM Studio, an OpenAI-compatible API endpoint). [TODO]
     *   Configuration mechanism (e.g., YAML/JSON file) to define available LLM backends and their connection details. [TODO]
-*   **Persona Management:** [TODO]
+*   **Persona Management:** [DONE]
     *   Database schema extension for `personas` (`persona_id`, `name`, `prompt_instructions`, `created_by_user`). [TODO]
     *   UI for users to create, view, edit, and delete custom personas (saved prompt instructions). [TODO]
 *   **Explicit Model/Persona Selection:** [WIP]

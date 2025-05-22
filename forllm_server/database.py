@@ -78,6 +78,21 @@ def init_db():
                 FOREIGN KEY (post_id_to_respond_to) REFERENCES posts(post_id)
             )
         ''')
+
+        # Check and add 'full_prompt_sent' to 'llm_requests'
+        cursor.execute("PRAGMA table_info(llm_requests)")
+        columns = [col[1] for col in cursor.fetchall()]
+        if 'full_prompt_sent' not in columns:
+            print("Updating llm_requests table: Adding 'full_prompt_sent' column...")
+            try:
+                # Ensure this alter statement is applied to the correct 'db' connection cursor
+                cursor.execute("ALTER TABLE llm_requests ADD COLUMN full_prompt_sent TEXT")
+                db.commit() # Commit this specific change
+                print("'full_prompt_sent' column added to llm_requests.")
+            except Exception as e:
+                print(f"Error adding 'full_prompt_sent' column to llm_requests: {e}")
+                db.rollback() # Rollback if alter fails
+
         cursor.execute('''
              CREATE TABLE IF NOT EXISTS schedule (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -252,13 +267,83 @@ def init_db():
             'darkMode': 'false',
             'selectedModel': DEFAULT_MODEL,
             'llmLinkSecurity': 'true'
+            # globalDefaultPersonaId is handled below
         }
         for key, default_value in default_settings_to_check.items():
             cursor.execute("SELECT setting_value FROM settings WHERE setting_key = ?", (key,))
             if cursor.fetchone() is None:
                 print(f"Setting '{key}' missing. Adding with default value '{default_value}'.")
                 cursor.execute("INSERT INTO settings (setting_key, setting_value) VALUES (?, ?)", (key, default_value))
-                db.commit()
+                db.commit() # Commit each missing setting individually
+
+    # --- Persona Management Tables (Ensure these always exist and have defaults) ---
+    # This section is now outside the initial if/else, so it runs every time.
+    print("Verifying/Creating Persona management tables and defaults...")
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS personas (
+            persona_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            prompt_instructions TEXT NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            created_by_user INTEGER,
+            version INTEGER DEFAULT 1,
+            is_active BOOLEAN DEFAULT TRUE,
+            FOREIGN KEY (created_by_user) REFERENCES users(user_id)
+        )
+    ''')
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS persona_versions (
+            version_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            persona_id INTEGER NOT NULL,
+            name TEXT NOT NULL,
+            prompt_instructions TEXT NOT NULL,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_by_user INTEGER,
+            version INTEGER NOT NULL,
+            FOREIGN KEY (persona_id) REFERENCES personas(persona_id),
+            FOREIGN KEY (updated_by_user) REFERENCES users(user_id)
+        )
+    ''')
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS subforum_personas (
+            subforum_persona_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            subforum_id INTEGER NOT NULL,
+            persona_id INTEGER NOT NULL,
+            assigned_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            is_default_for_subforum BOOLEAN DEFAULT FALSE,
+            FOREIGN KEY (subforum_id) REFERENCES subforums(subforum_id),
+            FOREIGN KEY (persona_id) REFERENCES personas(persona_id)
+        )
+    ''')
+    # Add indexes for fast persona lookup and assignment
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_subforum_personas_subforum ON subforum_personas(subforum_id)')
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_subforum_personas_persona ON subforum_personas(persona_id)')
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_personas_active ON personas(is_active)')
+
+    # Ensure settings table exists before trying to insert globalDefaultPersonaId (it should by this point)
+    cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='settings'")
+    if cursor.fetchone():
+        # Add global default persona ID to settings if not present
+        cursor.execute("INSERT OR IGNORE INTO settings (setting_key, setting_value) VALUES (?, ?)", ('globalDefaultPersonaId', '1'))
+    else:
+        # This case should ideally not be reached if the preceding logic is correct.
+        print("CRITICAL ERROR: Settings table does not exist when attempting to set globalDefaultPersonaId.")
+
+
+    # Add built-in fallback persona (ID 1) if not present.
+    cursor.execute("INSERT OR IGNORE INTO personas (persona_id, name, prompt_instructions, created_by_user, is_active) VALUES (?, ?, ?, ?, ?)",
+                   (1, 'fallback', 'You are a helpful assistant.', CURRENT_USER_ID, True))
+    # Also ensure its version 1 is in persona_versions (if persona_versions table is used for this)
+    # Assuming the fallback persona (ID 1) should also have a corresponding version 1 entry.
+    # If the persona was just inserted by IGNORE, this will also be ignored if it exists.
+    # If the persona already existed, this ensures its version 1 is also there.
+    cursor.execute("INSERT OR IGNORE INTO persona_versions (persona_id, version, name, prompt_instructions, updated_by_user) VALUES (?, ?, ?, ?, ?)",
+                   (1, 1, 'fallback', 'You are a helpful assistant.', CURRENT_USER_ID))
+
+
+    db.commit() # Commit after ensuring all persona tables, indexes, and default data.
+    print("Persona management tables and defaults verified/created.")
 
     print("Database initialization complete.")
     db.close()
@@ -268,85 +353,124 @@ def init_db():
 def create_persona(name, prompt_instructions, created_by_user):
     db = get_db()
     cursor = db.cursor()
-    cursor.execute('''
-        INSERT INTO personas (name, prompt_instructions, created_by_user, is_active)
-        VALUES (?, ?, ?, 1)
-    ''', (name, prompt_instructions, created_by_user))
-    persona_id = cursor.lastrowid
-    # Save initial version
-    cursor.execute('''
-        INSERT INTO persona_versions (persona_id, name, prompt_instructions, updated_by_user, version)
-        VALUES (?, ?, ?, ?, 1)
-    ''', (persona_id, name, prompt_instructions, created_by_user))
-    db.commit()
-    return persona_id
+    try:
+        cursor.execute('''
+            INSERT INTO personas (name, prompt_instructions, created_by_user, is_active)
+            VALUES (?, ?, ?, 1)
+        ''', (name, prompt_instructions, created_by_user))
+        persona_id = cursor.lastrowid
+        # Save initial version
+        cursor.execute('''
+            INSERT INTO persona_versions (persona_id, name, prompt_instructions, updated_by_user, version)
+            VALUES (?, ?, ?, ?, 1)
+        ''', (persona_id, name, prompt_instructions, created_by_user))
+        db.commit()
+        return persona_id
+    except sqlite3.Error as e:
+        print(f"Database error in create_persona: {e}")
+        if db:
+            db.rollback()
+        return None
 
 def get_persona(persona_id, active_only=True):
-    db = get_db()
-    cursor = db.cursor()
-    q = 'SELECT * FROM personas WHERE persona_id = ?'
-    if active_only:
-        q += ' AND is_active = 1'
-    cursor.execute(q, (persona_id,))
-    return cursor.fetchone()
+    try:
+        db = get_db()
+        cursor = db.cursor()
+        q = 'SELECT * FROM personas WHERE persona_id = ?'
+        if active_only:
+            q += ' AND is_active = 1'
+        cursor.execute(q, (persona_id,))
+        return cursor.fetchone()
+    except sqlite3.Error as e:
+        print(f"Database error in get_persona: {e}")
+        return None
 
 def list_personas(active_only=True):
-    db = get_db()
-    cursor = db.cursor()
-    q = 'SELECT * FROM personas'
-    if active_only:
-        q += ' WHERE is_active = 1'
-    cursor.execute(q)
-    return cursor.fetchall()
+    try:
+        db = get_db()
+        cursor = db.cursor()
+        q = 'SELECT * FROM personas'
+        if active_only:
+            q += ' WHERE is_active = 1'
+        cursor.execute(q)
+        return cursor.fetchall()
+    except sqlite3.Error as e:
+        print(f"Database error in list_personas: {e}")
+        return None # Return None, route handler will check
 
 def update_persona(persona_id, name, prompt_instructions, updated_by_user):
     db = get_db()
     cursor = db.cursor()
-    # Get current version
-    cursor.execute('SELECT version FROM personas WHERE persona_id = ?', (persona_id,))
-    row = cursor.fetchone()
-    if not row:
+    try:
+        # Get current version
+        cursor.execute('SELECT version FROM personas WHERE persona_id = ?', (persona_id,))
+        row = cursor.fetchone()
+        if not row:
+            # No need to rollback as no changes were made yet if persona not found
+            return False 
+        new_version = row['version'] + 1
+        cursor.execute('''
+            UPDATE personas SET name = ?, prompt_instructions = ?, updated_at = CURRENT_TIMESTAMP, version = ?
+            WHERE persona_id = ?
+        ''', (name, prompt_instructions, new_version, persona_id))
+        # Save version
+        cursor.execute('''
+            INSERT INTO persona_versions (persona_id, name, prompt_instructions, updated_by_user, version)
+            VALUES (?, ?, ?, ?, ?)
+        ''', (persona_id, name, prompt_instructions, updated_by_user, new_version))
+        db.commit()
+        return True
+    except sqlite3.Error as e:
+        print(f"Database error in update_persona: {e}")
+        if db:
+            db.rollback()
         return False
-    new_version = row['version'] + 1
-    cursor.execute('''
-        UPDATE personas SET name = ?, prompt_instructions = ?, updated_at = CURRENT_TIMESTAMP, version = ?
-        WHERE persona_id = ?
-    ''', (name, prompt_instructions, new_version, persona_id))
-    # Save version
-    cursor.execute('''
-        INSERT INTO persona_versions (persona_id, name, prompt_instructions, updated_by_user, version)
-        VALUES (?, ?, ?, ?, ?)
-    ''', (persona_id, name, prompt_instructions, updated_by_user, new_version))
-    db.commit()
-    return True
 
 def soft_delete_persona(persona_id):
     db = get_db()
-    cursor = db.cursor()
-    cursor.execute('UPDATE personas SET is_active = 0 WHERE persona_id = ?', (persona_id,))
-    db.commit()
-    return cursor.rowcount > 0
+    try:
+        cursor = db.cursor()
+        cursor.execute('UPDATE personas SET is_active = 0 WHERE persona_id = ?', (persona_id,))
+        db.commit()
+        return cursor.rowcount > 0
+    except sqlite3.Error as e:
+        print(f"Database error in soft_delete_persona: {e}")
+        if db: # Check if db object exists before rollback
+            db.rollback()
+        return False
 
 def revert_persona_to_version(persona_id, version, updated_by_user):
-    db = get_db()
-    cursor = db.cursor()
-    cursor.execute('''
-        SELECT name, prompt_instructions FROM persona_versions
-        WHERE persona_id = ? AND version = ?
-    ''', (persona_id, version))
-    row = cursor.fetchone()
-    if not row:
+    db = get_db() # Get DB connection for potential rollback
+    try:
+        cursor = db.cursor() # Use the same cursor throughout
+        cursor.execute('''
+            SELECT name, prompt_instructions FROM persona_versions
+            WHERE persona_id = ? AND version = ?
+        ''', (persona_id, version))
+        row = cursor.fetchone()
+        if not row:
+            return False # Version not found, no DB change made here
+        name, prompt_instructions = row['name'], row['prompt_instructions']
+        # update_persona will handle its own commit or rollback
+        return update_persona(persona_id, name, prompt_instructions, updated_by_user)
+    except sqlite3.Error as e:
+        # This except block handles errors from the SELECT query itself.
+        # update_persona has its own try-except for its operations.
+        print(f"Database error in revert_persona_to_version (during select): {e}")
+        # No rollback needed here as only a select failed.
         return False
-    name, prompt_instructions = row['name'], row['prompt_instructions']
-    return update_persona(persona_id, name, prompt_instructions, updated_by_user)
 
 def list_persona_versions(persona_id):
-    db = get_db()
-    cursor = db.cursor()
-    cursor.execute('''
-        SELECT * FROM persona_versions WHERE persona_id = ? ORDER BY version DESC
-    ''', (persona_id,))
-    return cursor.fetchall()
+    try:
+        db = get_db()
+        cursor = db.cursor()
+        cursor.execute('''
+            SELECT * FROM persona_versions WHERE persona_id = ? ORDER BY version DESC
+        ''', (persona_id,))
+        return cursor.fetchall()
+    except sqlite3.Error as e:
+        print(f"Database error in list_persona_versions: {e}")
+        return None # Return None, route handler will check
 
 # --- Persona Assignment Logic ---
 def assign_persona_to_subforum(subforum_id, persona_id, is_default=False):
@@ -420,18 +544,40 @@ def get_subforum_default_persona(subforum_id, active_only=True):
     return cursor.fetchone()
 
 def get_global_default_persona_id():
-    db = get_db()
-    cursor = db.cursor()
-    cursor.execute("SELECT setting_value FROM settings WHERE setting_key = 'globalDefaultPersonaId'")
-    row = cursor.fetchone()
-    return int(row['setting_value']) if row else 1
+    try:
+        db = get_db()
+        cursor = db.cursor()
+        cursor.execute("SELECT setting_value FROM settings WHERE setting_key = 'globalDefaultPersonaId'")
+        row = cursor.fetchone()
+        if row and row['setting_value'] is not None:
+            return int(row['setting_value'])
+        print("Warning: globalDefaultPersonaId not found or NULL in settings, returning fallback 1.")
+        return 1 # Fallback if not set or NULL
+    except sqlite3.Error as e:
+        print(f"Database error in get_global_default_persona_id: {e}")
+        return None # Indicates error to caller
+    except ValueError as e:
+        print(f"ValueError for globalDefaultPersonaId, value: {row['setting_value'] if row else 'Not Found'}. Error: {e}. Returning fallback 1.")
+        return 1 # Fallback if value is not a valid integer
 
 def set_global_default_persona_id(persona_id):
     db = get_db()
-    cursor = db.cursor()
-    cursor.execute("UPDATE settings SET setting_value = ? WHERE setting_key = 'globalDefaultPersonaId'", (str(persona_id),))
-    db.commit()
-    return cursor.rowcount > 0
+    try:
+        cursor = db.cursor()
+        # Ensure the persona_id exists in the personas table before setting it as default
+        cursor.execute("SELECT 1 FROM personas WHERE persona_id = ? AND is_active = 1", (persona_id,))
+        if not cursor.fetchone():
+            print(f"Attempted to set global default to non-existent or inactive persona_id: {persona_id}")
+            return False
+
+        cursor.execute("UPDATE settings SET setting_value = ? WHERE setting_key = 'globalDefaultPersonaId'", (str(persona_id),))
+        db.commit()
+        return cursor.rowcount > 0
+    except sqlite3.Error as e:
+        print(f"Database error in set_global_default_persona_id: {e}")
+        if db:
+            db.rollback()
+        return False
 
 def get_effective_persona_for_subforum(subforum_id, override_persona_id=None):
     """

@@ -2,43 +2,87 @@ import requests
 import json
 import time
 import sqlite3
-from .config import DATABASE, OLLAMA_GENERATE_URL, DEFAULT_MODEL, CURRENT_USER_ID
+from requests.exceptions import ConnectionError, RequestException
+from datetime import datetime
 
-def process_llm_request(request_details):
+# Removed sys.path manipulation and direct 'from forllm import app' import
+
+from .config import DATABASE, OLLAMA_GENERATE_URL, DEFAULT_MODEL, CURRENT_USER_ID
+from .database import get_persona 
+
+def process_llm_request(request_details, flask_app): # Added flask_app parameter
     """Handles the actual LLM interaction for a given request."""
     request_id = request_details['request_id']
     post_id = request_details['post_id']
-    # Get the currently selected model from settings
-    db_conn = sqlite3.connect(DATABASE)
-    db_conn.row_factory = sqlite3.Row # Ensure dictionary-like rows
-    settings_cursor = db_conn.cursor()
-    settings_cursor.execute("SELECT setting_value FROM settings WHERE setting_key = 'selectedModel'")
-    model_setting = settings_cursor.fetchone()
-    db_conn.close()
-    model = model_setting['setting_value'] if model_setting else DEFAULT_MODEL # Access by name
-
-    # Persona handling remains basic for now
-    persona = request_details.get('persona', 'default_persona')
-    print(f"Processing request {request_id} for post {post_id} with selected model '{model}' and persona '{persona}'...")
-
+    
+    # Establish DB connection for this request processing
     db = sqlite3.connect(DATABASE)
-    db.row_factory = sqlite3.Row # Ensure dictionary-like rows
+    db.row_factory = sqlite3.Row 
     cursor = db.cursor()
 
     try:
-        # 1. Get the content of the post to respond to (and maybe context)
+        # --- Start of main logic block ---
+        
+        # Get selected model using local cursor
+        cursor.execute("SELECT setting_value FROM settings WHERE setting_key = 'selectedModel'")
+        model_setting = cursor.fetchone()
+        model = model_setting['setting_value'] if model_setting else DEFAULT_MODEL
+
+        # Persona ID handling (parsing)
+        persona_id_str = request_details.get('persona')
+        persona_id = None
+        try:
+            if persona_id_str is not None:
+                persona_id = int(persona_id_str)
+        except (ValueError, TypeError):
+            print(f"Warning: Invalid persona_id ('{persona_id_str}') for request {request_id}. Using default fallback logic.")
+            persona_id = None
+        
+        if persona_id is None and persona_id_str:
+            print(f"Could not convert persona_id_str '{persona_id_str}' to int for request {request_id}. Default instructions will be used.")
+        
+        print(f"Processing request {request_id} for post {post_id} with selected model '{model}'. Attempting to use persona_id: '{persona_id_str}' (parsed as {persona_id}).")
+
+        persona_instructions = "You are a helpful assistant." # Default
+        
+        # Fetch persona instructions *WITHIN APP CONTEXT* using flask_app
+        with flask_app.app_context():
+            if persona_id:
+                persona_data = get_persona(persona_id) # get_persona uses Flask's g for DB
+                if persona_data and persona_data['prompt_instructions']:
+                    persona_instructions = persona_data['prompt_instructions']
+                    print(f"Successfully fetched instructions for persona_id {persona_id} for request {request_id}.")
+                else:
+                    print(f"Warning: Could not fetch instructions for persona_id {persona_id} (or instructions were empty) for request {request_id}. Using default instructions.")
+            else:
+                print(f"No valid persona_id provided or parsed for request {request_id}. Using default instructions.")
+
+        # Get original post content using local cursor
         cursor.execute("SELECT content FROM posts WHERE post_id = ?", (post_id,))
         original_post = cursor.fetchone()
         if not original_post:
-            raise ValueError(f"Original post {post_id} not found.")
+            # If original post not found, we need to log this and update request to error
+            # This is a critical error before even trying Ollama or dummy.
+            error_message = f"Original post {post_id} not found for request {request_id}."
+            print(error_message)
+            cursor.execute("UPDATE llm_requests SET status = 'error', error_message = ?, processed_at = CURRENT_TIMESTAMP WHERE request_id = ?", (error_message, request_id))
+            db.commit()
+            return # Exit early, db will be closed in finally
 
-        prompt_content = f"User wrote: {original_post['content']}\n\nRespond to this post."
-        # TODO: Add persona instructions and potentially more thread context later
+        prompt_content = f"{persona_instructions}\n\nUser wrote: {original_post['content']}\n\nRespond to this post."
+        print(f"Final prompt_content for request {request_id} (first 200 chars): {prompt_content[:200]}...")
+        
+        # Store the constructed prompt using local cursor
+        cursor.execute("UPDATE llm_requests SET full_prompt_sent = ? WHERE request_id = ?", (prompt_content, request_id))
+        db.commit()
+        print(f"Stored full_prompt_sent for request_id {request_id}")
+        print(f"DEBUG: Successfully committed full_prompt_sent for request {request_id}. Value snippet: '{prompt_content[:100]}...'")
 
-        # 2. Call Ollama API
-        print(f"Sending prompt to Ollama ({OLLAMA_GENERATE_URL}) for model '{model}'...")
-        full_response_content = "" # Initialize before the try block for communication
+        # --- Try/Except for Ollama connection and processing ---
         try:
+            # 2. Call Ollama API
+            print(f"Sending prompt to Ollama ({OLLAMA_GENERATE_URL}) for model '{model}'...")
+            full_response_content = "" # Initialize before the try block for communication
             # Variables for streaming
             last_chunk_time = time.time()
             inter_chunk_timeout = 300 # Seconds between chunks before timeout
@@ -92,7 +136,7 @@ def process_llm_request(request_details):
                 INSERT INTO posts (topic_id, user_id, parent_post_id, content, is_llm_response, llm_model_id, llm_persona_id)
                 SELECT topic_id, ?, ?, ?, TRUE, ?, ?
                 FROM posts WHERE post_id = ?
-            """, (CURRENT_USER_ID, post_id, full_response_content, model, persona, post_id))
+            """, (CURRENT_USER_ID, post_id, full_response_content, model, persona_id, post_id)) # Use persona_id here
             new_post_id = cursor.lastrowid
             print(f"Saved LLM response as post {new_post_id}")
 
@@ -101,14 +145,18 @@ def process_llm_request(request_details):
             db.commit()
             print(f"Request {request_id} marked as complete.")
 
-        except requests.exceptions.Timeout:
-            print(f"Ollama API connection timed out after {initial_connection_timeout} seconds for request {request_id}.")
-            raise Exception(f"Failed to connect to Ollama API within {initial_connection_timeout} seconds.")
-        except requests.exceptions.RequestException as req_err:
-            print(f"Ollama API request failed for request {request_id}: {req_err}")
-            raise Exception(f"Failed to communicate with Ollama API: {req_err}") from req_err
-        except TimeoutError as stream_timeout_err:
+        except (ConnectionError, requests.exceptions.Timeout) as e: # Combined ConnectionError and Timeout
+            print(f"Ollama connection failed or timed out: {type(e).__name__}. Using dummy LLM processor for request {request_id}.")
+            _dummy_llm_processor(request_id, post_id, model, persona_id, prompt_content, DATABASE, flask_app) # Pass flask_app
+            # _dummy_llm_processor handles updating request status, so no 'raise' here unless _dummy_llm_processor itself fails
+        except requests.exceptions.RequestException as e: # General RequestException
+            print(f"Ollama API request failed: {type(e).__name__}. Using dummy LLM processor for request {request_id}.")
+            _dummy_llm_processor(request_id, post_id, model, persona_id, prompt_content, DATABASE, flask_app) # Pass flask_app
+            # _dummy_llm_processor handles updating request status
+        except TimeoutError as stream_timeout_err: # This is our custom timeout for stream inactivity
             print(f"Ollama streaming error for request {request_id}: {stream_timeout_err}")
+            # For stream timeouts, we might still want to mark as error rather than use dummy,
+            # as connection was made but stream broke. Or choose to use dummy. For now, let it be an error.
             raise Exception(f"Ollama stream timed out: {stream_timeout_err}") from stream_timeout_err
         except json.JSONDecodeError as json_err:
              print(f"Error decoding JSON from Ollama stream for request {request_id}: {json_err}")
@@ -117,9 +165,75 @@ def process_llm_request(request_details):
              print(f"Value error during Ollama processing for request {request_id}: {val_err}")
              raise Exception(f"Data error during Ollama processing: {val_err}") from val_err
 
-    except Exception as e:
-        print(f"Error processing request {request_id}: {e}")
-        cursor.execute("UPDATE llm_requests SET status = 'error', error_message = ?, processed_at = CURRENT_TIMESTAMP WHERE request_id = ?", (str(e), request_id))
+    except Exception as e: # Outer catch for errors before Ollama/dummy call (e.g. DB error saving prompt)
+        print(f"Error in process_llm_request before Ollama/dummy call for request {request_id}: {e}")
+        # Update llm_requests to error status
+        # db and cursor should still be valid here from the outer scope of process_llm_request
+        cursor.execute("UPDATE llm_requests SET status = 'error', error_message = ?, processed_at = CURRENT_TIMESTAMP WHERE request_id = ?", (f"Pre-processing error: {str(e)}", request_id))
         db.commit()
     finally:
         db.close()
+
+# Changed signature to accept flask_app
+def _dummy_llm_processor(request_id, post_id, model, persona_id, prompt_content, db_path, flask_app):
+    print(f"Dummy LLM processing request {request_id} for post {post_id} with model '{model}' and persona_id '{persona_id}'. Flask_app: {flask_app}")
+    # prompt_content already includes persona instructions from the caller (process_llm_request)
+    dummy_response_content = f"This is a dummy LLM response for post {post_id} using model {model} and persona_id {persona_id}. The intended prompt was: {prompt_content}"
+
+    # _dummy_llm_processor uses its own DB connection as it might be called standalone
+    # or from contexts where the main processor's DB isn't available/safe.
+    dummy_db = None
+    try:
+        dummy_db = sqlite3.connect(db_path)
+        dummy_db.row_factory = sqlite3.Row 
+        dummy_cursor = dummy_db.cursor()
+
+        # Save the dummy LLM response to the posts table
+        dummy_cursor.execute("SELECT topic_id FROM posts WHERE post_id = ?", (post_id,))
+        original_post_topic = dummy_cursor.fetchone()
+        if not original_post_topic:
+            error_message = f"Dummy LLM: Original post {post_id} not found, cannot determine topic_id."
+            print(error_message)
+            # Update llm_requests to error
+            dummy_cursor.execute("UPDATE llm_requests SET status = 'error', error_message = ?, processed_at = CURRENT_TIMESTAMP WHERE request_id = ?", (error_message, request_id))
+            dummy_db.commit()
+            return
+        topic_id = original_post_topic['topic_id']
+
+        dummy_cursor.execute(
+            """
+            INSERT INTO posts (topic_id, user_id, parent_post_id, content, is_llm_response, llm_model_id, llm_persona_id, created_at, updated_at)
+            VALUES (?, ?, ?, ?, TRUE, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+            """,
+            (topic_id, CURRENT_USER_ID, post_id, dummy_response_content, model, persona_id) 
+        )
+        new_post_id = dummy_cursor.lastrowid
+        print(f"Dummy LLM response saved as post {new_post_id} for request {request_id}.")
+
+        # Update the llm_requests table status to 'complete'
+        dummy_cursor.execute(
+            "UPDATE llm_requests SET status = 'complete', processed_at = CURRENT_TIMESTAMP, error_message = NULL WHERE request_id = ?",
+            (request_id,)
+        )
+        dummy_db.commit()
+        print(f"Dummy request {request_id} marked as complete.")
+
+    except Exception as e:
+        error_message = f"Error in dummy LLM processor for request {request_id}: {str(e)}"
+        print(error_message)
+        if dummy_db: 
+            try:
+                # Ensure cursor is available for error update
+                error_cursor = dummy_db.cursor()
+                error_cursor.execute(
+                    "UPDATE llm_requests SET status = 'error', processed_at = CURRENT_TIMESTAMP, error_message = ? WHERE request_id = ?",
+                    (error_message, request_id)
+                )
+                dummy_db.commit()
+            except Exception as db_error:
+                print(f"Could not update LLM request status to error after dummy processor failure: {db_error}")
+        else:
+            print(f"Database connection (dummy_db) failed in dummy processor. Could not update request {request_id} status.")
+    finally:
+        if dummy_db:
+            dummy_db.close()
