@@ -98,6 +98,16 @@ def get_queue_prompt(request_id):
         cursor.execute("SELECT full_prompt_sent, post_id_to_respond_to, llm_persona FROM llm_requests WHERE request_id = ?", (request_id,))
         request_data = cursor.fetchone()
 
+        # Assuming 'request_data' holds the row from "SELECT full_prompt_sent, ... FROM llm_requests WHERE request_id = ?"
+        if request_data:
+            # Safely access 'full_prompt_sent' and print a snippet
+            prompt_val = request_data['full_prompt_sent']
+            snippet = (prompt_val[:100] + '...' if prompt_val and len(prompt_val) > 100 else prompt_val) if prompt_val else "None"
+            print(f"DEBUG: In get_queue_prompt for request {request_id}. Fetched full_prompt_sent: '{snippet}'")
+        else:
+            # This case is already handled by "No item with that key" error, but good for explicit logging
+            print(f"DEBUG: In get_queue_prompt for request {request_id}. No request_data found by cursor.fetchone().")
+
         if not request_data:
             return jsonify(error=f"No item with that key: Request ID {request_id} not found."), 404
 
