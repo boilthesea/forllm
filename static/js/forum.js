@@ -278,12 +278,10 @@ export async function addTopic() {
 
             // Handle file uploads for the new post
             const fileInput = document.getElementById('new-topic-attachment-input');
-            if (fileInput && fileInput.files.length > 0) {
-                // The finalDisplayContainerId needs to be dynamically known or updated after the post is rendered.
-                // For now, uploads will add to a pending list. The main post list will refresh via loadPosts.
-                // Or, if loadPosts is called after this, the attachments will be rendered then.
-                // Let's pass the specific container ID for the new post, which will be created when posts are re-rendered.
-                await handleFileUploadsForPost(initial_post_id, fileInput.files, 'new-topic-pending-attachments-list', `post-attachments-${initial_post_id}`);
+            const filesToUpload = fileInput && fileInput.files.length > 0 ? Array.from(fileInput.files) : [];
+
+            if (filesToUpload.length > 0) {
+                await handleFileUploadsForPost(initial_post_id, filesToUpload, 'new-topic-pending-attachments-list', `post-attachments-${initial_post_id}`);
                 fileInput.value = ''; // Clear the file input
                 const pendingList = document.getElementById('new-topic-pending-attachments-list');
                 if (pendingList) pendingList.innerHTML = ''; // Clear pending list display
@@ -366,9 +364,10 @@ export async function submitReply() {
 
             // Handle file uploads for the new reply
             const fileInput = document.getElementById('reply-attachment-input');
-            if (fileInput && fileInput.files.length > 0) {
-                // Similar to addTopic, pass the specific container ID for the new reply post.
-                await handleFileUploadsForPost(new_reply_post_id, fileInput.files, 'reply-pending-attachments-list', `post-attachments-${new_reply_post_id}`);
+            const filesToUpload = fileInput && fileInput.files.length > 0 ? Array.from(fileInput.files) : [];
+
+            if (filesToUpload.length > 0) {
+                await handleFileUploadsForPost(new_reply_post_id, filesToUpload, 'reply-pending-attachments-list', `post-attachments-${new_reply_post_id}`);
                 fileInput.value = ''; // Clear the file input
                 const pendingList = document.getElementById('reply-pending-attachments-list');
                 if (pendingList) pendingList.innerHTML = ''; // Clear pending list display
@@ -523,15 +522,15 @@ async function uploadSingleFile(postId, file, tempDisplayContainer = null) {
 }
 
 /**
- * Handles the selection of files from a FileList, uploading them for a given post.
+ * Handles the selection of files from an array of File objects, uploading them for a given post.
  * After successful uploads, it can optionally render them into a final display container.
  * @param {number} postId - The ID of the post.
- * @param {FileList} fileList - The FileList object (e.g., from an input element's .files property).
+ * @param {File[]} filesArray - An array of File objects to upload.
  * @param {string} tempDisplayListId - The ID of the DOM element to display temporary file statuses during upload.
  * @param {string} [finalDisplayContainerId=null] - Optional. The ID of the DOM container where successfully uploaded attachments should be fully rendered using renderAttachmentItem.
  */
-async function handleFileUploadsForPost(postId, fileList, tempDisplayListId, finalDisplayContainerId = null) {
-    if (!fileList || fileList.length === 0) {
+async function handleFileUploadsForPost(postId, filesArray, tempDisplayListId, finalDisplayContainerId = null) {
+    if (!filesArray || filesArray.length === 0) {
         console.log("handleFileUploadsForPost: No files to upload.");
         return;
     }
@@ -549,7 +548,7 @@ async function handleFileUploadsForPost(postId, fileList, tempDisplayListId, fin
         // tempDisplayListElement.innerHTML = ''; // Commented out: uploadSingleFile appends, so clearing might remove ongoing upload statuses from parallel calls if any. Let individual items be removed.
     }
 
-    for (const file of fileList) {
+    for (const file of filesArray) { // Iterate over the array of File objects
         const newAttachmentData = await uploadSingleFile(postId, file, tempDisplayListElement); // Pass temp element for status updates
         if (newAttachmentData && finalDisplayContainerElement) {
             // If a final container is specified, render the successfully uploaded attachment there.

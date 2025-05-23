@@ -86,7 +86,8 @@ def init_db():
                 filepath TEXT NOT NULL,
                 user_prompt TEXT,
                 order_in_post INTEGER NOT NULL DEFAULT 0,
-                FOREIGN KEY (post_id) REFERENCES posts(post_id) ON DELETE CASCADE
+                FOREIGN KEY (post_id) REFERENCES posts(post_id) ON DELETE CASCADE,
+                UNIQUE (post_id, order_in_post)
             )
         ''')
 
