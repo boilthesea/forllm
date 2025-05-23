@@ -11,3 +11,6 @@ DEFAULT_MODEL = "llama3" # A sensible default
 
 # Map Python's weekday() to short day names
 DAY_MAP = {0: 'Mon', 1: 'Tue', 2: 'Wed', 3: 'Thu', 4: 'Fri', 5: 'Sat', 6: 'Sun'}
+
+# --- File Uploads ---
+UPLOAD_FOLDER = 'uploads'

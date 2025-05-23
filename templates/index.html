@@ -149,6 +149,12 @@
                 <h4>Create New Topic</h4>
                 <input type="text" id="new-topic-title" placeholder="Topic Title">
                 <textarea id="new-topic-content" placeholder="Your initial post content..."></textarea>
+                <!-- File attachment input for new topics -->
+                <label for="new-topic-attachment-input" class="form-label">Attachments (plain text only):</label>
+                <input type="file" id="new-topic-attachment-input" multiple class="file-input mb-2">
+                <div id="new-topic-pending-attachments-list" class="pending-attachments-list mb-2">
+                    <!-- Selected files for new topic will be listed here by JS -->
+                </div>
                 <button id="add-topic-btn">Create Topic</button>
             </div>
         </section>
@@ -159,10 +165,21 @@
             <h3>Posts</h3>
             <div id="post-list">
                 <!-- Posts will be loaded here in a threaded view -->
+                <!-- For each post, forum.js should include:
+                     <div class="post-attachments-list mt-2" id="post-attachments-<post_id>">
+                         Attachments will be rendered here by JS
+                     </div>
+                -->
             </div>
              <div id="reply-form-container" style="display:none;">
                  <h4>Reply to Post <span id="reply-to-post-id"></span></h4>
                  <textarea id="reply-content" placeholder="Your reply..."></textarea>
+                 <!-- File attachment input for replies -->
+                 <label for="reply-attachment-input" class="form-label">Attachments (plain text only):</label>
+                 <input type="file" id="reply-attachment-input" multiple class="file-input mb-2">
+                 <div id="reply-pending-attachments-list" class="pending-attachments-list mb-2">
+                     <!-- Selected files for reply will be listed here by JS -->
+                 </div>
                  <button id="submit-reply-btn">Submit Reply</button>
                  <button id="cancel-reply-btn">Cancel</button>
              </div>

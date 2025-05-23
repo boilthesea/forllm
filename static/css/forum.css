@@ -179,3 +179,169 @@ body.dark-mode .queue-item-snippet {
 body.dark-mode .queue-meta {
     color: var(--post-meta-color);
 }
+
+/* --- Attachment Styles --- */
+
+/* File Input Styling */
+.file-input {
+    /* Using variables from base.css if they were defined there would be ideal */
+    padding: 0.5rem 0.8rem;
+    margin: 0.5rem 0;
+    border: 1px solid #ccc; /* Fallback, use var(--input-border) if available */
+    border-radius: 4px; /* Fallback, use var(--border-radius) if available */
+    background-color: #fff; /* Fallback, use var(--input-bg) if available */
+    color: #333; /* Fallback, use var(--text-color) if available */
+    cursor: pointer;
+    display: block; 
+    width: calc(100% - 1.6rem); /* Full width minus its own padding */
+    box-sizing: border-box;
+}
+
+.file-input:hover {
+    border-color: #aaa; /* Fallback, use var(--input-border-hover) if available */
+}
+
+input[type="file"]::file-selector-button {
+    padding: 0.4rem 0.8rem;
+    border: 1px solid #ccc; /* Fallback, use var(--btn-border-color) */
+    border-radius: 4px; /* Fallback, use var(--border-radius) */
+    background-color: #e0e0e0; /* Fallback, use var(--btn-bg) */
+    color: #333; /* Fallback, use var(--btn-text-color) */
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+    margin-right: 0.8rem;
+}
+
+input[type="file"]::file-selector-button:hover {
+    background-color: #d0d0d0; /* Fallback, use var(--btn-hover-bg) */
+    border-color: #bbb; /* Fallback, use var(--btn-hover-border-color) */
+}
+
+
+/* Pending Attachments List (during upload) */
+.pending-attachments-list {
+    margin-top: 0.5rem;
+    padding: 0.5rem;
+    border: 1px dashed #ddd; /* Fallback, use var(--input-border) */
+    border-radius: 4px; /* Fallback, use var(--border-radius) */
+    background-color: #f9f9f9; /* Fallback, use var(--input-bg-light) */
+    min-height: 2rem; 
+}
+
+.pending-attachments-list:empty {
+    display: none; 
+}
+
+.pending-attachment-item {
+    font-size: 0.9em;
+    padding: 0.2rem 0;
+    color: #555; /* Fallback, use var(--text-color-muted) */
+}
+
+/* Post Attachments List (container for attachments on a displayed post) */
+.post-attachments-list {
+    margin-top: 0.75rem;
+    padding-top: 0.75rem;
+    border-top: 1px solid #eee; /* Fallback, use var(--separator-color) */
+}
+
+/* Individual Attachment Item (in .post-attachments-list) */
+.attachment-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem; /* Space between items */
+    padding: 0.5rem;
+    margin-bottom: 0.5rem; 
+    background-color: #f0f0f0; /* Fallback, use var(--input-bg-light) */
+    border: 1px solid #e0e0e0; /* Fallback, use var(--input-border) */
+    border-radius: 4px; /* Fallback, use var(--border-radius) */
+}
+
+.attachment-filename {
+    font-weight: bold;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    flex-shrink: 1; 
+    min-width: 100px; /* Ensure filename is not overly squished */
+}
+
+.attachment-user-prompt {
+    flex-grow: 1; 
+    padding: 0.3rem 0.5rem;
+    font-size: 0.9em;
+    border: 1px solid #ccc; /* Fallback, use var(--input-border) */
+    border-radius: 3px; /* Fallback, use var(--border-radius-small) */
+    min-width: 150px; 
+}
+
+.delete-attachment-btn {
+    padding: 0.3rem 0.6rem;
+    font-size: 0.85em;
+    background-color: #e74c3c; /* Fallback, use var(--btn-danger-bg) */
+    color: white; /* Fallback, use var(--btn-danger-text) */
+    border: none;
+    border-radius: 3px; /* Fallback, use var(--border-radius-small) */
+    cursor: pointer;
+    flex-shrink: 0; 
+}
+
+.delete-attachment-btn:hover {
+    background-color: #c0392b; /* Fallback, use var(--btn-danger-hover-bg) */
+}
+
+/* Dark Mode Considerations for Attachments */
+body.dark-mode .file-input {
+    background-color: var(--input-bg, #2b2b2b); /* Provide fallback if var not defined */
+    border-color: var(--input-border, #555);
+    color: var(--text-color, #ddd);
+}
+
+body.dark-mode input[type="file"]::file-selector-button {
+    background-color: var(--btn-bg, #444);
+    color: var(--btn-text-color, #ddd);
+    border-color: var(--btn-border-color, #555);
+}
+
+body.dark-mode input[type="file"]::file-selector-button:hover {
+    background-color: var(--btn-hover-bg, #555);
+    border-color: var(--btn-hover-border-color, #666);
+}
+
+body.dark-mode .pending-attachments-list {
+    background-color: var(--input-bg-darker, #2c2c2c); 
+    border-color: var(--input-border, #555);
+}
+
+body.dark-mode .pending-attachment-item {
+    color: var(--text-color-muted, #aaa);
+}
+
+body.dark-mode .post-attachments-list {
+    border-top-color: var(--separator-color, #444);
+}
+
+body.dark-mode .attachment-item {
+    background-color: var(--post-bg-lighter, #3a3a3a); 
+    border-color: var(--input-border, #555);
+}
+
+body.dark-mode .attachment-filename {
+    color: var(--text-color, #ddd); 
+}
+
+body.dark-mode .attachment-user-prompt {
+    background-color: var(--input-bg, #2b2b2b);
+    border-color: var(--input-border, #555);
+    color: var(--text-color, #ddd);
+}
+
+body.dark-mode .delete-attachment-btn {
+    background-color: var(--btn-danger-bg, #e74c3c); 
+    color: var(--btn-danger-text, white);
+}
+
+body.dark-mode .delete-attachment-btn:hover {
+    background-color: var(--btn-danger-hover-bg, #c0392b);
+}

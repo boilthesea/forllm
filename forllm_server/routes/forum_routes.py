@@ -1,5 +1,7 @@
 import sqlite3
-from flask import Blueprint, request, jsonify
+import os
+from werkzeug.utils import secure_filename
+from flask import Blueprint, request, jsonify, current_app
 from bs4 import BeautifulSoup # For link modification in LLM responses
 from ..database import (
     get_db,
@@ -10,6 +12,53 @@ from ..markdown_config import md
 from ..config import CURRENT_USER_ID
 
 forum_api_bp = Blueprint('forum_api', __name__, url_prefix='/api')
+
+# Helper function to check for plain text
+def is_plain_text(file_stream):
+    """
+    Checks if a file stream appears to be plain text.
+    Reads a small portion, checks UTF-8 decoding, printable chars, and null bytes.
+    """
+    try:
+        # Read a small chunk (e.g., 2KB)
+        chunk_size = 2048
+        original_position = file_stream.tell()
+        chunk = file_stream.read(chunk_size)
+        file_stream.seek(original_position) # Reset stream position
+
+        if not chunk: # Empty file can be considered plain text or handled as an error by caller
+            return True
+
+        # Attempt to decode as UTF-8
+        try:
+            text_content = chunk.decode('utf-8')
+        except UnicodeDecodeError:
+            return False # Not valid UTF-8
+
+        # Check for high percentage of printable characters
+        printable_chars = sum(c.isprintable() or c.isspace() for c in text_content)
+        total_chars = len(text_content)
+        if total_chars == 0: # Should have been caught by 'if not chunk'
+             return True 
+        
+        # Allow a very small number of non-printable chars, but mostly printable
+        # Adjust threshold as needed. >85% printable seems reasonable.
+        if (printable_chars / total_chars) < 0.85:
+            return False
+
+        # Check for null bytes (common in binary files)
+        # Allow a very small tolerance for null bytes, e.g., in some text encodings or formats
+        # For truly plain text, null bytes should be rare or absent.
+        if b'\x00' in chunk:
+            null_byte_count = chunk.count(b'\x00')
+            # If more than, say, 2 null bytes in a 2KB chunk, or if they make up >1% of the chunk
+            if null_byte_count > 2 or (null_byte_count / len(chunk)) > 0.01:
+                 return False
+        
+        return True
+    except Exception:
+        # If any error occurs during the check, assume it's not plain text for safety
+        return False
 
 @forum_api_bp.route('/subforums', methods=['GET', 'POST'])
 def handle_subforums():
@@ -129,6 +178,19 @@ def handle_posts(topic_id):
         processed_posts = []
         for row in posts_raw:
             post_dict = dict(row)
+            
+            # Fetch attachments for this post
+            post_id = post_dict['post_id']
+            cursor.execute("""
+                SELECT attachment_id, filename, filepath, user_prompt, order_in_post
+                FROM attachments
+                WHERE post_id = ?
+                ORDER BY order_in_post ASC
+            """, (post_id,))
+            attachments_raw = cursor.fetchall()
+            attachments_list = [dict(att_row) for att_row in attachments_raw]
+            post_dict['attachments'] = attachments_list
+
             html_content = md.render(post_dict['content'])
             if post_dict.get('is_llm_response'):
                 try:
@@ -210,3 +272,181 @@ def api_get_subforum_default_persona(subforum_id):
     if not p:
         return jsonify({'error': 'No default persona'}), 404
     return jsonify(dict(p))
+
+@forum_api_bp.route('/posts/<int:post_id>/attachments', methods=['POST'])
+def upload_attachment(post_id):
+    db = get_db()
+    cursor = db.cursor()
+
+    # Check if the post exists
+    cursor.execute("SELECT post_id FROM posts WHERE post_id = ?", (post_id,))
+    if not cursor.fetchone():
+        return jsonify({'error': 'Post not found'}), 404
+
+    if 'file' not in request.files:
+        return jsonify({'error': 'No file part in the request'}), 400
+    
+    file = request.files['file']
+    if file.filename == '':
+        return jsonify({'error': 'No selected file'}), 400
+
+    if file:
+        # Secure the filename
+        filename = secure_filename(file.filename)
+        
+        # Validate if the file is plain text
+        original_stream_pos = file.stream.tell()
+        if not is_plain_text(file.stream):
+            file.stream.seek(original_stream_pos) # Reset stream position
+            return jsonify({'error': 'File does not appear to be plain text'}), 400
+        file.stream.seek(original_stream_pos) # Reset stream position for saving
+
+        # Create upload directory if it doesn't exist
+        # UPLOAD_FOLDER is expected to be in app.config
+        upload_folder_for_post = os.path.join(current_app.config['UPLOAD_FOLDER'], str(post_id))
+        os.makedirs(upload_folder_for_post, exist_ok=True)
+        
+        # Relative path for database storage
+        filepath_relative = os.path.join(str(post_id), filename)
+        # Full path for saving the file
+        filepath_full = os.path.join(current_app.config['UPLOAD_FOLDER'], filepath_relative)
+
+        try:
+            file.save(filepath_full)
+        except Exception as e:
+            return jsonify({'error': f'Failed to save file: {str(e)}'}), 500
+
+        # Store attachment details in the database
+        try:
+            # Get current max order_in_post for this post_id
+            cursor.execute("SELECT MAX(order_in_post) FROM attachments WHERE post_id = ?", (post_id,))
+            max_order = cursor.fetchone()[0]
+            current_order = 0
+            if max_order is not None:
+                current_order = max_order + 1
+
+            cursor.execute('''
+                INSERT INTO attachments (post_id, filename, filepath, order_in_post)
+                VALUES (?, ?, ?, ?)
+            ''', (post_id, filename, filepath_relative, current_order))
+            db.commit()
+            attachment_id = cursor.lastrowid
+            
+            return jsonify({
+                'attachment_id': attachment_id,
+                'filename': filename,
+                'filepath': filepath_relative,
+                'post_id': post_id,
+                'order_in_post': current_order
+            }), 201
+        except sqlite3.Error as e:
+            db.rollback()
+            # Attempt to remove the saved file if DB insert fails
+            try:
+                os.remove(filepath_full)
+            except OSError:
+                pass # Log this error in a real app
+            return jsonify({'error': f'Database error: {str(e)}'}), 500
+        except Exception as e: # Catch any other unexpected errors
+            db.rollback()
+            try:
+                os.remove(filepath_full)
+            except OSError:
+                pass
+            return jsonify({'error': f'An unexpected error occurred: {str(e)}'}), 500
+            
+    return jsonify({'error': 'File upload failed for an unknown reason'}), 500
+
+@forum_api_bp.route('/attachments/<int:attachment_id>', methods=['PUT'])
+def update_attachment(attachment_id):
+    data = request.get_json()
+    if not data:
+        return jsonify({'error': 'No data provided'}), 400
+
+    user_prompt = data.get('user_prompt')
+    order_in_post = data.get('order_in_post')
+
+    if user_prompt is None and order_in_post is None:
+        return jsonify({'error': 'No updatable fields provided (user_prompt or order_in_post)'}), 400
+
+    db = get_db()
+    cursor = db.cursor()
+
+    # Check if attachment exists
+    cursor.execute("SELECT attachment_id FROM attachments WHERE attachment_id = ?", (attachment_id,))
+    if not cursor.fetchone():
+        return jsonify({'error': 'Attachment not found'}), 404
+
+    fields_to_update = []
+    params = []
+
+    if user_prompt is not None:
+        fields_to_update.append("user_prompt = ?")
+        params.append(user_prompt)
+    
+    if order_in_post is not None:
+        if not isinstance(order_in_post, int):
+            return jsonify({'error': 'order_in_post must be an integer'}), 400
+        fields_to_update.append("order_in_post = ?")
+        params.append(order_in_post)
+
+    if not fields_to_update: # Should be caught by earlier check, but as a safeguard
+        return jsonify({'error': 'No valid fields to update'}), 400
+
+    sql = f"UPDATE attachments SET {', '.join(fields_to_update)} WHERE attachment_id = ?"
+    params.append(attachment_id)
+
+    try:
+        cursor.execute(sql, tuple(params))
+        db.commit()
+        if cursor.rowcount == 0:
+             # Should not happen if we already checked for existence, but good for robustness
+            return jsonify({'error': 'Attachment not found or no change made'}), 404
+        return jsonify({'message': 'Attachment updated successfully'})
+    except sqlite3.Error as e:
+        db.rollback()
+        return jsonify({'error': f'Database error: {str(e)}'}), 500
+
+@forum_api_bp.route('/attachments/<int:attachment_id>', methods=['DELETE'])
+def delete_attachment(attachment_id):
+    db = get_db()
+    cursor = db.cursor()
+
+    # Fetch filepath first
+    cursor.execute("SELECT filepath FROM attachments WHERE attachment_id = ?", (attachment_id,))
+    row = cursor.fetchone()
+    if not row:
+        return jsonify({'error': 'Attachment not found'}), 404
+    
+    filepath_relative = row['filepath']
+    filepath_full = os.path.join(current_app.config['UPLOAD_FOLDER'], filepath_relative)
+
+    try:
+        # Delete the file
+        try:
+            os.remove(filepath_full)
+        except FileNotFoundError:
+            # Log this: print(f"File not found during deletion: {filepath_full}, proceeding to delete DB record.")
+            pass # File already deleted, proceed to delete DB record
+        except OSError as e:
+            # Other OS errors (permissions, etc.), might be more serious
+            # print(f"Error deleting file {filepath_full}: {e}")
+            # Depending on policy, you might want to stop or continue. Here we continue.
+            pass
+
+
+        # Delete the database record
+        cursor.execute("DELETE FROM attachments WHERE attachment_id = ?", (attachment_id,))
+        db.commit()
+
+        if cursor.rowcount == 0:
+            # This might happen if the attachment was deleted by another request between fetching and deleting
+            return jsonify({'error': 'Attachment record not found or already deleted'}), 404
+            
+        return jsonify({'message': 'Attachment deleted successfully'})
+    except sqlite3.Error as e:
+        db.rollback()
+        return jsonify({'error': f'Database error: {str(e)}'}), 500
+    except Exception as e: # Catch any other unexpected errors
+        # db.rollback() # Rollback may not be needed if the error is not from sqlite
+        return jsonify({'error': f'An unexpected error occurred: {str(e)}'}), 500

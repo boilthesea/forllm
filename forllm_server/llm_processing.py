@@ -2,13 +2,15 @@ import requests
 import json
 import time
 import sqlite3
+import os # Added os
+from flask import current_app # Added current_app
 from requests.exceptions import ConnectionError, RequestException
 from datetime import datetime
 
 # Removed sys.path manipulation and direct 'from forllm import app' import
 
-from .config import DATABASE, OLLAMA_GENERATE_URL, DEFAULT_MODEL, CURRENT_USER_ID
-from .database import get_persona 
+from .config import DATABASE, OLLAMA_GENERATE_URL, DEFAULT_MODEL, CURRENT_USER_ID, UPLOAD_FOLDER # UPLOAD_FOLDER might not be needed if current_app.config is used
+from .database import get_persona
 
 def process_llm_request(request_details, flask_app): # Added flask_app parameter
     """Handles the actual LLM interaction for a given request."""
@@ -61,15 +63,65 @@ def process_llm_request(request_details, flask_app): # Added flask_app parameter
         cursor.execute("SELECT content FROM posts WHERE post_id = ?", (post_id,))
         original_post = cursor.fetchone()
         if not original_post:
-            # If original post not found, we need to log this and update request to error
-            # This is a critical error before even trying Ollama or dummy.
             error_message = f"Original post {post_id} not found for request {request_id}."
             print(error_message)
             cursor.execute("UPDATE llm_requests SET status = 'error', error_message = ?, processed_at = CURRENT_TIMESTAMP WHERE request_id = ?", (error_message, request_id))
             db.commit()
-            return # Exit early, db will be closed in finally
+            return
 
-        prompt_content = f"{persona_instructions}\n\nUser wrote: {original_post['content']}\n\nRespond to this post."
+        # --- Fetch and format attachments ---
+        attachments_text_parts = []
+        # Need app_context to access current_app.config['UPLOAD_FOLDER']
+        with flask_app.app_context():
+            upload_folder_path = current_app.config.get('UPLOAD_FOLDER')
+            if not upload_folder_path:
+                print(f"Error: UPLOAD_FOLDER not configured in Flask app for request {request_id}. Cannot process attachments.")
+            else:
+                cursor.execute("""
+                    SELECT filename, filepath, user_prompt
+                    FROM attachments
+                    WHERE post_id = ?
+                    ORDER BY order_in_post ASC
+                """, (post_id,))
+                attachments = cursor.fetchall()
+
+                if attachments:
+                    print(f"Found {len(attachments)} attachments for post {post_id} (request {request_id}). Processing...")
+                    for att in attachments:
+                        attachment_filename = att['filename']
+                        attachment_filepath_relative = att['filepath']
+                        attachment_user_prompt = att['user_prompt'] if att['user_prompt'] else 'Associated file content.'
+                        
+                        full_filepath = os.path.join(upload_folder_path, attachment_filepath_relative)
+                        file_content = ""
+                        try:
+                            with open(full_filepath, 'r', encoding='utf-8') as f:
+                                file_content = f.read()
+                            print(f"Successfully read content of attachment: {attachment_filename} for post {post_id}.")
+                        except FileNotFoundError:
+                            file_content = "Error: File content not found."
+                            print(f"Error: Attachment file not found at {full_filepath} for post {post_id}.")
+                        except Exception as e:
+                            file_content = f"Error reading file: {str(e)}"
+                            print(f"Error reading attachment file {full_filepath} for post {post_id}: {e}")
+
+                        attachments_text_parts.append(
+                            f"--- BEGIN ATTACHED FILE ---\n"
+                            f"Filename: {attachment_filename}\n"
+                            f"User prompt: {attachment_user_prompt}\n"
+                            f"Content:\n{file_content}\n"
+                            f"--- END ATTACHED FILE ---"
+                        )
+                else:
+                    print(f"No attachments found for post {post_id} (request {request_id}).")
+        
+        attachments_string = "\n\n".join(attachments_text_parts)
+        if attachments_string:
+            attachments_string += "\n\n" # Add trailing newlines if there were attachments
+
+        # --- Construct final prompt ---
+        # Attachments first, then persona instructions, then user's post
+        prompt_content = f"{attachments_string}{persona_instructions}\n\nUser wrote: {original_post['content']}\n\nRespond to this post."
         print(f"Final prompt_content for request {request_id} (first 200 chars): {prompt_content[:200]}...")
         
         # Store the constructed prompt using local cursor

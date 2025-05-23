@@ -146,6 +146,20 @@ function renderPostNode(post, parentElement, depth) {
     postDiv.appendChild(metaDiv);
     postDiv.appendChild(contentDiv);
     postDiv.appendChild(actionsDiv);
+
+    // --- Render Attachments for the post ---
+    if (post.attachments && Array.isArray(post.attachments) && post.attachments.length > 0) {
+        const attachmentsContainerDiv = document.createElement('div');
+        attachmentsContainerDiv.className = 'post-attachments-list mt-2';
+        attachmentsContainerDiv.id = `post-attachments-${post.post_id}`; // Unique ID for this post's attachments
+
+        post.attachments.forEach(attachmentData => {
+            renderAttachmentItem(attachmentData, attachmentsContainerDiv, post.post_id);
+        });
+        postDiv.appendChild(attachmentsContainerDiv);
+    }
+    // --- End Render Attachments ---
+
     parentElement.appendChild(postDiv);
 
     if (post.children && post.children.length > 0) {
@@ -257,17 +271,36 @@ export async function addTopic() {
         return;
     }
     try {
-        const newTopic = await apiRequest(`/api/subforums/${currentSubforumId}/topics`, 'POST', { title, content });
-         if (newTopic) {
+        const newTopicResponse = await apiRequest(`/api/subforums/${currentSubforumId}/topics`, 'POST', { title, content });
+         if (newTopicResponse && newTopicResponse.topic_id && newTopicResponse.initial_post_id) {
+            // Successfully created topic and initial post
+            const initial_post_id = newTopicResponse.initial_post_id;
+
+            // Handle file uploads for the new post
+            const fileInput = document.getElementById('new-topic-attachment-input');
+            if (fileInput && fileInput.files.length > 0) {
+                // The finalDisplayContainerId needs to be dynamically known or updated after the post is rendered.
+                // For now, uploads will add to a pending list. The main post list will refresh via loadPosts.
+                // Or, if loadPosts is called after this, the attachments will be rendered then.
+                // Let's pass the specific container ID for the new post, which will be created when posts are re-rendered.
+                await handleFileUploadsForPost(initial_post_id, fileInput.files, 'new-topic-pending-attachments-list', `post-attachments-${initial_post_id}`);
+                fileInput.value = ''; // Clear the file input
+                const pendingList = document.getElementById('new-topic-pending-attachments-list');
+                if (pendingList) pendingList.innerHTML = ''; // Clear pending list display
+            }
+
+            // Refresh the topic list and potentially navigate to the new topic
+            // The existing code for adding to topic list is fine.
+            // Consider if we should auto-load the new topic: loadPosts(newTopicResponse.topic_id, newTopicResponse.title);
             const li = document.createElement('li');
             const a = document.createElement('a');
             a.href = '#';
-            a.textContent = newTopic.title;
-            a.dataset.topicId = newTopic.topic_id;
-            a.dataset.topicTitle = newTopic.title;
+            a.textContent = newTopicResponse.title;
+            a.dataset.topicId = newTopicResponse.topic_id;
+            a.dataset.topicTitle = newTopicResponse.title;
             a.addEventListener('click', (e) => {
                 e.preventDefault();
-                loadPosts(newTopic.topic_id, newTopic.title);
+                loadPosts(newTopicResponse.topic_id, newTopicResponse.title);
             });
              const meta = document.createElement('div');
              meta.className = 'topic-meta';
@@ -327,10 +360,22 @@ export async function submitReply() {
     }
 
     try {
-        const newPost = await apiRequest(`/api/topics/${currentTopicId}/posts`, 'POST', { content, parent_post_id: parentPostId });
-        if (newPost) {
+        const newPostResponse = await apiRequest(`/api/topics/${currentTopicId}/posts`, 'POST', { content, parent_post_id: parentPostId });
+        if (newPostResponse && newPostResponse.post_id) {
+            const new_reply_post_id = newPostResponse.post_id;
+
+            // Handle file uploads for the new reply
+            const fileInput = document.getElementById('reply-attachment-input');
+            if (fileInput && fileInput.files.length > 0) {
+                // Similar to addTopic, pass the specific container ID for the new reply post.
+                await handleFileUploadsForPost(new_reply_post_id, fileInput.files, 'reply-pending-attachments-list', `post-attachments-${new_reply_post_id}`);
+                fileInput.value = ''; // Clear the file input
+                const pendingList = document.getElementById('reply-pending-attachments-list');
+                if (pendingList) pendingList.innerHTML = ''; // Clear pending list display
+            }
+
             hideReplyForm();
-            loadPosts(currentTopicId, currentTopicTitle.textContent);
+            loadPosts(currentTopicId, currentTopicTitle.textContent); // This will re-render the posts, including new attachments.
         }
     } catch (error) {
         // Error handled by apiRequest
@@ -367,5 +412,153 @@ postList.addEventListener('click', (event) => {
     }
 });
 
+// --- Attachment Handling Functions ---
+
+/**
+ * Renders a single attachment item in the specified container.
+ * Sets up event listeners for editing user prompt and deleting the attachment.
+ * @param {object} attachmentData - Data for the attachment (attachment_id, filename, user_prompt, filepath).
+ * @param {HTMLElement} containerElement - The DOM element to append the attachment item to.
+ * @param {number} postId - The ID of the post this attachment belongs to (used for context if needed).
+ * @returns {HTMLElement|null} The created attachment item element, or null if failed.
+ */
+function renderAttachmentItem(attachmentData, containerElement, postId) {
+    if (!attachmentData || !containerElement) {
+        console.error("renderAttachmentItem: Missing attachmentData or containerElement", attachmentData, containerElement);
+        return null;
+    }
+
+    const itemDiv = document.createElement('div');
+    itemDiv.className = 'attachment-item mb-2';
+    itemDiv.dataset.attachmentId = attachmentData.attachment_id;
+
+    const fileNameSpan = document.createElement('span');
+    fileNameSpan.className = 'attachment-filename';
+    fileNameSpan.textContent = attachmentData.filename;
+    itemDiv.appendChild(fileNameSpan);
+
+    const promptInput = document.createElement('input');
+    promptInput.type = 'text';
+    promptInput.className = 'attachment-user-prompt form-input';
+    promptInput.value = attachmentData.user_prompt || '';
+    promptInput.placeholder = 'Custom prompt for LLM (optional)';
+    promptInput.addEventListener('blur', async () => {
+        const newPrompt = promptInput.value.trim();
+        if (newPrompt !== (attachmentData.user_prompt || '')) {
+            try {
+                await apiRequest(`/api/attachments/${attachmentData.attachment_id}`, 'PUT', { user_prompt: newPrompt });
+                attachmentData.user_prompt = newPrompt; // Update local data representation
+            } catch (error) {
+                alert(`Failed to update attachment prompt: ${error.message}`);
+                promptInput.value = attachmentData.user_prompt || ''; // Revert on error
+            }
+        }
+    });
+    itemDiv.appendChild(promptInput);
+
+    const deleteButton = document.createElement('button');
+    deleteButton.className = 'delete-attachment-btn btn btn-danger btn-small';
+    deleteButton.textContent = 'Delete';
+    deleteButton.addEventListener('click', async () => {
+        if (confirm(`Are you sure you want to delete attachment "${attachmentData.filename}"?`)) {
+            try {
+                await apiRequest(`/api/attachments/${attachmentData.attachment_id}`, 'DELETE');
+                itemDiv.remove();
+            } catch (error) {
+                alert(`Failed to delete attachment: ${error.message}`);
+            }
+        }
+    });
+    itemDiv.appendChild(deleteButton);
+    containerElement.appendChild(itemDiv);
+    return itemDiv;
+}
+
+/**
+ * Uploads a single file to the server for a given post.
+ * @param {number} postId - The ID of the post to attach the file to.
+ * @param {File} file - The file object to upload.
+ * @param {HTMLElement} [tempDisplayContainer=null] - Optional. A DOM element to show temporary upload status for this specific file.
+ * @returns {Promise<object|null>} The attachment data from the server or null on failure.
+ */
+async function uploadSingleFile(postId, file, tempDisplayContainer = null) {
+    const tempId = `temp-upload-${postId}-${file.name}-${Date.now()}`; // Include postId for better uniqueness
+    let tempListItem = null;
+
+    if (tempDisplayContainer) {
+        tempListItem = document.createElement('div');
+        tempListItem.className = 'pending-attachment-item';
+        tempListItem.textContent = `Uploading ${file.name}...`;
+        tempListItem.id = tempId;
+        tempDisplayContainer.appendChild(tempListItem);
+    }
+
+    const formData = new FormData();
+    formData.append('file', file);
+
+    try {
+        const newAttachmentData = await apiRequest(`/api/posts/${postId}/attachments`, 'POST', formData, true); // true for isFormData
+        if (newAttachmentData && newAttachmentData.attachment_id) {
+            if (tempListItem) {
+                tempListItem.textContent = `${file.name} - Uploaded successfully.`;
+                // Remove the temporary item after a short delay
+                setTimeout(() => tempListItem.remove(), 3000);
+            }
+            return newAttachmentData;
+        } else {
+            throw new Error('Upload completed but no valid attachment data returned.');
+        }
+    } catch (error) {
+        console.error(`Failed to upload ${file.name}:`, error);
+        if (tempListItem) {
+            tempListItem.textContent = `Failed to upload ${file.name}: ${error.message || 'Unknown error'}`;
+            tempListItem.style.color = 'red';
+            // Optionally, don't remove error messages automatically or provide a way to clear them.
+        } else {
+            // Fallback alert if no temp display area was provided (less likely with new flow)
+            alert(`Failed to upload ${file.name}: ${error.message || 'Unknown error'}`);
+        }
+        return null;
+    }
+}
+
+/**
+ * Handles the selection of files from a FileList, uploading them for a given post.
+ * After successful uploads, it can optionally render them into a final display container.
+ * @param {number} postId - The ID of the post.
+ * @param {FileList} fileList - The FileList object (e.g., from an input element's .files property).
+ * @param {string} tempDisplayListId - The ID of the DOM element to display temporary file statuses during upload.
+ * @param {string} [finalDisplayContainerId=null] - Optional. The ID of the DOM container where successfully uploaded attachments should be fully rendered using renderAttachmentItem.
+ */
+async function handleFileUploadsForPost(postId, fileList, tempDisplayListId, finalDisplayContainerId = null) {
+    if (!fileList || fileList.length === 0) {
+        console.log("handleFileUploadsForPost: No files to upload.");
+        return;
+    }
+    if (!postId) {
+        console.error("handleFileUploadsForPost: postId is required.");
+        alert("Error: Cannot upload attachments without a valid post ID.");
+        return;
+    }
+
+    const tempDisplayListElement = document.getElementById(tempDisplayListId);
+    const finalDisplayContainerElement = finalDisplayContainerId ? document.getElementById(finalDisplayContainerId) : null;
+
+    if (tempDisplayListElement) {
+        // Clear previous items from the temporary display list for this batch of uploads
+        // tempDisplayListElement.innerHTML = ''; // Commented out: uploadSingleFile appends, so clearing might remove ongoing upload statuses from parallel calls if any. Let individual items be removed.
+    }
+
+    for (const file of fileList) {
+        const newAttachmentData = await uploadSingleFile(postId, file, tempDisplayListElement); // Pass temp element for status updates
+        if (newAttachmentData && finalDisplayContainerElement) {
+            // If a final container is specified, render the successfully uploaded attachment there.
+            renderAttachmentItem(newAttachmentData, finalDisplayContainerElement, postId);
+        }
+    }
+}
+
 // Export state variables if needed by other modules (e.g., main.js for initial load)
 export { currentSubforumId, currentTopicId, currentPosts };
+// Export new attachment handlers
+export { handleFileUploadsForPost, renderAttachmentItem }; // renderAttachmentItem is exported for direct use if needed elsewhere
