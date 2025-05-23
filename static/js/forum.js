@@ -279,6 +279,7 @@ export async function addTopic() {
             // Handle file uploads for the new post
             const fileInput = document.getElementById('new-topic-attachment-input');
             const filesToUpload = fileInput && fileInput.files.length > 0 ? Array.from(fileInput.files) : [];
+            console.log('[DEBUG] Files selected:', filesToUpload);
 
             if (filesToUpload.length > 0) {
                 await handleFileUploadsForPost(initial_post_id, filesToUpload, 'new-topic-pending-attachments-list', `post-attachments-${initial_post_id}`);
@@ -365,6 +366,7 @@ export async function submitReply() {
             // Handle file uploads for the new reply
             const fileInput = document.getElementById('reply-attachment-input');
             const filesToUpload = fileInput && fileInput.files.length > 0 ? Array.from(fileInput.files) : [];
+            console.log('[DEBUG] Files selected:', filesToUpload);
 
             if (filesToUpload.length > 0) {
                 await handleFileUploadsForPost(new_reply_post_id, filesToUpload, 'reply-pending-attachments-list', `post-attachments-${new_reply_post_id}`);
@@ -481,6 +483,9 @@ function renderAttachmentItem(attachmentData, containerElement, postId) {
  * @returns {Promise<object|null>} The attachment data from the server or null on failure.
  */
 async function uploadSingleFile(postId, file, tempDisplayContainer = null) {
+    console.log('[DEBUG] uploadSingleFile - postId:', postId, 'file:', file);
+    console.log('[DEBUG] uploadSingleFile - File details: name:', file.name, 'size:', file.size, 'type:', file.type, 'lastModified:', file.lastModified, 'File instance of File:', file instanceof File);
+
     const tempId = `temp-upload-${postId}-${file.name}-${Date.now()}`; // Include postId for better uniqueness
     let tempListItem = null;
 
@@ -493,7 +498,10 @@ async function uploadSingleFile(postId, file, tempDisplayContainer = null) {
     }
 
     const formData = new FormData();
+    console.log('[DEBUG] uploadSingleFile - Initialized FormData object:', formData);
     formData.append('file', file);
+    console.log('[DEBUG] uploadSingleFile - FormData after appending file. Calling formData.has("file"):', formData.has('file'));
+    for (let [key, value] of formData.entries()) { console.log('[DEBUG] uploadSingleFile - FormData entry: key=', key, 'value=', value); }
 
     try {
         const newAttachmentData = await apiRequest(`/api/posts/${postId}/attachments`, 'POST', formData, true); // true for isFormData
@@ -530,6 +538,7 @@ async function uploadSingleFile(postId, file, tempDisplayContainer = null) {
  * @param {string} [finalDisplayContainerId=null] - Optional. The ID of the DOM container where successfully uploaded attachments should be fully rendered using renderAttachmentItem.
  */
 async function handleFileUploadsForPost(postId, filesArray, tempDisplayListId, finalDisplayContainerId = null) {
+    console.log('[DEBUG] handleFileUploadsForPost - postId:', postId, 'filesArray:', filesArray);
     if (!filesArray || filesArray.length === 0) {
         console.log("handleFileUploadsForPost: No files to upload.");
         return;
@@ -549,6 +558,7 @@ async function handleFileUploadsForPost(postId, filesArray, tempDisplayListId, f
     }
 
     for (const file of filesArray) { // Iterate over the array of File objects
+        console.log('[DEBUG] handleFileUploadsForPost - processing file:', file);
         const newAttachmentData = await uploadSingleFile(postId, file, tempDisplayListElement); // Pass temp element for status updates
         if (newAttachmentData && finalDisplayContainerElement) {
             // If a final container is specified, render the successfully uploaded attachment there.
