@@ -343,6 +343,10 @@ def upload_attachment(post_id):
             db.commit()
             attachment_id = cursor.lastrowid
             
+            # Ensure 'filename' here refers to the secured filename if that's what's stored and used.
+            # The variable 'filename' was already secure_filename(file.filename)
+            print(f"[DEBUG AttachmentSave] Saved attachment: id={attachment_id}, post_id={post_id}, filename='{filename}', filepath='{filepath_relative}', order_in_post={order_in_post}")
+            
             # Return the actual order_in_post used
             return jsonify({
                 'attachment_id': attachment_id,

@@ -77,17 +77,23 @@ def process_llm_request(request_details, flask_app): # Added flask_app parameter
             if not upload_folder_path:
                 print(f"Error: UPLOAD_FOLDER not configured in Flask app for request {request_id}. Cannot process attachments.")
             else:
+                print(f"[DEBUG AttachmentFetch] Attempting to fetch attachments for post_id: {post_id}") # post_id here is post_id_to_respond_to
                 cursor.execute("""
-                    SELECT filename, filepath, user_prompt
+                    SELECT filename, filepath, user_prompt, order_in_post
                     FROM attachments
                     WHERE post_id = ?
                     ORDER BY order_in_post ASC
-                """, (post_id,))
-                attachments = cursor.fetchall()
+                """, (post_id,)) # post_id here is post_id_to_respond_to
+                attachments_raw = cursor.fetchall()
+                
+                # Convert Row objects to dictionaries for easier logging/processing if needed, or just log raw
+                attachments_list_for_log = [dict(row) for row in attachments_raw]
+                print(f"[DEBUG AttachmentFetch] Found attachments for post_id {post_id}: {attachments_list_for_log}")
 
-                if attachments:
-                    print(f"Found {len(attachments)} attachments for post {post_id} (request {request_id}). Processing...")
-                    for att in attachments:
+
+                if attachments_raw: # Check attachments_raw instead of attachments
+                    print(f"Found {len(attachments_raw)} attachments for post {post_id} (request {request_id}). Processing...")
+                    for att in attachments_raw: # Iterate over attachments_raw
                         attachment_filename = att['filename']
                         attachment_filepath_relative = att['filepath']
                         attachment_user_prompt = att['user_prompt'] if att['user_prompt'] else 'Associated file content.'
