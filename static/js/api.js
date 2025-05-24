@@ -21,18 +21,18 @@ export async function apiRequest(url, method = 'GET', data = null, isFormData = 
     }
 
     // Debugging logs
-    console.log('[DEBUG] apiRequest - URL:', url, 'Method:', method, 'Options:', JSON.stringify(options, null, 2));
-    if (isFormData && data) {
+    // console.log('[DEBUG] apiRequest - URL:', url, 'Method:', method, 'Options:', JSON.stringify(options, null, 2));
+    // if (isFormData && data) {
         // Loop through FormData entries to log them
         // This helps confirm what FormData contains right before fetch
-        for (let [key, value] of data.entries()) {
-            console.log('[DEBUG] apiRequest - FormData entry before fetch: key=', key, 'value=', value);
+        // for (let [key, value] of data.entries()) {
+            // console.log('[DEBUG] apiRequest - FormData entry before fetch: key=', key, 'value=', value);
             // If value is a File object, log its properties
-            if (value instanceof File) {
-                console.log('[DEBUG] apiRequest - File details: name=', value.name, 'size=', value.size, 'type=', value.type);
-            }
-        }
-    }
+            // if (value instanceof File) {
+                // console.log('[DEBUG] apiRequest - File details: name=', value.name, 'size=', value.size, 'type=', value.type);
+            // }
+        // }
+    // }
     // End Debugging logs
 
     try {

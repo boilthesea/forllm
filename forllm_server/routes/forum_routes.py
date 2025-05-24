@@ -318,28 +318,46 @@ def upload_attachment(post_id):
 
         # Store attachment details in the database
         try:
-            # Get current max order_in_post for this post_id
-            cursor.execute("SELECT MAX(order_in_post) FROM attachments WHERE post_id = ?", (post_id,))
-            max_order = cursor.fetchone()[0]
-            current_order = 0
-            if max_order is not None:
-                current_order = max_order + 1
+            order_in_post_str = request.form.get('order_in_post')
+            order_in_post = None
+
+            if order_in_post_str is not None:
+                try:
+                    order_in_post_val = int(order_in_post_str)
+                    if order_in_post_val >= 0:
+                        order_in_post = order_in_post_val
+                    else:
+                        return jsonify({'error': 'order_in_post must be a non-negative integer.'}), 400
+                except ValueError:
+                    return jsonify({'error': 'order_in_post must be a valid integer.'}), 400
+            else:
+                # This case should ideally not be hit if client always sends it.
+                # For robustness, if client *might* not send it, this fallback could be used,
+                # but the prompt implies client will send it. Sticking to stricter:
+                return jsonify({'error': 'order_in_post is required in form data.'}), 400
 
             cursor.execute('''
                 INSERT INTO attachments (post_id, filename, filepath, order_in_post)
                 VALUES (?, ?, ?, ?)
-            ''', (post_id, filename, filepath_relative, current_order))
+            ''', (post_id, filename, filepath_relative, order_in_post)) # Use client-provided order_in_post
             db.commit()
             attachment_id = cursor.lastrowid
             
+            # Return the actual order_in_post used
             return jsonify({
                 'attachment_id': attachment_id,
                 'filename': filename,
                 'filepath': filepath_relative,
                 'post_id': post_id,
-                'order_in_post': current_order
+                'order_in_post': order_in_post 
             }), 201
-        except sqlite3.Error as e:
+        except sqlite3.IntegrityError as e: # Specifically catch IntegrityError for UNIQUE constraint
+            db.rollback()
+            if "UNIQUE constraint failed: attachments.post_id, attachments.order_in_post" in str(e):
+                 return jsonify({'error': f'Database error: An attachment with order {order_in_post} already exists for this post.'}), 409 # Conflict
+            else:
+                 return jsonify({'error': f'Database integrity error: {str(e)}'}), 500
+        except sqlite3.Error as e: # Catch other SQLite errors
             db.rollback()
             # Attempt to remove the saved file if DB insert fails
             try:

@@ -26,6 +26,9 @@ let currentTopicId = null;
 let currentPosts = []; // Store posts for the current topic
 let currentPersonaId = null;
 
+let stagedAttachments = []; // For managing files selected in UI before actual upload
+let nextStagedAttachmentId = 0; // Counter for unique IDs for staged attachments
+
 // --- Rendering Functions ---
 
 export function renderSubforumList(subforums) {
@@ -270,23 +273,35 @@ export async function addTopic() {
         alert('Cannot add topic: No subforum selected.');
         return;
     }
+
+    // Clear and prepare staging area for new topic attachments
+    stagedAttachments = [];
+    nextStagedAttachmentId = 0;
+    renderStagedAttachments('new-topic-pending-attachments-list'); // Render to clear it visually too
+
+    // Note: The event listener on 'new-topic-attachment-input' will call handleFileSelection,
+    // which populates stagedAttachments and calls renderStagedAttachments again.
+    // The call above ensures it's clear when the form is conceptually "new".
+
     try {
         const newTopicResponse = await apiRequest(`/api/subforums/${currentSubforumId}/topics`, 'POST', { title, content });
          if (newTopicResponse && newTopicResponse.topic_id && newTopicResponse.initial_post_id) {
             // Successfully created topic and initial post
             const initial_post_id = newTopicResponse.initial_post_id;
 
-            // Handle file uploads for the new post
-            const fileInput = document.getElementById('new-topic-attachment-input');
-            const filesToUpload = fileInput && fileInput.files.length > 0 ? Array.from(fileInput.files) : [];
-            console.log('[DEBUG] Files selected:', filesToUpload);
-
-            if (filesToUpload.length > 0) {
-                await handleFileUploadsForPost(initial_post_id, filesToUpload, 'new-topic-pending-attachments-list', `post-attachments-${initial_post_id}`);
-                fileInput.value = ''; // Clear the file input
-                const pendingList = document.getElementById('new-topic-pending-attachments-list');
-                if (pendingList) pendingList.innerHTML = ''; // Clear pending list display
+            // Files are now handled by handleFileSelection and stagedAttachments.
+            if (stagedAttachments.length > 0) {
+                await uploadStagedAttachments(initial_post_id, stagedAttachments, 'new-topic-pending-attachments-list');
             }
+            // Clear staged attachments and update UI after successful post creation and uploads
+            stagedAttachments = [];
+            nextStagedAttachmentId = 0;
+            renderStagedAttachments('new-topic-pending-attachments-list'); // Clears the UI
+
+            // Clear the file input (its value is cleared in handleFileSelection, this is a fallback or UI cleanup)
+            const fileInput = document.getElementById('new-topic-attachment-input');
+            if (fileInput) fileInput.value = '';
+
 
             // Refresh the topic list and potentially navigate to the new topic
             // The existing code for adding to topic list is fine.
@@ -327,6 +342,12 @@ export function showReplyForm(postId) {
     } else {
         replyContentInput.value = '';
     }
+
+    // Clear and prepare staging area for reply attachments
+    stagedAttachments = [];
+    nextStagedAttachmentId = 0;
+    renderStagedAttachments('reply-pending-attachments-list');
+
     replyFormContainer.style.display = 'block';
     if (replyEditor) {
         replyEditor.codemirror.focus();
@@ -363,17 +384,18 @@ export async function submitReply() {
         if (newPostResponse && newPostResponse.post_id) {
             const new_reply_post_id = newPostResponse.post_id;
 
-            // Handle file uploads for the new reply
-            const fileInput = document.getElementById('reply-attachment-input');
-            const filesToUpload = fileInput && fileInput.files.length > 0 ? Array.from(fileInput.files) : [];
-            console.log('[DEBUG] Files selected:', filesToUpload);
-
-            if (filesToUpload.length > 0) {
-                await handleFileUploadsForPost(new_reply_post_id, filesToUpload, 'reply-pending-attachments-list', `post-attachments-${new_reply_post_id}`);
-                fileInput.value = ''; // Clear the file input
-                const pendingList = document.getElementById('reply-pending-attachments-list');
-                if (pendingList) pendingList.innerHTML = ''; // Clear pending list display
+            // Files are now handled by handleFileSelection and stagedAttachments.
+            if (stagedAttachments.length > 0) {
+                await uploadStagedAttachments(new_reply_post_id, stagedAttachments, 'reply-pending-attachments-list');
             }
+            // Clear staged attachments and update UI after successful post creation and uploads
+            stagedAttachments = [];
+            nextStagedAttachmentId = 0;
+            renderStagedAttachments('reply-pending-attachments-list'); // Clears the UI
+
+            // Clear the file input (its value is cleared in handleFileSelection, this is a fallback or UI cleanup)
+            const fileInput = document.getElementById('reply-attachment-input');
+            if (fileInput) fileInput.value = '';
 
             hideReplyForm();
             loadPosts(currentTopicId, currentTopicTitle.textContent); // This will re-render the posts, including new attachments.
@@ -476,98 +498,246 @@ function renderAttachmentItem(attachmentData, containerElement, postId) {
 }
 
 /**
- * Uploads a single file to the server for a given post.
+ * Uploads a single file with its order and potentially updates its user prompt.
  * @param {number} postId - The ID of the post to attach the file to.
  * @param {File} file - The file object to upload.
- * @param {HTMLElement} [tempDisplayContainer=null] - Optional. A DOM element to show temporary upload status for this specific file.
+ * @param {number} orderInPost - The order of this attachment in the post.
+ * @param {HTMLElement} [tempStatusElement=null] - Optional. A DOM element to show temporary upload status for this specific file.
  * @returns {Promise<object|null>} The attachment data from the server or null on failure.
  */
-async function uploadSingleFile(postId, file, tempDisplayContainer = null) {
-    console.log('[DEBUG] uploadSingleFile - postId:', postId, 'file:', file);
-    console.log('[DEBUG] uploadSingleFile - File details: name:', file.name, 'size:', file.size, 'type:', file.type, 'lastModified:', file.lastModified, 'File instance of File:', file instanceof File);
+async function uploadSingleFile(postId, file, orderInPost, tempStatusElement = null) {
+    // console.log('[DEBUG] uploadSingleFile - postId:', postId, 'file:', file.name, 'order_in_post:', orderInPost);
+    // console.log('[DEBUG] uploadSingleFile - File details: name:', file.name, 'size:', file.size, 'type:', file.type, 'lastModified:', file.lastModified, 'File instance of File:', file instanceof File);
 
-    const tempId = `temp-upload-${postId}-${file.name}-${Date.now()}`; // Include postId for better uniqueness
-    let tempListItem = null;
-
-    if (tempDisplayContainer) {
-        tempListItem = document.createElement('div');
-        tempListItem.className = 'pending-attachment-item';
-        tempListItem.textContent = `Uploading ${file.name}...`;
-        tempListItem.id = tempId;
-        tempDisplayContainer.appendChild(tempListItem);
+    if (tempStatusElement) {
+        tempStatusElement.textContent = `Uploading ${file.name}...`;
     }
 
     const formData = new FormData();
-    console.log('[DEBUG] uploadSingleFile - Initialized FormData object:', formData);
+    // console.log('[DEBUG] uploadSingleFile - Initialized FormData object:', formData);
     formData.append('file', file);
-    console.log('[DEBUG] uploadSingleFile - FormData after appending file. Calling formData.has("file"):', formData.has('file'));
-    for (let [key, value] of formData.entries()) { console.log('[DEBUG] uploadSingleFile - FormData entry: key=', key, 'value=', value); }
+    formData.append('order_in_post', orderInPost); // Add order_in_post
+    // console.log('[DEBUG] uploadSingleFile - FormData after appending file and order. Calling formData.has("file"):', formData.has('file'));
+    // for (let [key, value] of formData.entries()) { console.log('[DEBUG] uploadSingleFile - FormData entry: key=', key, 'value=', value); }
 
     try {
-        const newAttachmentData = await apiRequest(`/api/posts/${postId}/attachments`, 'POST', formData, true); // true for isFormData
+        // The backend route /api/posts/<post_id>/attachments needs to handle 'order_in_post' from FormData
+        const newAttachmentData = await apiRequest(`/api/posts/${postId}/attachments`, 'POST', formData, true); 
         if (newAttachmentData && newAttachmentData.attachment_id) {
-            if (tempListItem) {
-                tempListItem.textContent = `${file.name} - Uploaded successfully.`;
-                // Remove the temporary item after a short delay
-                setTimeout(() => tempListItem.remove(), 3000);
+            if (tempStatusElement) {
+                tempStatusElement.textContent = `${file.name} - Uploaded.`;
             }
-            return newAttachmentData;
+            return newAttachmentData; // Return the full data including the server-generated ID
         } else {
-            throw new Error('Upload completed but no valid attachment data returned.');
+            throw new Error('Upload of file completed but no valid attachment data returned.');
         }
     } catch (error) {
-        console.error(`Failed to upload ${file.name}:`, error);
-        if (tempListItem) {
-            tempListItem.textContent = `Failed to upload ${file.name}: ${error.message || 'Unknown error'}`;
-            tempListItem.style.color = 'red';
-            // Optionally, don't remove error messages automatically or provide a way to clear them.
+        console.error(`Error uploading ${file.name}:`, error);
+        if (tempStatusElement) {
+            tempStatusElement.textContent = `Failed to upload ${file.name}: ${error.message || 'Unknown error'}`;
+            tempStatusElement.style.color = 'red';
         } else {
-            // Fallback alert if no temp display area was provided (less likely with new flow)
             alert(`Failed to upload ${file.name}: ${error.message || 'Unknown error'}`);
         }
-        return null;
+        return null; // Indicate failure
     }
 }
+
 
 /**
- * Handles the selection of files from an array of File objects, uploading them for a given post.
- * After successful uploads, it can optionally render them into a final display container.
- * @param {number} postId - The ID of the post.
- * @param {File[]} filesArray - An array of File objects to upload.
- * @param {string} tempDisplayListId - The ID of the DOM element to display temporary file statuses during upload.
- * @param {string} [finalDisplayContainerId=null] - Optional. The ID of the DOM container where successfully uploaded attachments should be fully rendered using renderAttachmentItem.
+ * Uploads all staged attachments for a given post.
+ * @param {number} postId - The ID of the post to associate attachments with.
+ * @param {Array<object>} attachmentsToUpload - Array of staged attachment objects {id, file, userPrompt}.
+ * @param {string} tempDisplayListId - The ID of the DOM element where temporary status is shown (likely the staged list itself).
  */
-async function handleFileUploadsForPost(postId, filesArray, tempDisplayListId, finalDisplayContainerId = null) {
-    console.log('[DEBUG] handleFileUploadsForPost - postId:', postId, 'filesArray:', filesArray);
-    if (!filesArray || filesArray.length === 0) {
-        console.log("handleFileUploadsForPost: No files to upload.");
-        return;
+async function uploadStagedAttachments(postId, attachmentsToUpload, tempDisplayListId) {
+    const displayListElement = document.getElementById(tempDisplayListId);
+    if (!displayListElement) {
+        console.error(`uploadStagedAttachments: Display list element '${tempDisplayListId}' not found.`); // Kept console.error, removed [DEBUG]
+        // Potentially alert the user or throw an error if this UI element is critical
     }
-    if (!postId) {
-        console.error("handleFileUploadsForPost: postId is required.");
-        alert("Error: Cannot upload attachments without a valid post ID.");
-        return;
-    }
+    // console.log(`[DEBUG] uploadStagedAttachments - Uploading ${attachmentsToUpload.length} files for post ${postId}`);
 
-    const tempDisplayListElement = document.getElementById(tempDisplayListId);
-    const finalDisplayContainerElement = finalDisplayContainerId ? document.getElementById(finalDisplayContainerId) : null;
+    for (let i = 0; i < attachmentsToUpload.length; i++) {
+        const stagedAttachment = attachmentsToUpload[i];
+        let tempStatusElement = null;
 
-    if (tempDisplayListElement) {
-        // Clear previous items from the temporary display list for this batch of uploads
-        // tempDisplayListElement.innerHTML = ''; // Commented out: uploadSingleFile appends, so clearing might remove ongoing upload statuses from parallel calls if any. Let individual items be removed.
-    }
+        // Try to find the specific staged item in the UI to update its status
+        if (displayListElement) {
+            tempStatusElement = displayListElement.querySelector(`[data-id="${stagedAttachment.id}"]`);
+            if (tempStatusElement) {
+                 // Maybe add a specific child element for status messages within the staged item
+                const statusSpan = tempStatusElement.querySelector('.staged-upload-status') || document.createElement('span');
+                statusSpan.className = 'staged-upload-status';
+                statusSpan.textContent = ' Uploading...';
+                tempStatusElement.appendChild(statusSpan); // Append if new
+                tempStatusElement = statusSpan; // Update this element
+            }
+        }
+        
+        const newAttachmentData = await uploadSingleFile(postId, stagedAttachment.file, i, tempStatusElement);
 
-    for (const file of filesArray) { // Iterate over the array of File objects
-        console.log('[DEBUG] handleFileUploadsForPost - processing file:', file);
-        const newAttachmentData = await uploadSingleFile(postId, file, tempDisplayListElement); // Pass temp element for status updates
-        if (newAttachmentData && finalDisplayContainerElement) {
-            // If a final container is specified, render the successfully uploaded attachment there.
-            renderAttachmentItem(newAttachmentData, finalDisplayContainerElement, postId);
+        if (newAttachmentData && newAttachmentData.attachment_id) {
+            if (stagedAttachment.userPrompt && stagedAttachment.userPrompt.trim() !== '') {
+                try {
+                    // console.log(`[DEBUG] Updating user_prompt for attachment ${newAttachmentData.attachment_id} to "${stagedAttachment.userPrompt}"`);
+                    await apiRequest(`/api/attachments/${newAttachmentData.attachment_id}`, 'PUT', { user_prompt: stagedAttachment.userPrompt });
+                    if (tempStatusElement) tempStatusElement.textContent = ` ${stagedAttachment.file.name} - Uploaded & prompt saved.`;
+                } catch (e) {
+                    console.error(`Failed to update user_prompt for ${stagedAttachment.file.name}:`, e); // Kept console.error
+                    if (tempStatusElement) tempStatusElement.textContent = ` ${stagedAttachment.file.name} - Uploaded, but prompt update failed.`;
+                    tempStatusElement.style.color = 'orange'; // Or some other indication of partial success
+                }
+            } else {
+                 if (tempStatusElement) tempStatusElement.textContent = ` ${stagedAttachment.file.name} - Uploaded.`;
+            }
+            // The attachment will be rendered properly when loadPosts refreshes the view.
+            // No need to call renderAttachmentItem here as the temporary list is just for feedback.
+        } else {
+            // uploadSingleFile already handles updating tempStatusElement on failure.
+            console.error(`[DEBUG] Failed to upload staged file: ${stagedAttachment.file.name}`);
         }
     }
+    // After all uploads, the calling function (addTopic/submitReply) will clear stagedAttachments
+    // and re-render the (now empty) staging list.
+    // The main post list will be refreshed by loadPosts, showing the newly uploaded attachments.
 }
+
 
 // Export state variables if needed by other modules (e.g., main.js for initial load)
 export { currentSubforumId, currentTopicId, currentPosts };
 // Export new attachment handlers
-export { handleFileUploadsForPost, renderAttachmentItem }; // renderAttachmentItem is exported for direct use if needed elsewhere
+export { renderAttachmentItem }; // handleFileUploadsForPost is removed
+
+/**
+ * Handles file selection from an input element, adding files to a staging area.
+ * @param {Event} event - The file input change event.
+ */
+export function handleFileSelection(event) {
+    const files = event.target.files;
+    if (!files) return;
+
+    for (const file of files) {
+        const newStagedAttachment = {
+            id: `staged-${nextStagedAttachmentId++}`, // Give a temporary unique ID for UI management
+            file: file,
+            userPrompt: '' // Default empty user prompt, can be edited in UI later
+        };
+        stagedAttachments.push(newStagedAttachment);
+    }
+
+    const listId = event.target.id === 'new-topic-attachment-input' 
+                   ? 'new-topic-pending-attachments-list' 
+                   : 'reply-pending-attachments-list';
+    renderStagedAttachments(listId);
+
+    event.target.value = null; // Clear the file input to allow selecting the same file again
+    // console.log('[DEBUG] Staged attachments after selection and render:', stagedAttachments);
+}
+
+/**
+ * Renders the currently staged attachments into the specified list container.
+ * @param {string} targetListId - The ID of the DOM element to render into.
+ */
+function renderStagedAttachments(targetListId) {
+    const listElement = document.getElementById(targetListId);
+    if (!listElement) {
+        console.error(`renderStagedAttachments: Target list element with ID '${targetListId}' not found.`); // Kept console.error, removed [DEBUG]
+        return;
+    }
+    listElement.innerHTML = ''; // Clear current display
+
+    stagedAttachments.forEach((attachment, index) => { // Add index for reordering logic
+        const itemDiv = document.createElement('div');
+        itemDiv.className = 'staged-attachment-item'; // Use this class for styling
+        itemDiv.dataset.id = attachment.id;
+
+        const fileNameSpan = document.createElement('span');
+        fileNameSpan.className = 'staged-filename';
+        fileNameSpan.textContent = attachment.file.name;
+        itemDiv.appendChild(fileNameSpan);
+
+        const promptInput = document.createElement('input');
+        promptInput.type = 'text';
+        promptInput.className = 'staged-user-prompt form-input'; // Added form-input
+        promptInput.value = attachment.userPrompt;
+        promptInput.placeholder = 'Custom prompt for LLM (optional)';
+        promptInput.addEventListener('input', (e) => { // 'input' for immediate update
+            const stagedAtt = stagedAttachments.find(sa => sa.id === attachment.id);
+            if (stagedAtt) {
+                stagedAtt.userPrompt = e.target.value;
+                // console.log('[DEBUG] Updated userPrompt for staged ID', attachment.id, 'to:', stagedAtt.userPrompt);
+            }
+        });
+        itemDiv.appendChild(promptInput);
+
+        const removeButton = document.createElement('button');
+        removeButton.className = 'remove-staged-btn btn btn-danger btn-small'; // Added btn classes
+        removeButton.textContent = 'Remove';
+        removeButton.addEventListener('click', () => {
+            stagedAttachments = stagedAttachments.filter(sa => sa.id !== attachment.id);
+            renderStagedAttachments(targetListId); // Re-render the list for this specific target
+            // console.log('[DEBUG] Removed staged attachment ID', attachment.id, '. Remaining:', stagedAttachments);
+        });
+        itemDiv.appendChild(removeButton);
+
+        // --- Reorder Buttons ---
+        const controlsDiv = document.createElement('div'); // Optional: group reorder buttons
+        controlsDiv.className = 'staged-attachment-controls';
+
+        const moveUpButton = document.createElement('button');
+        moveUpButton.className = 'move-staged-up-btn btn btn-secondary btn-small'; // Added btn classes
+        moveUpButton.textContent = 'Up';
+        moveUpButton.disabled = (index === 0); // Disable if first item
+        moveUpButton.addEventListener('click', () => {
+            const currentIdx = stagedAttachments.findIndex(sa => sa.id === attachment.id);
+            if (currentIdx > 0) {
+                // Swap with previous element
+                [stagedAttachments[currentIdx - 1], stagedAttachments[currentIdx]] = [stagedAttachments[currentIdx], stagedAttachments[currentIdx - 1]];
+                renderStagedAttachments(targetListId);
+                // console.log('[DEBUG] Moved up staged attachment ID', attachment.id);
+            }
+        });
+        controlsDiv.appendChild(moveUpButton);
+
+        const moveDownButton = document.createElement('button');
+        moveDownButton.className = 'move-staged-down-btn btn btn-secondary btn-small'; // Added btn classes
+        moveDownButton.textContent = 'Down';
+        moveDownButton.disabled = (index === stagedAttachments.length - 1); // Disable if last item
+        moveDownButton.addEventListener('click', () => {
+            const currentIdx = stagedAttachments.findIndex(sa => sa.id === attachment.id);
+            if (currentIdx < stagedAttachments.length - 1 && currentIdx !== -1) {
+                // Swap with next element
+                [stagedAttachments[currentIdx + 1], stagedAttachments[currentIdx]] = [stagedAttachments[currentIdx], stagedAttachments[currentIdx + 1]];
+                renderStagedAttachments(targetListId);
+                // console.log('[DEBUG] Moved down staged attachment ID', attachment.id);
+            }
+        });
+        controlsDiv.appendChild(moveDownButton);
+        itemDiv.appendChild(controlsDiv); // Append controls to the itemDiv
+
+        listElement.appendChild(itemDiv);
+    });
+    // console.log(`[DEBUG] Rendered ${stagedAttachments.length} items into ${targetListId}`);
+}
+
+
+/*
+// Event listeners for file inputs - These should ideally be set up in main.js or an init function.
+// Ensure these IDs match the ones in templates/index.html
+document.addEventListener('DOMContentLoaded', () => {
+    const newTopicAttachmentInput = document.getElementById('new-topic-attachment-input');
+    if (newTopicAttachmentInput) {
+        newTopicAttachmentInput.addEventListener('change', handleFileSelection);
+    } else {
+        console.warn("Element with ID 'new-topic-attachment-input' not found for event listener setup.");
+    }
+
+    const replyAttachmentInput = document.getElementById('reply-attachment-input');
+    if (replyAttachmentInput) {
+        replyAttachmentInput.addEventListener('change', handleFileSelection);
+    } else {
+        console.warn("Element with ID 'reply-attachment-input' not found for event listener setup.");
+    }
+});
+*/

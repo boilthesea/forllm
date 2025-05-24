@@ -8,7 +8,8 @@ import {
     hideReplyForm,
     loadTopics, // Needed for backToTopicsBtn
     currentSubforumId, // Needed for backToTopicsBtn
-    loadSubforumPersonas
+    loadSubforumPersonas,
+    handleFileSelection // Import for attachment staging
 } from './forum.js';
 
 import {
@@ -144,6 +145,23 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Initial Load
     initialLoad();
+
+    // Attachment File Input Listeners
+    const newTopicAttachmentInput = document.getElementById('new-topic-attachment-input');
+    if (newTopicAttachmentInput) {
+        newTopicAttachmentInput.addEventListener('change', handleFileSelection);
+    } else {
+        // This might be expected if the new topic form isn't always visible or part of the initial DOM.
+        // console.warn("Element with ID 'new-topic-attachment-input' not found during initial setup.");
+    }
+
+    const replyAttachmentInput = document.getElementById('reply-attachment-input');
+    if (replyAttachmentInput) {
+        replyAttachmentInput.addEventListener('change', handleFileSelection);
+    } else {
+        // This might be expected if the reply form isn't always visible or part of the initial DOM.
+        // console.warn("Element with ID 'reply-attachment-input' not found during initial setup.");
+    }
 });
 
 // window click listener for modals is now in ui.js
