@@ -1,4 +1,4 @@
-# FORLLM (FORum for Local Large Models) - Development Plan
+# FORLLM (FORum for Local Language Models) - Development Plan
 
 ## 1. Project Overview
 
@@ -84,18 +84,18 @@ graph TD
     *   **`ui.js`**: Handles general user interface logic, including switching between different sections of the page (`showSection`) and managing UI components like the LLM link warning popup (`showLinkWarningPopup`).
     *   **`forum.js`**: Encapsulates all logic related to the forum features: loading, rendering, and handling user interactions for subforums, topics, and posts (including replies and LLM response requests). Displays assigned personas for a subforum, indicates the default persona, and allows persona selection/override when requesting an LLM response.
     *   **`schedule.js`**: Manages the scheduling functionality, including loading, rendering, and saving user-defined processing schedules, as well as displaying the next scheduled time and the current processor status.
-    *   **`settings.js`**: Deals with application-wide settings, including loading, rendering, and saving user preferences like dark mode, selected LLM model, and LLM link security. Also handles loading available Ollama models. Integrates persona management into the settings navigation and display.
+    *   **`settings.js`**: Deals with application-wide settings, including loading, rendering, and saving user preferences like selected LLM model, personas and LLM link security. Also handles loading available Ollama models. Integrates persona management into the settings navigation and display.
     *   **`queue.js`**: Manages the display of the LLM processing queue, including fetching and rendering the list of queued tasks.
     *   **`editor.js`**: Responsible for initializing and configuring the EasyMDE Markdown editor instances used for creating new topics and replies.
 
-*   **`static/css/base.css`**: Contains fundamental styles like body, typography, basic resets, and CSS variables. Includes relevant dark mode overrides.
-*   **`static/css/layout.css`**: Handles the main structural layout, including `main`, `nav#subforum-nav`, `section`, and future layouts. Includes relevant dark mode overrides.
-*   **`static/css/components.css`**: Groups styles for reusable UI elements such as buttons, form inputs, and the toggle switch. Includes relevant dark mode overrides.
-*   **`static/css/modals.css`**: Contains styles for all modal windows (general, schedule, settings, link warning) and related elements like close buttons and error messages. Includes relevant dark mode overrides.
-*   **`static/css/forum.css`**: Styles specific to the forum content display (topic lists, posts, LLM responses, metadata, actions, threading). Includes relevant dark mode overrides.
-*   **`static/css/markdown.css`**: Styles for rendering Markdown elements and Pygments syntax highlighting within posts. Includes relevant dark mode overrides.
-*   **`static/css/editor.css`**: Contains style overrides specifically for the EasyMDE editor. Includes relevant dark mode overrides.
-*   **`static/css/status-indicator.css`**: Styles for the processing status indicator. Includes relevant dark mode overrides.
+*   **`static/css/base.css`**: Contains fundamental styles like body, typography, basic resets, and CSS variables. 
+*   **`static/css/layout.css`**: Handles the main structural layout, including `main`, `nav#subforum-nav`, `section`, and future layouts. 
+*   **`static/css/components.css`**: Groups styles for reusable UI elements such as buttons, form inputs, and the toggle switch. 
+*   **`static/css/modals.css`**: Contains styles for all modal windows (general, schedule, settings, link warning) and related elements like close buttons and error messages. 
+*   **`static/css/forum.css`**: Styles specific to the forum content display (topic lists, posts, LLM responses, metadata, actions, threading). 
+*   **`static/css/markdown.css`**: Styles for rendering Markdown elements and Pygments syntax highlighting within posts. 
+*   **`static/css/editor.css`**: Contains style overrides specifically for the EasyMDE editor.
+*   **`static/css/status-indicator.css`**: Styles for the processing status indicator.
 
 *   **`forllm_data.db`** (Database File):
     *   A SQLite database file.
@@ -106,7 +106,7 @@ graph TD
         *   `posts`: User-generated content and LLM responses, forming threaded discussions.
         *   `llm_requests`: Queue for LLM processing, tracking status, model, and persona.
         *   `schedule`: Defines active hours and days for the LLM processor.
-        *   `settings`: Stores application-wide settings like dark mode preference and selected LLM model. Also stores the global default persona ID.
+        *   `settings`: Stores application-wide settings like selected LLM model. Also stores the global default persona ID.
         *   `personas`: Stores persona details, including name, prompt instructions, creation/update timestamps, and creator.
         *   `subforum_personas`: Links subforums and personas, indicating which personas are assigned to a subforum and the default for that subforum.
         *   `persona_versions`: Stores historical versions of persona details for versioning and revert capability.
@@ -180,6 +180,7 @@ graph TD
     *   Modify the "Request LLM Response" UI to allow selecting from configured LLM backends and saved/default personas. (Model selection from settings is implemented, but not persona selection at request time).
     *   Store selected model/persona in the `llm_requests` table. (Model is stored, persona is default).
 *   **Basic Prompt Management:** [TODO]
+    * Chat history construction for replies.
 *   **Basic File Attachment:** [DONE]
 *   **Improved Error Handling & Status:** [WIP]
     *   More detailed status updates for queued requests (e.g., "queued", "processing", "error: connection failed", "error: inference failed"). (DB has status, but UI for queue page is basic). [DONE]
@@ -190,7 +191,7 @@ graph TD
 **Goal:** Enhance the user experience and add more standard forum functionalities.
 
 **Features:**
-
+*   **Dark Mode Only:** [DONE] Switch to dark mode only for comfort and reduction in css complexity.
 *   **Markdown Support:** [DONE] Implement Markdown rendering for posts (e.g., using a Python library on the backend and a JS library on the frontend).
 *   **Notifications:** [TODO] Simple in-app indicator (e.g., a badge on the navigation) when new LLM responses have arrived since the last view. (Desktop notifications could be a later addition).
 *   **Progress Indicators:** [TODO] Basic visual feedback in the UI showing which requests are queued or actively being processed by the background worker.
@@ -205,6 +206,9 @@ graph TD
 **Features:**
 
 *   **Dynamic Persona Generation:** [TODO] Functionality to use a specified LLM to generate a persona based on a user description or topic context.
+    * For subforums request a user specified number of personas based on subforum name and description, give user a field to request specifics. Queuable.
+    * Autogenerated subforum personas should have a regenerate button next to them for those that aren't up to snuff. Queuable.
+    * 
 *   **Inter-Persona Communication (Tagging):** [TODO] Implement `@PersonaName` or similar tagging in user replies to direct a specific LLM/Persona to respond. Requires parsing logic in the backend.
 *   **Optional Automated Persona Interaction:** [TODO] A setting (per-topic?) to allow enabled personas to automatically reply to each other's posts within certain limits (e.g., depth, time). *Requires careful design to avoid runaway computation.*
 *   **Summarization Tools:** [TODO] Add a feature to use an LLM to summarize a selected topic thread or a set of LLM replies.
