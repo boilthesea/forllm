@@ -17,6 +17,8 @@ def generate_persona_from_details_api():
     name_hint = data.get('name_hint')
     description_hint = data.get('description_hint')
     llm_model_for_generation = data.get('llm_model_for_generation')
+    output_preferences = data.get('output_preferences', {}) # Added
+    target_persona_name_override = data.get('target_persona_name_override', '') # Added
 
     if not description_hint: # Name hint can be optional
         return jsonify({"error": "description_hint is required"}), 400
@@ -47,9 +49,9 @@ def generate_persona_from_details_api():
             "name_hint": name_hint,
             "description_hint": description_hint
         },
-        "output_preferences": {}, # MVP does not focus on this yet
+        "output_preferences": output_preferences, # Updated
         "llm_model_for_generation": llm_model_for_generation,
-        # target_persona_name_override is not used in MVP for from_name_and_description
+        "target_persona_name_override": target_persona_name_override # Updated
     }
     request_params_json = json.dumps(persona_generation_request_payload)
 

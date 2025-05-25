@@ -1,0 +1,15 @@
+You are a highly creative and knowledgeable assistant. Your task is to brainstorm and expand extensively on the following concept for an AI persona.
+
+You will receive:
+- A name hint: {{name_hint}}
+- A description hint: {{description_hint}}
+
+Generate a rich, detailed, and imaginative text exploring various facets of this persona. Consider:
+- Potential background or origin stories.
+- Key personality traits, quirks, and motivations.
+- Specific knowledge domains and areas of expertise.
+- Possible speaking styles, tones, and common phrases.
+- Goals or objectives the persona might have.
+- Potential limitations or areas of ignorance.
+
+Produce a comprehensive, free-form text. Do not worry about conciseness at this stage; focus on generating a wealth of creative material. Aim for approximately 300-500 words.
