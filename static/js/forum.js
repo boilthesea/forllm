@@ -274,26 +274,27 @@ export async function addTopic() {
         return;
     }
 
-    // Clear and prepare staging area for new topic attachments
-    stagedAttachments = [];
-    nextStagedAttachmentId = 0;
-    renderStagedAttachments('new-topic-pending-attachments-list'); // Render to clear it visually too
-
-    // Note: The event listener on 'new-topic-attachment-input' will call handleFileSelection,
-    // which populates stagedAttachments and calls renderStagedAttachments again.
-    // The call above ensures it's clear when the form is conceptually "new".
+    // The event listener on 'new-topic-attachment-input' calls handleFileSelection,
+    // which populates stagedAttachments.
+    // renderStagedAttachments is called by handleFileSelection to show the staged files.
+    // Staging area should be cleared when the form is *initially prepared*,
+    // which is not directly in addTopic but when the UI for creating a new topic is shown.
+    // For now, we assume stagedAttachments holds the correct files for THIS topic submission.
 
     try {
         const newTopicResponse = await apiRequest(`/api/subforums/${currentSubforumId}/topics`, 'POST', { title, content });
          if (newTopicResponse && newTopicResponse.topic_id && newTopicResponse.initial_post_id) {
             // Successfully created topic and initial post
             const initial_post_id = newTopicResponse.initial_post_id;
+            console.log('[DEBUG addTopic] Topic created. initial_post_id:', initial_post_id, 'Staged attachments count:', stagedAttachments.length);
 
             // Files are now handled by handleFileSelection and stagedAttachments.
+            console.log('[DEBUG addTopic] Preparing to call uploadStagedAttachments. postId:', initial_post_id, 'Attachments:', stagedAttachments);
             if (stagedAttachments.length > 0) {
                 await uploadStagedAttachments(initial_post_id, stagedAttachments, 'new-topic-pending-attachments-list');
             }
-            // Clear staged attachments and update UI after successful post creation and uploads
+            
+            // Clear staged attachments and UI *after* successful post creation and uploads
             stagedAttachments = [];
             nextStagedAttachmentId = 0;
             renderStagedAttachments('new-topic-pending-attachments-list'); // Clears the UI
@@ -383,8 +384,10 @@ export async function submitReply() {
         const newPostResponse = await apiRequest(`/api/topics/${currentTopicId}/posts`, 'POST', { content, parent_post_id: parentPostId });
         if (newPostResponse && newPostResponse.post_id) {
             const new_reply_post_id = newPostResponse.post_id;
-
+            console.log('[DEBUG submitReply] Reply created. new_reply_post_id:', new_reply_post_id, 'Staged attachments count:', stagedAttachments.length);
+            
             // Files are now handled by handleFileSelection and stagedAttachments.
+            console.log('[DEBUG submitReply] Preparing to call uploadStagedAttachments. postId:', new_reply_post_id, 'Attachments:', stagedAttachments);
             if (stagedAttachments.length > 0) {
                 await uploadStagedAttachments(new_reply_post_id, stagedAttachments, 'reply-pending-attachments-list');
             }
@@ -506,7 +509,7 @@ function renderAttachmentItem(attachmentData, containerElement, postId) {
  * @returns {Promise<object|null>} The attachment data from the server or null on failure.
  */
 async function uploadSingleFile(postId, file, orderInPost, tempStatusElement = null) {
-    // console.log('[DEBUG] uploadSingleFile - postId:', postId, 'file:', file.name, 'order_in_post:', orderInPost);
+    console.log('[DEBUG uploadSingleFile] Entered function. postId:', postId, 'File name:', file.name, 'Order:', orderInPost);
     // console.log('[DEBUG] uploadSingleFile - File details: name:', file.name, 'size:', file.size, 'type:', file.type, 'lastModified:', file.lastModified, 'File instance of File:', file instanceof File);
 
     if (tempStatusElement) {
@@ -551,6 +554,7 @@ async function uploadSingleFile(postId, file, orderInPost, tempStatusElement = n
  * @param {string} tempDisplayListId - The ID of the DOM element where temporary status is shown (likely the staged list itself).
  */
 async function uploadStagedAttachments(postId, attachmentsToUpload, tempDisplayListId) {
+    console.log('[DEBUG uploadStagedAttachments] Entered function. postId:', postId, 'Attachments to upload:', attachmentsToUpload);
     const displayListElement = document.getElementById(tempDisplayListId);
     if (!displayListElement) {
         console.error(`uploadStagedAttachments: Display list element '${tempDisplayListId}' not found.`); // Kept console.error, removed [DEBUG]
@@ -626,6 +630,7 @@ export function handleFileSelection(event) {
         stagedAttachments.push(newStagedAttachment);
     }
 
+    console.log('[DEBUG handleFileSelection] After adding files. Staged attachments count:', stagedAttachments.length, 'Content:', JSON.stringify(stagedAttachments.map(a => ({name: a.file.name, id: a.id, userPrompt: a.userPrompt}))));
     const listId = event.target.id === 'new-topic-attachment-input' 
                    ? 'new-topic-pending-attachments-list' 
                    : 'reply-pending-attachments-list';
@@ -671,28 +676,18 @@ function renderStagedAttachments(targetListId) {
         });
         itemDiv.appendChild(promptInput);
 
-        const removeButton = document.createElement('button');
-        removeButton.className = 'remove-staged-btn btn btn-danger btn-small'; // Added btn classes
-        removeButton.textContent = 'Remove';
-        removeButton.addEventListener('click', () => {
-            stagedAttachments = stagedAttachments.filter(sa => sa.id !== attachment.id);
-            renderStagedAttachments(targetListId); // Re-render the list for this specific target
-            // console.log('[DEBUG] Removed staged attachment ID', attachment.id, '. Remaining:', stagedAttachments);
-        });
-        itemDiv.appendChild(removeButton);
-
-        // --- Reorder Buttons ---
-        const controlsDiv = document.createElement('div'); // Optional: group reorder buttons
+        // --- Controls Container ---
+        const controlsDiv = document.createElement('div');
         controlsDiv.className = 'staged-attachment-controls';
 
         const moveUpButton = document.createElement('button');
-        moveUpButton.className = 'move-staged-up-btn btn btn-secondary btn-small'; // Added btn classes
-        moveUpButton.textContent = 'Up';
-        moveUpButton.disabled = (index === 0); // Disable if first item
+        moveUpButton.className = 'move-staged-up-btn staged-attachment-action-btn btn btn-secondary btn-small';
+        moveUpButton.innerHTML = '&#x2191;'; // Up arrow: ↑
+        moveUpButton.title = 'Move Up';
+        moveUpButton.disabled = (index === 0);
         moveUpButton.addEventListener('click', () => {
             const currentIdx = stagedAttachments.findIndex(sa => sa.id === attachment.id);
             if (currentIdx > 0) {
-                // Swap with previous element
                 [stagedAttachments[currentIdx - 1], stagedAttachments[currentIdx]] = [stagedAttachments[currentIdx], stagedAttachments[currentIdx - 1]];
                 renderStagedAttachments(targetListId);
                 // console.log('[DEBUG] Moved up staged attachment ID', attachment.id);
@@ -701,20 +696,32 @@ function renderStagedAttachments(targetListId) {
         controlsDiv.appendChild(moveUpButton);
 
         const moveDownButton = document.createElement('button');
-        moveDownButton.className = 'move-staged-down-btn btn btn-secondary btn-small'; // Added btn classes
-        moveDownButton.textContent = 'Down';
-        moveDownButton.disabled = (index === stagedAttachments.length - 1); // Disable if last item
+        moveDownButton.className = 'move-staged-down-btn staged-attachment-action-btn btn btn-secondary btn-small';
+        moveDownButton.innerHTML = '&#x2193;'; // Down arrow: ↓
+        moveDownButton.title = 'Move Down';
+        moveDownButton.disabled = (index === stagedAttachments.length - 1);
         moveDownButton.addEventListener('click', () => {
             const currentIdx = stagedAttachments.findIndex(sa => sa.id === attachment.id);
             if (currentIdx < stagedAttachments.length - 1 && currentIdx !== -1) {
-                // Swap with next element
                 [stagedAttachments[currentIdx + 1], stagedAttachments[currentIdx]] = [stagedAttachments[currentIdx], stagedAttachments[currentIdx + 1]];
                 renderStagedAttachments(targetListId);
                 // console.log('[DEBUG] Moved down staged attachment ID', attachment.id);
             }
         });
         controlsDiv.appendChild(moveDownButton);
-        itemDiv.appendChild(controlsDiv); // Append controls to the itemDiv
+        
+        const removeButton = document.createElement('button');
+        removeButton.className = 'remove-staged-btn staged-attachment-action-btn btn btn-danger btn-small';
+        removeButton.innerHTML = '&#x1F5D1;'; // Trash can: 🗑️
+        removeButton.title = 'Remove';
+        removeButton.addEventListener('click', () => {
+            stagedAttachments = stagedAttachments.filter(sa => sa.id !== attachment.id);
+            renderStagedAttachments(targetListId); // Re-render the list for this specific target
+            // console.log('[DEBUG] Removed staged attachment ID', attachment.id, '. Remaining:', stagedAttachments);
+        });
+        controlsDiv.appendChild(removeButton);
+
+        itemDiv.appendChild(controlsDiv); // Append controls container to the itemDiv
 
         listElement.appendChild(itemDiv);
     });

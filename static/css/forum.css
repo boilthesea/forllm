@@ -345,3 +345,69 @@ body.dark-mode .delete-attachment-btn {
 body.dark-mode .delete-attachment-btn:hover {
     background-color: var(--btn-danger-hover-bg, #c0392b);
 }
+
+/* --- Staged Attachment Styles --- */
+.staged-attachment-item {
+    display: flex;
+    align-items: center; /* Vertically align items in the middle */
+    margin-bottom: 0.5rem; /* Space between items */
+    padding: 0.5rem;
+    border: 1px solid var(--border-color, #ccc); /* Consistent with other elements */
+    border-radius: 4px;
+    background-color: var(--input-bg-light, #f9f9f9); /* Light background for the item */
+}
+
+.staged-filename {
+    margin-right: 0.5rem;
+    font-weight: bold;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    flex-shrink: 1; /* Allow shrinking if needed */
+    min-width: 100px; /* Ensure it has some minimum width */
+}
+
+.staged-user-prompt {
+    flex-grow: 1; /* Takes up available space */
+    margin-right: 0.5rem; /* Space before buttons */
+    /* Assuming .form-input class (from JS) provides most input styling */
+}
+
+.staged-attachment-controls {
+    display: flex;
+    align-items: center;
+    flex-shrink: 0; /* Prevent this container from shrinking */
+}
+
+.staged-attachment-action-btn {
+    padding: 0.2rem 0.4rem; /* Adjust for small size */
+    font-size: 0.9rem;     /* Adjust symbol size if needed */
+    line-height: 1;        /* Ensure text/icons are centered well */
+    margin-left: 0.25rem;  /* Space between buttons */
+    display: inline-flex;  /* Helps with icon centering */
+    justify-content: center;
+    align-items: center;
+    /* These buttons also have .btn, .btn-secondary, .btn-danger, .btn-small */
+    /* .btn-small might already define padding/font-size, these are more specific overrides if needed */
+}
+
+/* Dark Mode for Staged Attachments */
+body.dark-mode .staged-attachment-item {
+    background-color: var(--input-bg-darker, #2c2c2c);
+    border-color: var(--input-border, #555);
+}
+
+body.dark-mode .staged-filename {
+    color: var(--text-color, #ddd);
+}
+
+/* .staged-user-prompt inherits dark mode from .form-input if that's styled for dark mode */
+
+/* .staged-attachment-action-btn inherits from .btn, .btn-secondary, .btn-danger which should have dark mode variants */
+/* If specific overrides are needed for these action buttons in dark mode, they can be added here */
+/* For example, if the symbols need a color adjustment: */
+/*
+body.dark-mode .staged-attachment-action-btn {
+    color: var(--btn-text-color-dark, #eee);
+}
+*/
