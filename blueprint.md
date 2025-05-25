@@ -180,7 +180,7 @@ graph TD
     *   Modify the "Request LLM Response" UI to allow selecting from configured LLM backends and saved/default personas. (Model selection from settings is implemented, but not persona selection at request time).
     *   Store selected model/persona in the `llm_requests` table. (Model is stored, persona is default).
 *   **Basic Prompt Management:** [TODO]
-*   **Basic File Attachment:** [TODO]
+*   **Basic File Attachment:** [DONE]
 *   **Improved Error Handling & Status:** [WIP]
     *   More detailed status updates for queued requests (e.g., "queued", "processing", "error: connection failed", "error: inference failed"). (DB has status, but UI for queue page is basic). [DONE]
     *   Display errors clearly in the UI. (Some `alert()` and console errors, but could be more user-friendly).

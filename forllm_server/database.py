@@ -78,6 +78,18 @@ def init_db():
                 FOREIGN KEY (post_id_to_respond_to) REFERENCES posts(post_id)
             )
         ''')
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS attachments (
+                attachment_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                post_id INTEGER NOT NULL,
+                filename TEXT NOT NULL,
+                filepath TEXT NOT NULL,
+                user_prompt TEXT,
+                order_in_post INTEGER NOT NULL DEFAULT 0,
+                FOREIGN KEY (post_id) REFERENCES posts(post_id) ON DELETE CASCADE,
+                UNIQUE (post_id, order_in_post)
+            )
+        ''')
 
         # Check and add 'full_prompt_sent' to 'llm_requests'
         cursor.execute("PRAGMA table_info(llm_requests)")

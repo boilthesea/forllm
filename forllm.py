@@ -1,9 +1,11 @@
 import os
 import threading
+import os
+import threading
 from flask import Flask
 
 # Import functionalities from the new forllm_server package
-from forllm_server.config import DATABASE # Though DATABASE is used in database.py, good to have if needed directly
+from forllm_server.config import DATABASE, UPLOAD_FOLDER # Import UPLOAD_FOLDER
 from forllm_server.database import init_db, close_db
 from forllm_server.llm_queue import llm_worker
 
@@ -17,6 +19,7 @@ from forllm_server.routes.settings_routes import settings_api_bp
 # --- Flask App Initialization ---
 app = Flask(__name__, template_folder='templates', static_folder='static')
 app.config['SECRET_KEY'] = os.urandom(24) # For potential future session use
+app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER # Set UPLOAD_FOLDER in app.config
 
 # Register Blueprints
 app.register_blueprint(main_bp)
@@ -33,6 +36,15 @@ def teardown_db(error):
 
 # --- Main Execution ---
 if __name__ == '__main__':
+    # Create upload folder if it doesn't exist
+    try:
+        os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
+        print(f"Upload folder '{app.config['UPLOAD_FOLDER']}' is ready.")
+    except OSError as e:
+        print(f"Error creating upload folder '{app.config['UPLOAD_FOLDER']}': {e}")
+        # Depending on the severity, you might want to exit or handle this error
+        # For now, we'll print the error and continue.
+
     print("Initializing database...")
     init_db() # Ensure DB exists and schema is created/verified
 
