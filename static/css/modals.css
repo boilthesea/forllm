@@ -11,10 +11,11 @@
 }
 
 .modal-content {
-    background-color: #fefefe;
+    background-color: var(--modal-bg);
     margin: 15% auto;
     padding: 20px;
-    border: 1px solid #888;
+    border: 1px solid var(--modal-border);
+    color: var(--modal-text); /* Added from dark mode */
     width: 80%;
     max-width: 500px; /* Default max-width */
     border-radius: 5px;
@@ -34,8 +35,9 @@
 #full-prompt-content {
     margin-top: 1rem;
     padding: 1rem;
-    border: 1px solid #eee;
-    background-color: #f9f9f9;
+    border: 1px solid var(--post-border);
+    background-color: var(--post-bg);
+    color: var(--text-color); /* Added from dark mode */
     max-height: 60vh; /* Limit height */
     overflow-y: auto; /* Add scroll if content overflows */
     white-space: pre-wrap; /* Preserve whitespace and wrap */
@@ -52,7 +54,7 @@
 
 
 .close-btn, .close {
-    color: #aaa;
+    color: var(--close-btn-color); /* Was #aaa */
     float: right;
     font-size: 28px;
     font-weight: bold;
@@ -66,7 +68,7 @@
 .close-btn:focus,
 .close:hover,
 .close:focus {
-    color: black;
+    color: var(--close-btn-hover-color); /* Was black */
     text-decoration: none;
     cursor: pointer;
 }
@@ -79,12 +81,12 @@
 
 #schedule-display {
     font-size: 0.85em; /* Slightly smaller */
-    color: #555; /* Darker for better readability on white */
+    color: var(--schedule-display-color); /* Was #555 */
     margin-bottom: 1em;
     padding: 0.5em;
-    background-color: #f9f9f9;
+    background-color: #2e2e2e; /* Darker background for schedule display - Was #f9f9f9 */
     border-radius: 4px;
-    border: 1px solid #eee;
+    border: 1px solid var(--post-border); /* Was #eee */
 }
 
 /* Schedule Modal Specific Styles */
@@ -100,10 +102,10 @@
     align-items: center;
     gap: 0.75rem;
     padding: 0.75rem;
-    border: 1px solid #eee;
+    border: 1px solid var(--post-border, #555); /* Was #eee */
     border-radius: 4px;
     margin-bottom: 0.75rem;
-    background-color: #f9f9f9;
+    background-color: var(--post-bg, #444); /* Was #f9f9f9 */
 }
 
 .schedule-row .time-inputs {
@@ -120,16 +122,18 @@
 .schedule-row .days-selector {
     display: flex;
     gap: 0.3rem;
-    border: 1px solid #ccc;
+    border: 1px solid var(--input-border, #777); /* Was #ccc */
     padding: 0.3rem 0.5rem;
     border-radius: 3px;
     flex-wrap: wrap; /* Allow days to wrap if not enough space */
+    color: var(--text-color, #eee); /* Added from dark mode */
 }
 .schedule-row .days-selector label {
     display: inline-flex; /* Align checkbox and text */
     align-items: center;
     font-size: 0.9em;
     cursor: pointer;
+    color: var(--text-color, #eee); /* Added from dark mode */
 }
 .schedule-row .days-selector input[type="checkbox"] {
     margin-right: 0.2rem;
@@ -144,73 +148,31 @@
     word-break: break-all; /* Break long URLs */
     font-family: monospace;
     font-size: 0.9em;
-    background-color: #eee;
+    background-color: var(--input-bg, #555); /* Was #eee */
+    color: var(--input-text, #eee); /* Added from dark mode */
     padding: 0.1em 0.3em;
     border-radius: 2px;
 }
 
 .link-warning-content p strong { /* Make nested strong tags stand out */
-    color: var(--text-color, #333);
+    color: var(--text-color, #eee); /* Was var(--text-color, #333) */
 }
 
 .link-warning-content p:last-of-type { /* Spacing before buttons */
     margin-bottom: 1.5rem;
 }
 
-
-/* Dark Mode Styles */
-body.dark-mode .modal-content {
-    background-color: var(--modal-bg);
-    border-color: var(--modal-border);
-    color: var(--modal-text);
-}
-
-body.dark-mode .close-btn {
-    color: var(--close-btn-color);
-}
-
-body.dark-mode .close-btn:hover,
-body.dark-mode .close-btn:focus {
-    color: var(--close-btn-hover-color);
-}
-
-body.dark-mode #schedule-display {
-    color: var(--schedule-display-color);
-    background-color: #2e2e2e; /* Darker background for schedule display */
-    border-color: var(--post-border);
-}
-
-body.dark-mode .schedule-row {
-    background-color: var(--post-bg, #444);
-    border-color: var(--post-border, #555);
-}
-body.dark-mode .schedule-row .time-inputs input[type="number"] {
+/* Styles for schedule row time inputs, moved from .body.dark-mode specific rule */
+.schedule-row .time-inputs input[type="number"] {
     background-color: var(--input-bg, #555);
     border-color: var(--input-border, #777);
     color: var(--input-text, #eee);
-}
-body.dark-mode .schedule-row .days-selector {
-    border-color: var(--input-border, #777);
-    color: var(--text-color, #eee);
-}
-body.dark-mode .schedule-row .days-selector label {
-    color: var(--text-color, #eee);
+    /* Ensure these styles are not overridden by general input[type=number] if any exist elsewhere */
+    width: 50px; /* Smaller width for hour inputs */
+    padding: 0.4rem;
+    text-align: center;
 }
 
-body.dark-mode .link-warning-content .link-url {
-    background-color: var(--input-bg, #555);
-    color: var(--input-text, #eee);
-}
-
-body.dark-mode .link-warning-content p strong {
-    color: var(--text-color, #eee);
-}
-
-body.dark-mode #full-prompt-content {
-    border-color: var(--post-border);
-    background-color: var(--post-bg);
-    color: var(--text-color);
-}
 
 /* Persona Modal Specific Styles */
 #persona-modal {
@@ -237,50 +199,45 @@ body.dark-mode #full-prompt-content {
 #persona-name-input {
     width: 100%;
     padding: 0.5rem;
-    border: 1px solid #ddd;
+    border: 1px solid #444; /* Was #ddd */
     border-radius: 4px;
     margin-bottom: 1rem;
+    background-color: #1f1f1f; /* Added from dark mode */
+    color: #e0e0e0; /* Added from dark mode */
 }
 
 #persona-instructions-input {
     width: 100%;
     min-height: 150px;
     padding: 0.5rem;
-    border: 1px solid #ddd;
+    border: 1px solid #444; /* Was #ddd */
     border-radius: 4px;
     resize: vertical;
     margin-bottom: 1rem;
+    background-color: #1f1f1f; /* Added from dark mode */
+    color: #e0e0e0; /* Added from dark mode */
 }
 
 #persona-prompt-preview {
     margin: 1rem 0;
     padding: 1rem;
-    background-color: #f5f5f5;
-    border: 1px solid #ddd;
+    background-color: #1f1f1f; /* Was #f5f5f5 */
+    border: 1px solid #444; /* Was #ddd */
     border-radius: 4px;
     white-space: pre-wrap;
+    color: #e0e0e0; /* Assuming text color should be light */
 }
 
-/* Dark mode overrides */
-html[data-theme="dark"] #persona-modal .modal-content {
+/* Specific styling for #persona-modal .modal-content for dark theme */
+#persona-modal .modal-content {
+    background-color: #2d2d2d; /* from html[data-theme="dark"] */
+    color: #e0e0e0; /* from html[data-theme="dark"] */
+    border-color: #444; /* from html[data-theme="dark"] */
+}
+
+/* Specific styling for .persona-list-item for dark theme */
+/* Note: .persona-list-item rule itself is not in this file, but if it were, this is how it would be handled */
+/* .persona-list-item {
     background-color: #2d2d2d;
-    color: #e0e0e0;
     border-color: #444;
-}
-
-html[data-theme="dark"] .persona-list-item {
-    background-color: #2d2d2d;
-    border-color: #444;
-}
-
-html[data-theme="dark"] #persona-instructions-input,
-html[data-theme="dark"] #persona-name-input {
-    background-color: #1f1f1f;
-    color: #e0e0e0;
-    border-color: #444;
-}
-
-html[data-theme="dark"] #persona-prompt-preview {
-    background-color: #1f1f1f;
-    border-color: #444;
-}
+} */

@@ -42,12 +42,8 @@ export function showSection(sectionIdToShow) {
     }
 }
 
-export function applyDarkMode(isDark) {
-    if (isDark) {
-        document.body.classList.add('dark-mode');
-    } else {
-        document.body.classList.remove('dark-mode');
-    }
+export function applyDarkMode() {
+    document.body.classList.add('dark-mode');
 }
 
 export function showLinkWarningPopup(linkUrl, linkText) {
@@ -127,3 +123,6 @@ window.addEventListener('click', (event) => {
     //     settingsModal.style.display = 'none';
     // }
 });
+
+// Apply dark mode on initial load
+applyDarkMode();

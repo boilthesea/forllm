@@ -8,10 +8,10 @@ main {
 
 nav#subforum-nav {
     flex: 0 0 280px; /* Fixed width for the sidebar */
-    background: #fff;
+    background: var(--nav-bg);
     padding: 1.5rem; /* Increased padding */
-    border-right: 1px solid #e0e0e0; /* Subtle border */
-    box-shadow: 2px 0 5px rgba(0,0,0,0.05); /* Softer shadow */
+    border-right: 1px solid var(--post-border); /* Subtle border */
+    box-shadow: 0 0 5px rgba(255,255,255,0.1); /* Softer shadow */
     display: flex;
     flex-direction: column;
     min-height: 100vh; /* Make sidebar full height */
@@ -23,44 +23,44 @@ nav#subforum-nav {
 nav#subforum-nav h1 {
     font-size: 1.8em;
     margin-bottom: 0.2em;
-    color: #333; /* Matches general heading color */
+    color: var(--text-color); /* Was #333, now uses variable from base.css */
 }
 
 #site-subtitle {
     font-size: 0.65em; /* Reduced font size */
-    color: #666;
+    color: #bbb; /* Was #666, assuming this should be lighter on dark bg */
     margin-top: -0.5em;
     margin-bottom: 1.5em;
 }
 
 hr.sidebar-separator {
     border: none;
-    border-top: 1px solid #eee;
+    border-top: 1px solid var(--input-border, #777); /* Was #eee */
     margin: 1.5rem 0;
 }
 
 section {
     flex: 3;
-    background: #fff;
+    background: var(--nav-bg); /* Was #fff */
     padding: 1rem;
     border-radius: 5px;
-    box-shadow: 0 0 5px rgba(0,0,0,0.1);
+    box-shadow: 0 0 5px rgba(255,255,255,0.1); /* Was rgba(0,0,0,0.1) */
 }
 
 /* Styling for new page sections */
 #settings-page-section,
 #queue-page-section {
     flex: 3; /* Same as other content sections */
-    background: var(--section-bg, #fff);
+    background: var(--section-bg); /* Was var(--section-bg, #fff) */
     padding: 1.5rem; /* Consistent padding */
     border-radius: 5px;
-    box-shadow: 0 0 5px rgba(0,0,0,0.1);
+    box-shadow: 0 0 5px rgba(255,255,255,0.1); /* Was rgba(0,0,0,0.1) */
     /* display: none; is handled inline or by JS */
 }
 
 #settings-page-section h2,
 #queue-page-section h2 {
-    color: var(--text-color, #333);
+    color: var(--text-color); /* Was var(--text-color, #333) */
     margin-top: 0; /* Remove default margin for h2 if it's the first child */
     margin-bottom: 1.5rem;
 }
@@ -71,34 +71,8 @@ section {
     overflow-y: auto;
 }
 
-/* Dark Mode Styles */
-body.dark-mode nav#subforum-nav h1 {
-    color: var(--text-color);
-}
-
-body.dark-mode nav#subforum-nav,
-body.dark-mode section {
-    background: var(--nav-bg);
-    box-shadow: 0 0 5px rgba(255,255,255,0.1);
-    border-right-color: var(--post-border); /* Adjust border for dark mode */
-}
-
-body.dark-mode nav#subforum-nav {
-     border-right-color: var(--post-border);
-}
-
-body.dark-mode #reply-form-container {
-    background-color: var(--nav-bg); /* Match nav/section bg */
+#reply-form-container { /* Added this new base rule */
+    background-color: var(--nav-bg);
     border-color: var(--input-border);
-}
-
-body.dark-mode #settings-page-section,
-body.dark-mode #queue-page-section {
-    background: var(--section-bg, #333);
-    box-shadow: 0 0 5px rgba(255,255,255,0.1);
-}
-
-body.dark-mode #settings-page-section h2,
-body.dark-mode #queue-page-section h2 {
-    color: var(--text-color, #eee);
+    /* Assuming some padding/margin might be needed, but will stick to original instruction for now */
 }

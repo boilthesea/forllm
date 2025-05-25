@@ -6,13 +6,11 @@ body {
     line-height: 1.6;
     margin: 0;
     padding: 0;
-    background-color: #f4f4f4;
-    color: #333;
+    background-color: var(--bg-color);
+    color: var(--text-color);
     font-size: 16px; /* Base font size */
-}
 
-/* Dark Mode Styles */
-body.dark-mode {
+    /* Dark Mode Styles by default */
     --bg-color: #222;
     --text-color: #eee;
     --header-bg: #111;
@@ -39,32 +37,28 @@ body.dark-mode {
     --footer-bg: #111;
     --footer-text: #ccc;
     --schedule-display-color: #888;
+}
 
-    background-color: var(--bg-color);
+/* header styling can be direct if specific dark mode overrides are not needed */
+/* header { */
+    /* background-color: var(--header-bg); */ /* Example: if header bg is always dark */
+    /* color: var(--header-text); */ /* Example: if header text is always light */
+/* } */
+
+h1,
+h2,
+h3,
+h4 {
     color: var(--text-color);
 }
 
-body.dark-mode header { /* Keep for potential future use? Or remove? Removed for now */
-    /* background-color: var(--header-bg); */
-    /* color: var(--header-text); */
-}
-
-body.dark-mode h1,
-body.dark-mode h2,
-body.dark-mode h3,
-body.dark-mode h4 {
-    color: var(--text-color);
-}
-
-body.dark-mode a {
+a {
     color: var(--link-color);
 }
 
 hr {
    border: none;
-   border-top: 1px solid #eee;
+   /* border-top: 1px solid #eee; */ /* Old light mode style */
+   border-top: 1px solid var(--input-border, #777); /* Default to dark mode border */
    margin: 1rem 0;
-}
-body.dark-mode hr {
-   border-top-color: var(--input-border, #777);
 }

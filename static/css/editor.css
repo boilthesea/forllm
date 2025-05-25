@@ -2,110 +2,68 @@
 
 /* General Editor Appearance */
 .EasyMDEContainer .CodeMirror {
-   border: 1px solid #ccc;
+   border: 1px solid var(--input-border, #777); /* Was #ccc */
    border-radius: 3px;
-   background-color: #fff; /* Light mode background */
-   color: #333; /* Light mode text */
+   background-color: var(--input-bg, #555); /* Was #fff */
+   color: var(--input-text, #eee); /* Was #333 */
 }
 
 /* Toolbar */
 .editor-toolbar {
-   border: 1px solid var(--input-border, #ccc);
+   border: 1px solid var(--input-border, #505050); /* Was var(--input-border, #ccc) */
    border-bottom: none;
    border-top-left-radius: 3px;
    border-top-right-radius: 3px;
-   background-color: var(--input-bg, #f0f0f0); /* Slightly off-white for toolbar itself */
+   background-color: var(--nav-bg, #2e2e2e); /* Darker toolbar bg - Was var(--input-bg, #f0f0f0) */
    padding: 4px;
 }
 
 .editor-toolbar button {
-    background: linear-gradient(to bottom, #fdfdfd 0%, #e9e9e9 100%) !important;
-    color: #333 !important;
-    border: 1px solid #c5c5c5 !important;
-    padding: 0.3rem 0.6rem !important;
-    border-radius: 4px !important;
+    background: linear-gradient(to bottom, #4a4a4a 0%, #3c3c3c 100%); /* Dark silver gradient */
+    color: var(--text-color, #ddd);
+    border: 1px solid var(--input-border, #585858);
+    padding: 0.3rem 0.6rem;
+    border-radius: 4px;
     cursor: pointer;
-    margin: 2px !important;
-    font-size: 0.9em !important;
-    box-shadow: 0 1px 1px rgba(0,0,0,0.06) !important;
-    transition: background 0.2s ease, box-shadow 0.2s ease, transform 0.1s ease !important;
-    height: auto !important;
-    line-height: normal !important;
-    vertical-align: middle !important; /* Better icon alignment */
+    margin: 2px;
+    font-size: 0.9em;
+    box-shadow: 0 1px 1px rgba(0,0,0,0.25);
+    transition: background 0.2s ease, box-shadow 0.2s ease, transform 0.1s ease;
+    height: auto;
+    line-height: normal;
+    vertical-align: middle; /* Better icon alignment */
 }
 
 .editor-toolbar button:hover {
-    background: linear-gradient(to bottom, #ffffff 0%, #f0f0f0 100%) !important;
-    border-color: #b5b5b5 !important;
-    box-shadow: 0 1px 2px rgba(0,0,0,0.1) !important;
+    background: linear-gradient(to bottom, #525252 0%, #454545 100%);
+    border-color: var(--input-border, #606060);
+    box-shadow: 0 1px 2px rgba(0,0,0,0.35);
 }
 
 .editor-toolbar button.active,
 .editor-toolbar button:active { /* Combined active and :active for consistency */
-    background: linear-gradient(to bottom, #e0e0e0 0%, #d0d0d0 100%) !important;
-    box-shadow: inset 0 1px 2px rgba(0,0,0,0.12) !important;
-    border-color: #adadad !important;
-    transform: translateY(1px) !important;
+    background: linear-gradient(to bottom, #3a3a3a 0%, #2f2f2f 100%);
+    box-shadow: inset 0 1px 2px rgba(0,0,0,0.4);
+    border-color: var(--input-border, #484848);
+    transform: translateY(1px);
 }
 
 /* Ensure icons are visible and aligned */
 .editor-toolbar button i.fa {
-    color: #333 !important;
-    vertical-align: middle !important;
+    color: var(--text-color, #ddd);
+    vertical-align: middle;
 }
 
 /* Status Bar */
 .editor-statusbar {
-   border: 1px solid #ccc;
+   border: 1px solid var(--input-border, #777); /* Was #ccc */
    border-top: none;
    border-bottom-left-radius: 3px;
    border-bottom-right-radius: 3px;
-   background-color: #f9f9f9; /* Light mode status bar background */
-   color: #666; /* Light mode status bar text */
+   background-color: var(--nav-bg, #333); /* Was #f9f9f9 */
+   color: var(--post-meta-color, #bbb); /* Was #666 */
    font-size: 0.9em;
    padding: 2px 6px;
-}
-
-/* Dark Mode Overrides for EasyMDE */
-body.dark-mode .EasyMDEContainer .CodeMirror {
-   border-color: var(--input-border, #777);
-   background-color: var(--input-bg, #555);
-   color: var(--input-text, #eee);
-}
-
-body.dark-mode .editor-toolbar {
-   border-color: var(--input-border, #505050);
-   background-color: var(--nav-bg, #2e2e2e); /* Darker toolbar bg */
-}
-
-body.dark-mode .editor-toolbar button {
-    background: linear-gradient(to bottom, #4a4a4a 0%, #3c3c3c 100%) !important; /* Dark silver gradient */
-    color: var(--text-color, #ddd) !important;
-    border-color: var(--input-border, #585858) !important;
-    box-shadow: 0 1px 1px rgba(0,0,0,0.25) !important;
-}
-
-body.dark-mode .editor-toolbar button:hover {
-    background: linear-gradient(to bottom, #525252 0%, #454545 100%) !important;
-    border-color: var(--input-border, #606060) !important;
-    box-shadow: 0 1px 2px rgba(0,0,0,0.35) !important;
-}
-
-body.dark-mode .editor-toolbar button.active,
-body.dark-mode .editor-toolbar button:active {
-    background: linear-gradient(to bottom, #3a3a3a 0%, #2f2f2f 100%) !important;
-    box-shadow: inset 0 1px 2px rgba(0,0,0,0.4) !important;
-    border-color: var(--input-border, #484848) !important;
-}
-
-body.dark-mode .editor-toolbar button i.fa {
-    color: var(--text-color, #ddd) !important;
-}
-
-body.dark-mode .editor-statusbar {
-   border-color: var(--input-border, #777);
-   background-color: var(--nav-bg, #333);
-   color: var(--post-meta-color, #bbb); /* Match post meta text color */
 }
 
 /* Adjust textarea margin if needed (EasyMDE hides the original textarea) */
