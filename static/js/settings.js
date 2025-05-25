@@ -10,7 +10,6 @@ import { applyDarkMode, showSection, lastVisibleSectionId } from './ui.js'; // N
 
 // --- State Variables ---
 export let currentSettings = { // Store loaded settings
-    darkMode: 'false',
     selectedModel: null,
     llmLinkSecurity: 'true' // Added default
 };
@@ -56,10 +55,6 @@ export function renderSettingsPage() {
   </ul>
 </nav>
 <div id="settings-general-section" class="settings-tab-section">
-    <div class="setting-item">
-        <label for="dark-mode-toggle">Dark Mode:</label>
-        <input type="checkbox" id="dark-mode-toggle">
-    </div>
     <div class="setting-item">
         <label for="model-select">Select LLM Model:</label>
         <select id="model-select">
@@ -144,14 +139,6 @@ export function renderSettingsPage() {
                 }
 
                 // Re-attach listeners for this container
-                const darkModeToggleInput = container.querySelector('#dark-mode-toggle');
-                if (darkModeToggleInput) {
-                    darkModeToggleInput.checked = currentSettings.darkMode === 'true';
-                    darkModeToggleInput.addEventListener('change', () => {
-                        applyDarkMode(darkModeToggleInput.checked);
-                    });
-                }
-                
                 const linkSecurityToggleInput = container.querySelector('#llm-link-security-toggle');
                 if (linkSecurityToggleInput) {
                     linkSecurityToggleInput.checked = currentSettings.llmLinkSecurity === 'true';
@@ -208,20 +195,15 @@ export async function loadSettings() {
     try {
         const settings = await apiRequest('/api/settings');
         currentSettings = {
-            darkMode: settings.darkMode === 'true' ? 'true' : 'false',
             selectedModel: settings.selectedModel || null,
             llmLinkSecurity: settings.llmLinkSecurity === 'true' ? 'true' : 'false' // Default to true if missing
         };
          if (settings.llmLinkSecurity === undefined) {
              currentSettings.llmLinkSecurity = 'true'; // Explicitly default if undefined
         }
-        applyDarkMode(currentSettings.darkMode === 'true'); // Apply dark mode immediately
+        applyDarkMode(true); // Apply dark mode immediately
 
         // Update UI elements if they exist (they might be created later by renderSettingsPage)
-        const darkModeToggleInput = settingsPageContent.querySelector('#dark-mode-toggle');
-        if (darkModeToggleInput) {
-            darkModeToggleInput.checked = currentSettings.darkMode === 'true';
-        }
         const linkSecurityToggleInput = settingsPageContent.querySelector('#llm-link-security-toggle');
         if (linkSecurityToggleInput) {
              linkSecurityToggleInput.checked = currentSettings.llmLinkSecurity === 'true';
@@ -232,8 +214,8 @@ export async function loadSettings() {
     } catch (error) {
         console.error("Error loading settings:", error);
         // Apply default settings on error
-        currentSettings = { darkMode: 'false', selectedModel: null, llmLinkSecurity: 'true' };
-        applyDarkMode(false);
+        currentSettings = { selectedModel: null, llmLinkSecurity: 'true' };
+        applyDarkMode(true); // Apply dark mode immediately
         // Still try to load models even if settings load failed
         // loadOllamaModels() will be called by renderSettingsPage
     }
@@ -284,19 +266,17 @@ export async function loadOllamaModels() {
 // --- Settings Actions ---
 export async function saveSettings() {
     // Get elements from within the settings page content
-    const darkModeToggleInput = settingsPageContent.querySelector('#dark-mode-toggle');
     const modelSelectElement = settingsPageContent.querySelector('#model-select');
     const linkSecurityToggleInput = settingsPageContent.querySelector('#llm-link-security-toggle');
     const saveButton = settingsPageContent.querySelector('#save-settings-btn');
     const settingsErrorElement = settingsPageContent.querySelector('#settings-error');
 
-    if (!darkModeToggleInput || !modelSelectElement || !linkSecurityToggleInput || !saveButton || !settingsErrorElement) {
+    if (!modelSelectElement || !linkSecurityToggleInput || !saveButton || !settingsErrorElement) {
         console.error("Settings elements not found for saving.");
         alert("An error occurred. Could not save settings.");
         return;
     }
 
-    const newDarkMode = darkModeToggleInput.checked;
     const newSelectedModel = modelSelectElement.value;
     const newLlmLinkSecurity = linkSecurityToggleInput.checked;
 
@@ -309,7 +289,6 @@ export async function saveSettings() {
     }
 
     const settingsToSave = {
-        darkMode: newDarkMode.toString(),
         selectedModel: newSelectedModel,
         llmLinkSecurity: newLlmLinkSecurity.toString()
     };
@@ -323,13 +302,11 @@ export async function saveSettings() {
 
         // Update local state immediately based on what was sent,
         // assuming the backend confirms or handles potential discrepancies.
-        currentSettings.darkMode = settingsToSave.darkMode;
         currentSettings.selectedModel = settingsToSave.selectedModel;
         currentSettings.llmLinkSecurity = settingsToSave.llmLinkSecurity;
 
         // Update UI (redundant if page isn't re-rendered, but good practice)
-        applyDarkMode(currentSettings.darkMode === 'true');
-        darkModeToggleInput.checked = currentSettings.darkMode === 'true';
+        applyDarkMode(true); // Apply dark mode immediately
         linkSecurityToggleInput.checked = currentSettings.llmLinkSecurity === 'true';
         // Re-render model options to ensure the saved one is selected
         // (though it should already be selected from the user's choice)

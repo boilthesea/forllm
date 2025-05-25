@@ -19,9 +19,9 @@ def handle_settings():
             return jsonify({'error': 'No settings data provided'}), 400
         try:
             for key, value in data.items():
-                if key in ['darkMode', 'selectedModel', 'llmLinkSecurity']:
+                if key in ['selectedModel', 'llmLinkSecurity']: # Removed 'darkMode'
                     processed_value = value
-                    if key == 'darkMode' or key == 'llmLinkSecurity':
+                    if key == 'llmLinkSecurity': # Specific handling for llmLinkSecurity
                         if isinstance(value, bool):
                             processed_value = 'true' if value else 'false'
                         else:
@@ -39,7 +39,7 @@ def handle_settings():
             cursor.execute("SELECT setting_key, setting_value FROM settings")
             settings = {row['setting_key']: row['setting_value'] for row in cursor.fetchall()}
             # Ensure defaults are applied if any known setting is somehow missing after update
-            if 'darkMode' not in settings: settings['darkMode'] = 'false'
+            # Removed: if 'darkMode' not in settings: settings['darkMode'] = 'false'
             if 'selectedModel' not in settings: settings['selectedModel'] = DEFAULT_MODEL
             if 'llmLinkSecurity' not in settings: settings['llmLinkSecurity'] = 'true'
             return jsonify(settings)
@@ -51,8 +51,7 @@ def handle_settings():
         try:
             cursor.execute("SELECT setting_key, setting_value FROM settings")
             settings = {row['setting_key']: row['setting_value'] for row in cursor.fetchall()}
-            if 'darkMode' not in settings:
-                settings['darkMode'] = 'false'
+            # Removed: if 'darkMode' not in settings: settings['darkMode'] = 'false'
             if 'selectedModel' not in settings:
                 settings['selectedModel'] = DEFAULT_MODEL
             if 'llmLinkSecurity' not in settings:

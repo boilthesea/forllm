@@ -124,7 +124,7 @@ def init_db():
         # Insert default user if not present
         cursor.execute("INSERT OR IGNORE INTO users (user_id, username) VALUES (?, ?)", (CURRENT_USER_ID, CURRENT_USERNAME))
         # Insert default settings if not present
-        cursor.execute("INSERT OR IGNORE INTO settings (setting_key, setting_value) VALUES (?, ?)", ('darkMode', 'false'))
+        # Removed: cursor.execute("INSERT OR IGNORE INTO settings (setting_key, setting_value) VALUES (?, ?)", ('darkMode', 'false'))
         cursor.execute("INSERT OR IGNORE INTO settings (setting_key, setting_value) VALUES (?, ?)", ('selectedModel', DEFAULT_MODEL))
         cursor.execute("INSERT OR IGNORE INTO settings (setting_key, setting_value) VALUES (?, ?)", ('llmLinkSecurity', 'true')) # Added default
         print("Database schema verified/created.")
@@ -142,7 +142,7 @@ def init_db():
                 )
             ''')
             # Insert default settings only if table was just created
-            cursor.execute("INSERT OR IGNORE INTO settings (setting_key, setting_value) VALUES (?, ?)", ('darkMode', 'false'))
+            # Removed: cursor.execute("INSERT OR IGNORE INTO settings (setting_key, setting_value) VALUES (?, ?)", ('darkMode', 'false'))
             cursor.execute("INSERT OR IGNORE INTO settings (setting_key, setting_value) VALUES (?, ?)", ('selectedModel', DEFAULT_MODEL))
             cursor.execute("INSERT OR IGNORE INTO settings (setting_key, setting_value) VALUES (?, ?)", ('llmLinkSecurity', 'true')) # Added default
             print("Settings table created with defaults.")
@@ -276,7 +276,7 @@ def init_db():
         # Ensure all default settings are present if the settings table already existed
         # This is a good place to add new settings with defaults if they are introduced later
         default_settings_to_check = {
-            'darkMode': 'false',
+            # Removed: 'darkMode': 'false',
             'selectedModel': DEFAULT_MODEL,
             'llmLinkSecurity': 'true'
             # globalDefaultPersonaId is handled below
@@ -356,6 +356,17 @@ def init_db():
 
     db.commit() # Commit after ensuring all persona tables, indexes, and default data.
     print("Persona management tables and defaults verified/created.")
+
+    # One-time cleanup of old darkMode setting
+    try:
+        cursor.execute("DELETE FROM settings WHERE setting_key = ?", ('darkMode',))
+        db.commit() # Commit this deletion
+        print("Cleaned up 'darkMode' setting from database if it existed.")
+    except sqlite3.Error as e:
+        print(f"Error during darkMode cleanup: {e}")
+        # Potentially rollback if this commit is part of a larger transaction,
+        # but since it's a cleanup at the end, a separate commit is fine.
+        # db.rollback() # Only if part of a transaction that should be reverted entirely
 
     print("Database initialization complete.")
     db.close()
