@@ -15,6 +15,7 @@ from forllm_server.routes.forum_routes import forum_api_bp
 from forllm_server.routes.llm_routes import llm_api_bp
 from forllm_server.routes.schedule_routes import schedule_api_bp
 from forllm_server.routes.settings_routes import settings_api_bp
+from forllm_server.routes.persona_routes import persona_routes_bp # Added
 
 # --- Flask App Initialization ---
 app = Flask(__name__, template_folder='templates', static_folder='static')
@@ -27,6 +28,7 @@ app.register_blueprint(forum_api_bp) # Default prefix is /api
 app.register_blueprint(llm_api_bp)   # Default prefix is /api
 app.register_blueprint(schedule_api_bp) # Prefix is /api/schedule
 app.register_blueprint(settings_api_bp) # Default prefix is /api
+app.register_blueprint(persona_routes_bp) # Added
 
 
 # Register database close function
