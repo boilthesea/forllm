@@ -402,6 +402,19 @@ def create_persona(name, prompt_instructions, created_by_user):
             db.rollback()
         return None
 
+def get_subforum_details(subforum_id):
+    try:
+        db = get_db()
+        cursor = db.cursor()
+        cursor.execute("SELECT name, description FROM subforums WHERE subforum_id = ?", (subforum_id,))
+        row = cursor.fetchone()
+        if row:
+            return {"name": row["name"], "description": row["description"]}
+        return None
+    except sqlite3.Error as e:
+        print(f"Database error in get_subforum_details for subforum_id {subforum_id}: {e}")
+        return None
+
 def get_persona(persona_id, active_only=True):
     try:
         db = get_db()

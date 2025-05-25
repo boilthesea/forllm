@@ -3,10 +3,11 @@ import os
 import requests
 from flask import current_app # For potential future use with app_context in _call_llm
 from forllm_server.config import OLLAMA_GENERATE_URL
+from .database import get_subforum_details # New import
 
 # Helper function for LLM calls
 def _call_llm(prompt, model_id, flask_app): # flask_app for context, if needed later
-    print(f"Calling LLM: Model '{model_id}', Prompt (start): '{prompt[:200]}...'") # Increased preview length
+    print(f"Calling LLM: Model '{model_id}', Prompt (start): '{prompt[:200]}...'")
     try:
         response = requests.post(
             OLLAMA_GENERATE_URL,
@@ -32,172 +33,190 @@ def _call_llm(prompt, model_id, flask_app): # flask_app for context, if needed l
         return {"status": "error", "error_message": "Invalid JSON response from LLM", "text": None}
 
 def generate_persona_from_details(request_details, flask_app):
+    generation_type = request_details.get('generation_type', 'from_name_and_description') # Default
     input_details = request_details.get('input_details', {})
     llm_model_for_generation = request_details.get('llm_model_for_generation')
-    # output_preferences are read but specific handling for desired_headings is deferred as per prompt
-    output_preferences = request_details.get('output_preferences', {}) 
+    output_preferences = request_details.get('output_preferences', {})
     target_persona_name_override = request_details.get('target_persona_name_override', '')
 
     name_hint = input_details.get('name_hint', '')
     description_hint = input_details.get('description_hint', '')
+    
+    subforum_name = None
+    subforum_description = None
+    additional_directives = input_details.get('additional_directives', '')
 
     if not llm_model_for_generation:
-        # This case should ideally be handled by the route before queueing,
-        # but as a safeguard:
-        print("Error: llm_model_for_generation is missing.")
         return {"status": "error", "error_message": "llm_model_for_generation is required."}
 
+    if generation_type == "subforum_expert":
+        subforum_id = input_details.get('subforum_id')
+        if not subforum_id:
+            return {"status": "error", "error_message": "Missing subforum_id for subforum_expert generation."}
+        
+        with flask_app.app_context(): # Ensure DB operations have app context
+            sf_details = get_subforum_details(subforum_id)
+
+        if not sf_details:
+            return {"status": "error", "error_message": f"Could not retrieve details for subforum_id {subforum_id}."}
+        subforum_name = sf_details['name']
+        subforum_description = sf_details['description']
+        
+        expansion_template_name = "subforum_expert.txt"
+        refinement_template_name = "subforum_expert.txt"
+        print(f"Generation Type: Subforum Expert for '{subforum_name}'")
+    elif generation_type == "from_name_and_description":
+        expansion_template_name = "from_name_and_description.txt"
+        refinement_template_name = "from_name_and_description.txt"
+        print(f"Generation Type: From Name and Description (Name Hint: '{name_hint}')")
+    else:
+        return {"status": "error", "error_message": f"Unsupported generation_type: {generation_type}"}
+
     # === Stage 1: Expansion ===
-    print("Starting Stage 1: Expansion")
+    print(f"Starting Stage 1: Expansion with template '{expansion_template_name}'")
     try:
         expansion_template_path = os.path.join(
             os.path.dirname(__file__),
-            'persona_prompt_templates', 'expansion', 'from_name_and_description.txt'
+            'persona_prompt_templates', 'expansion', expansion_template_name
         )
         with open(expansion_template_path, 'r', encoding='utf-8') as f:
             expansion_template = f.read()
     except FileNotFoundError:
-        print(f"Error: Expansion prompt template not found at {expansion_template_path}")
-        return {"status": "error", "error_message": "Expansion prompt template not found."}
+        return {"status": "error", "error_message": f"Expansion prompt template {expansion_template_name} not found."}
 
-    expansion_prompt = expansion_template.replace("{{name_hint}}", name_hint).replace("{{description_hint}}", description_hint)
+    expansion_prompt = expansion_template
+    if generation_type == "subforum_expert":
+        expansion_prompt = expansion_prompt.replace("{{subforum_name}}", subforum_name or '')
+        expansion_prompt = expansion_prompt.replace("{{subforum_description}}", subforum_description or '')
+        expansion_prompt = expansion_prompt.replace("{{additional_directives}}", additional_directives or '')
+    elif generation_type == "from_name_and_description":
+        expansion_prompt = expansion_prompt.replace("{{name_hint}}", name_hint or '')
+        expansion_prompt = expansion_prompt.replace("{{description_hint}}", description_hint or '')
     
     expansion_result = _call_llm(expansion_prompt, llm_model_for_generation, flask_app) 
     if expansion_result["status"] == "error":
-        return {
-            "status": "error", 
-            "error_message": f"Expansion stage failed: {expansion_result['error_message']}", 
-            "persona_name": name_hint or "Expansion Failed", # Provide some context
-            "prompt_instructions": expansion_result.get('text', '') # Return error text if available
-        }
+        return {"status": "error", "error_message": f"Expansion stage failed: {expansion_result['error_message']}", 
+                "persona_name": name_hint or "Expansion Failed", 
+                "prompt_instructions": expansion_result.get('text', '')}
     brainstormed_text_from_stage_1 = expansion_result["text"]
     print(f"Stage 1 (Expansion) successful. Brainstormed text length: {len(brainstormed_text_from_stage_1)}")
 
     # === Stage 2: Refinement ===
-    print("Starting Stage 2: Refinement")
+    print(f"Starting Stage 2: Refinement with template '{refinement_template_name}'")
     try:
         refinement_template_path = os.path.join(
             os.path.dirname(__file__),
-            'persona_prompt_templates', 'refinement', 'from_name_and_description.txt'
+            'persona_prompt_templates', 'refinement', refinement_template_name
         )
         with open(refinement_template_path, 'r', encoding='utf-8') as f:
             refinement_template = f.read()
     except FileNotFoundError:
-        print(f"Error: Refinement prompt template not found at {refinement_template_path}")
-        return {"status": "error", "error_message": "Refinement prompt template not found."}
+        return {"status": "error", "error_message": f"Refinement prompt template {refinement_template_name} not found."}
 
-    # Prepare output_preferences for template
-    desired_headings = output_preferences.get('desired_headings', []) 
-    
+    desired_headings = output_preferences.get('desired_headings', [])
     if isinstance(desired_headings, list) and desired_headings:
-        # Format as a comma-separated string for the prompt.
-        # The prompt template should instruct the LLM to use these as the primary headings.
         desired_headings_str = ", ".join(desired_headings)
-        # Example of how the prompt template might need to be phrased:
-        # "Use the following comma-separated list of headings for your output structure: {{desired_headings_list_or_default}}. If this list is empty or not provided, use your default set of headings."
-        print(f"Using custom desired_headings: {desired_headings_str}")
     else:
-        # Fallback to default list string if empty or not a list
         desired_headings_str = "## Persona Name:,## Core Identity:,## Key Personality Traits:,## Knowledge Domain & Expertise:,## Speaking Style & Tone:,## Interaction Guidelines & Behaviors:,## Forbidden Actions & Topics:,## Example Phrases:"
-        print(f"Using default desired_headings: {desired_headings_str}")
 
-    refinement_prompt = refinement_template.replace("{{brainstormed_text_from_stage_1}}", brainstormed_text_from_stage_1)
-    refinement_prompt = refinement_prompt.replace("{{name_hint}}", name_hint)
-    refinement_prompt = refinement_prompt.replace("{{description_hint}}", description_hint)
-    # This line is the key change for desired_headings:
-    refinement_prompt = refinement_prompt.replace("{{desired_headings_list_or_default}}", desired_headings_str) 
-    refinement_prompt = refinement_prompt.replace("{{target_persona_name_override}}", target_persona_name_override)
+    refinement_prompt = refinement_template.replace("{{brainstormed_text_from_stage_1}}", brainstormed_text_from_stage_1 or '')
+    # These are in both refinement templates, so replace them regardless of type
+    refinement_prompt = refinement_prompt.replace("{{name_hint}}", name_hint or '') 
+    refinement_prompt = refinement_prompt.replace("{{description_hint}}", description_hint or '')
+
+    if generation_type == "subforum_expert":
+        refinement_prompt = refinement_prompt.replace("{{subforum_name}}", subforum_name or '')
+        refinement_prompt = refinement_prompt.replace("{{subforum_description}}", subforum_description or '')
+        refinement_prompt = refinement_prompt.replace("{{additional_directives}}", additional_directives or '')
+    
+    refinement_prompt = refinement_prompt.replace("{{desired_headings_list_or_default}}", desired_headings_str)
+    refinement_prompt = refinement_prompt.replace("{{target_persona_name_override}}", target_persona_name_override or '')
     refinement_prompt = refinement_prompt.replace("{{tone_preference}}", output_preferences.get('tone_preference', ''))
     refinement_prompt = refinement_prompt.replace("{{length_preference}}", output_preferences.get('length_preference', ''))
-    # Note: llm_model_for_generation is not a placeholder in the refinement prompt template provided.
 
     refinement_result = _call_llm(refinement_prompt, llm_model_for_generation, flask_app)
     if refinement_result["status"] == "error":
-        return {
-            "status": "error", 
-            "error_message": f"Refinement stage failed: {refinement_result['error_message']}", 
-            "persona_name": name_hint or "Refinement Failed", # Provide some context
-            "prompt_instructions": refinement_result.get('text', '')
-        }
+        return {"status": "error", "error_message": f"Refinement stage failed: {refinement_result['error_message']}", 
+                "persona_name": name_hint or "Refinement Failed", 
+                "prompt_instructions": refinement_result.get('text', '')}
     final_instructions_text = refinement_result["text"]
     print(f"Stage 2 (Refinement) successful. Final text length: {len(final_instructions_text)}")
     
     # === Parsing Final Output ===
-    # Priority: Override > Parsed from LLM (if not overridden) > Name Hint > Default
-    persona_name = target_persona_name_override # Highest priority
+    parsed_persona_name_successfully = False
+    persona_name_to_save = target_persona_name_override  # Highest priority
 
-    if not persona_name: # If no override, try to parse or use hint
-        # Attempt to parse from LLM output
-        parsed_llm_name = None
+    if not persona_name_to_save: # If no override
         if "## Persona Name:" in final_instructions_text:
             try:
                 name_section_and_rest = final_instructions_text.split("## Persona Name:", 1)[1]
-                parsed_llm_name = name_section_and_rest.split("##", 1)[0].strip().splitlines()[0].strip()
+                parsed_name_from_llm = name_section_and_rest.split("##", 1)[0].strip().splitlines()[0].strip()
+                if parsed_name_from_llm:
+                    persona_name_to_save = parsed_name_from_llm
+                    parsed_persona_name_successfully = True 
             except IndexError:
                 print("Warning: Parsing '## Persona Name:' failed during name extraction.")
         
-        if parsed_llm_name:
-            persona_name = parsed_llm_name
-        elif name_hint:
-            persona_name = name_hint
-        else:
-            persona_name = "Generated Persona" # Fallback default
+        if not persona_name_to_save: # Still no name, try hint
+            persona_name_to_save = name_hint
+        
+        if not persona_name_to_save and generation_type == "subforum_expert" and subforum_name:
+            persona_name_to_save = f"{subforum_name} Expert" # Fallback for subforum expert type
 
-    prompt_instructions = final_instructions_text
-    # If a name was parsed from the LLM output AND there was no override,
-    # we might want to remove the "## Persona Name: ..." section from the instructions.
-    # This logic is a bit simplified from the original single-stage parsing.
-    if not target_persona_name_override and "## Persona Name:" in final_instructions_text:
+    if not persona_name_to_save: # Absolute fallback
+        persona_name_to_save = "Generated Persona"
+
+    prompt_instructions_to_save = final_instructions_text
+    if parsed_persona_name_successfully and not target_persona_name_override:
+        # Attempt to remove the "## Persona Name: ..." line from instructions if it was parsed and not overridden
         try:
-            # This assumes the "## Persona Name:" line is at the beginning if present.
-            split_by_name_heading = final_instructions_text.split("## Persona Name:", 1)
-            if len(split_by_name_heading) > 1:
-                name_section_and_rest = split_by_name_heading[1]
-                # Further split to isolate the name itself and the rest of the content
-                parts = name_section_and_rest.split("##", 1)
-                if len(parts) > 1: # Check if there is content after the name section
-                    # This means there was a "## Persona Name: actual_name ## Next Heading" structure
-                    prompt_instructions = "##" + parts[1].strip() # Keep the "##" for the next heading
-                else: 
-                    # This means "## Persona Name: actual_name" was the only thing, or the last thing.
-                    # If it's the only thing, instructions might become empty.
-                    # If it implies the rest of the text _is_ the name, this is problematic.
-                    # For now, if no "##" follows the name, assume the rest is instructions
-                    # but this part of parsing could be fragile.
-                    # A robust approach might be to rely on the LLM to *not* include the name line
-                    # if it's told to generate instructions based on a name it's also generating.
-                    # For now, let's assume the name section is distinct.
-                    # If the text _only_ contained "## Persona Name: Foobar", prompt_instructions would become empty here.
-                    # This is unlikely if the prompt asks for multiple sections.
-                    # A simple fix: if parts[1] is empty, means name was last.
-                    # In that case, don't strip. Instructions are the whole text.
-                    # The current logic is: if "##NextHeading" exists, strip name section.
-                    # If not, prompt_instructions remains final_instructions_text.
-                    pass # Keep prompt_instructions as final_instructions_text
+            # More robust way to split: find first "## Persona Name:", then find the end of that line.
+            # Then, find the start of the next "##" heading.
+            lines = final_instructions_text.splitlines()
+            name_line_index = -1
+            for i, line in enumerate(lines):
+                if line.strip().startswith("## Persona Name:"):
+                    name_line_index = i
+                    break
+            
+            if name_line_index != -1:
+                # Find where the actual instructions start (next heading or significant content)
+                instructions_start_index = -1
+                for i in range(name_line_index + 1, len(lines)):
+                    if lines[i].strip().startswith("## ") or lines[i].strip(): # Next heading or any non-empty line
+                        instructions_start_index = i
+                        break
+                if instructions_start_index != -1:
+                    prompt_instructions_to_save = "\n".join(lines[instructions_start_index:])
+                else: # Only name was generated, or no content after name
+                    prompt_instructions_to_save = "" 
+            # If "## Persona Name:" was not found or structure is unexpected, prompt_instructions_to_save remains final_instructions_text
         except Exception as e:
-            print(f"Warning: Error during final parsing of prompt_instructions: {e}")
-            # Fallback: prompt_instructions remains final_instructions_text
+            print(f"Minor error trying to strip parsed name from instructions: {e}")
+            # Fallback: prompt_instructions_to_save remains final_instructions_text
 
-    print(f"Final Persona Name: '{persona_name}', Instructions (start): '{prompt_instructions[:100]}...'")
+    print(f"Final Persona Name: '{persona_name_to_save}', Instructions (start): '{prompt_instructions_to_save[:100]}...'")
 
     return {
-        "persona_name": persona_name.strip(), # Ensure name is stripped
-        "prompt_instructions": prompt_instructions.strip(),
+        "persona_name": persona_name_to_save.strip(),
+        "prompt_instructions": prompt_instructions_to_save.strip(),
         "status": "success"
     }
 
 # Example PersonaGenerationRequest structure (for reference, if needed):
 # {
-#     "generation_type": "from_name_and_description", // Or other types later
+#     "generation_type": "from_name_and_description" OR "subforum_expert",
 #     "input_details": {
-#         "name_hint": "Optional name suggestion",
-#         "description_hint": "Few sentences or keywords"
+#         "name_hint": "Optional name suggestion", (used by both)
+#         "description_hint": "Few sentences or keywords" (used by from_name_and_description)
+#         "subforum_id": 123, (used by subforum_expert)
+#         "additional_directives": "Focus on X, Y, Z." (used by subforum_expert)
 #     },
-#     "output_preferences": { // Optional
-#         "desired_headings": ["## Persona Name:", "## Core Identity:", ...], // For future full handling
+#     "output_preferences": { 
+#         "desired_headings": ["## Persona Name:", "## Core Identity:", ...], 
 #         "tone_preference": "witty", 
 #         "length_preference": "concise" 
 #     },
-#     "target_persona_name_override": "Specific Name", // Optional
-#     "llm_model_for_generation": "model_identifier" // Should be validated before this point
+#     "target_persona_name_override": "Specific Name", 
+#     "llm_model_for_generation": "model_identifier"
 # }
