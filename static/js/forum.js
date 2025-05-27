@@ -633,6 +633,20 @@ export { currentSubforumId, currentTopicId, currentPosts };
 // Export new attachment handlers
 export { renderAttachmentItem }; // handleFileUploadsForPost is removed
 
+export function setCurrentTopicAndSubforum(subforumId, topicId, subforumName, topicTitle) {
+    currentSubforumId = subforumId;
+    currentTopicId = topicId;
+    // Update UI elements if they exist (e.g., breadcrumbs or titles)
+    if (currentSubforumName && subforumName) {
+        currentSubforumName.textContent = subforumName;
+    }
+    if (currentTopicTitle && topicTitle) {
+        currentTopicTitle.textContent = topicTitle;
+    }
+    // This function primarily sets state. UI updates related to showing sections
+    // or loading data are handled by functions like loadPosts, loadTopics.
+}
+
 /**
  * Handles file selection from an input element, adding files to a staging area.
  * @param {Event} event - The file input change event.
