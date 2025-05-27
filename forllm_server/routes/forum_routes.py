@@ -6,7 +6,8 @@ from bs4 import BeautifulSoup # For link modification in LLM responses
 from ..database import (
     get_db,
     assign_persona_to_subforum, unassign_persona_from_subforum, list_personas_for_subforum,
-    set_subforum_default_persona, get_subforum_default_persona
+    set_subforum_default_persona, get_subforum_default_persona, update_user_activity,
+    get_subforums_with_status, get_topics_for_subforum_with_status
 )
 from ..markdown_config import md
 from ..config import CURRENT_USER_ID
@@ -77,9 +78,11 @@ def handle_subforums():
         except sqlite3.IntegrityError:
             return jsonify({'error': 'Subforum name already exists'}), 409
     else: # GET
-        cursor.execute("SELECT subforum_id, name FROM subforums ORDER BY name")
-        subforums = cursor.fetchall()
-        return jsonify([dict(row) for row in subforums])
+        # cursor.execute("SELECT subforum_id, name FROM subforums ORDER BY name")
+        # subforums = cursor.fetchall()
+        # return jsonify([dict(row) for row in subforums])
+        subforums_with_status = get_subforums_with_status(CURRENT_USER_ID)
+        return jsonify(subforums_with_status)
 
 @forum_api_bp.route('/subforums/<int:subforum_id>/topics', methods=['GET', 'POST'])
 def handle_topics(subforum_id):
@@ -108,17 +111,22 @@ def handle_topics(subforum_id):
             db.rollback()
             return jsonify({'error': f'Failed to create topic: {e}'}), 500
     else: # GET
-        cursor.execute("""
-            SELECT t.topic_id, t.title, u.username, t.created_at,
-                   (SELECT COUNT(*) FROM posts p WHERE p.topic_id = t.topic_id) as post_count,
-                   (SELECT MAX(p.created_at) FROM posts p WHERE p.topic_id = t.topic_id) as last_post_at
-            FROM topics t
-            JOIN users u ON t.user_id = u.user_id
-            WHERE t.subforum_id = ?
-            ORDER BY last_post_at DESC
-        """, (subforum_id,))
-        topics = cursor.fetchall()
-        return jsonify([dict(row) for row in topics])
+        # cursor.execute("""
+        #     SELECT t.topic_id, t.title, u.username, t.created_at,
+        #            (SELECT COUNT(*) FROM posts p WHERE p.topic_id = t.topic_id) as post_count,
+        #            (SELECT MAX(p.created_at) FROM posts p WHERE p.topic_id = t.topic_id) as last_post_at
+        #     FROM topics t
+        #     JOIN users u ON t.user_id = u.user_id
+        #     WHERE t.subforum_id = ?
+        #     ORDER BY last_post_at DESC
+        # """, (subforum_id,))
+        # topics = cursor.fetchall()
+        topics_with_status = get_topics_for_subforum_with_status(subforum_id, CURRENT_USER_ID)
+        # Record user activity for viewing subforum (still relevant after fetching topics)
+        if not update_user_activity(CURRENT_USER_ID, 'subforum', subforum_id):
+            current_app.logger.error(f"Failed to update user activity for user {CURRENT_USER_ID}, subforum {subforum_id}")
+        # return jsonify([dict(row) for row in topics])
+        return jsonify(topics_with_status)
 
 @forum_api_bp.route('/topics/<int:topic_id>/posts', methods=['GET', 'POST'])
 def handle_posts(topic_id):
@@ -209,6 +217,9 @@ def handle_posts(topic_id):
                     print(f"Error parsing or modifying HTML for LLM post {post_dict.get('post_id', 'N/A')}: {e}")
             post_dict['content'] = html_content
             processed_posts.append(post_dict)
+        # Record user activity for viewing topic
+        if not update_user_activity(CURRENT_USER_ID, 'topic', topic_id):
+            current_app.logger.error(f"Failed to update user activity for user {CURRENT_USER_ID}, topic {topic_id}")
         return jsonify(processed_posts)
 
 # --- Persona Assignment Endpoints ---

@@ -1,4 +1,5 @@
 import sqlite3
+import datetime
 from flask import g
 from .config import DATABASE, CURRENT_USER_ID, CURRENT_USERNAME, DEFAULT_MODEL
 
@@ -91,6 +92,15 @@ def init_db():
                 order_in_post INTEGER NOT NULL DEFAULT 0,
                 FOREIGN KEY (post_id) REFERENCES posts(post_id) ON DELETE CASCADE,
                 UNIQUE (post_id, order_in_post)
+            )
+        ''')
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS user_activity (
+                user_id INTEGER NOT NULL,
+                item_type TEXT NOT NULL,
+                item_id INTEGER NOT NULL,
+                last_viewed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (user_id, item_type, item_id)
             )
         ''')
 
@@ -401,6 +411,371 @@ def create_persona(name, prompt_instructions, created_by_user):
         if db:
             db.rollback()
         return None
+
+# ------------------- USER ACTIVITY LOGIC -------------------
+
+def update_user_activity(user_id, item_type, item_id):
+    """
+    Inserts or replaces a user activity entry, updating the last_viewed_at timestamp.
+    """
+    db = get_db()
+    cursor = db.cursor()
+    try:
+        cursor.execute('''
+            INSERT OR REPLACE INTO user_activity (user_id, item_type, item_id, last_viewed_at)
+            VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+        ''', (user_id, item_type, item_id))
+        db.commit()
+        return True
+    except sqlite3.Error as e:
+        print(f"Database error in update_user_activity: {e}")
+        if db:
+            db.rollback()
+        return False
+
+def get_last_viewed_timestamp(user_id, item_type, item_id):
+    """
+    Retrieves the last_viewed_at timestamp for a given user and item.
+    Returns None if no entry is found.
+    """
+    db = get_db()
+    cursor = db.cursor()
+    try:
+        cursor.execute('''
+            SELECT last_viewed_at FROM user_activity
+            WHERE user_id = ? AND item_type = ? AND item_id = ?
+        ''', (user_id, item_type, item_id))
+        row = cursor.fetchone()
+        if row:
+            return row['last_viewed_at']
+        return None
+    except sqlite3.Error as e:
+        print(f"Database error in get_last_viewed_timestamp: {e}")
+        return None
+
+def check_topic_unseen_status(topic_id, user_id, last_viewed_subforum_ts=None):
+    """
+    Checks if a topic has unseen posts or is itself new relative to subforum view.
+    Returns True if unseen, False otherwise.
+    """
+    db = get_db()
+    cursor = db.cursor()
+    
+    try:
+        # Get topic creation time
+        cursor.execute("SELECT created_at FROM topics WHERE topic_id = ?", (topic_id,))
+        topic_row = cursor.fetchone()
+        if not topic_row:
+            return False # Topic not found
+
+        # Timestamps are stored as strings, convert to datetime objects
+        # SQLite's CURRENT_TIMESTAMP format is 'YYYY-MM-DD HH:MM:SS'
+        topic_created_at = datetime.datetime.strptime(topic_row['created_at'], '%Y-%m-%d %H:%M:%S')
+
+        last_viewed_topic_ts_raw = get_last_viewed_timestamp(user_id, 'topic', topic_id)
+        
+        # Ensure last_viewed_topic_ts is a datetime object for comparison
+        if last_viewed_topic_ts_raw:
+            if isinstance(last_viewed_topic_ts_raw, str):
+                 last_viewed_topic_ts = datetime.datetime.strptime(last_viewed_topic_ts_raw, '%Y-%m-%d %H:%M:%S')
+            elif isinstance(last_viewed_topic_ts_raw, datetime.datetime):
+                 last_viewed_topic_ts = last_viewed_topic_ts_raw
+            else: # Fallback for unexpected types, treat as very old
+                 last_viewed_topic_ts = datetime.datetime.fromtimestamp(0)
+        else:
+            last_viewed_topic_ts = datetime.datetime.fromtimestamp(0)
+
+        # Ensure last_viewed_subforum_ts is a datetime object if provided
+        if last_viewed_subforum_ts:
+            if isinstance(last_viewed_subforum_ts, str):
+                last_viewed_subforum_ts_dt = datetime.datetime.strptime(last_viewed_subforum_ts, '%Y-%m-%d %H:%M:%S')
+            elif isinstance(last_viewed_subforum_ts, datetime.datetime):
+                last_viewed_subforum_ts_dt = last_viewed_subforum_ts
+            else: # Fallback for unexpected types
+                last_viewed_subforum_ts_dt = datetime.datetime.fromtimestamp(0) # Or handle error
+
+            if topic_created_at > last_viewed_subforum_ts_dt:
+                return True # Topic is new since subforum was last viewed
+
+        # Check for new posts (replies) in this topic since the topic was last viewed
+        # We only care about replies, so parent_post_id IS NOT NULL.
+        # However, the prompt for check_topic_unseen_status says "any post P ... has P.created_at > last_viewed_topic_ts"
+        # This could include the initial post if the topic itself was never "viewed" (no entry in user_activity).
+        # If a topic is created, and user_activity for this topic is None (epoch 0), then topic.created_at > epoch 0,
+        # it implies the first post is also unseen.
+        # Let's check any post. If the first post makes it true, and the topic itself wasn't marked "new" by subforum view, then it's still unseen.
+        # Correction: Requirement is to check for REPLIES only.
+        cursor.execute("""
+            SELECT 1 FROM posts
+            WHERE topic_id = ? AND parent_post_id IS NOT NULL AND created_at > ?
+            LIMIT 1
+        """, (topic_id, last_viewed_topic_ts.strftime('%Y-%m-%d %H:%M:%S')))
+        if cursor.fetchone():
+            return True
+
+        return False
+    except sqlite3.Error as e:
+        print(f"Database error in check_topic_unseen_status for topic {topic_id}, user {user_id}: {e}")
+        return False # Default to not unseen in case of error
+    except ValueError as e:
+        print(f"Timestamp format error in check_topic_unseen_status for topic {topic_id}, user {user_id}: {e}")
+        return False
+
+
+def check_subforum_unseen_status(subforum_id, user_id):
+    """
+    Checks if a subforum has unseen topics or posts within its topics.
+    Returns True if unseen, False otherwise.
+    """
+    db = get_db()
+    cursor = db.cursor()
+
+    try:
+        last_viewed_subforum_ts_raw = get_last_viewed_timestamp(user_id, 'subforum', subforum_id)
+        
+        if last_viewed_subforum_ts_raw:
+            if isinstance(last_viewed_subforum_ts_raw, str):
+                last_viewed_subforum_ts = datetime.datetime.strptime(last_viewed_subforum_ts_raw, '%Y-%m-%d %H:%M:%S')
+            elif isinstance(last_viewed_subforum_ts_raw, datetime.datetime):
+                last_viewed_subforum_ts = last_viewed_subforum_ts_raw
+            else: # Fallback for unexpected types
+                last_viewed_subforum_ts = datetime.datetime.fromtimestamp(0)
+        else:
+            last_viewed_subforum_ts = datetime.datetime.fromtimestamp(0)
+
+        # Fetch all topics in this subforum
+        cursor.execute("SELECT topic_id, created_at FROM topics WHERE subforum_id = ?", (subforum_id,))
+        topics = cursor.fetchall()
+
+        for topic_row in topics:
+            topic_id = topic_row['topic_id']
+            # Convert topic_created_at from string to datetime for comparison
+            topic_created_at = datetime.datetime.strptime(topic_row['created_at'], '%Y-%m-%d %H:%M:%S')
+
+            if topic_created_at > last_viewed_subforum_ts:
+                return True # New topic since subforum was last viewed
+
+            # Check individual topic status (for new posts within that topic)
+            # We don't pass last_viewed_subforum_ts here, as per interpretation of requirements.
+            # check_topic_unseen_status will use the topic's own last_viewed_ts.
+            if check_topic_unseen_status(topic_id, user_id): # Pass None or omit last_viewed_subforum_ts
+                return True
+        
+        return False
+    except sqlite3.Error as e:
+        print(f"Database error in check_subforum_unseen_status for subforum {subforum_id}, user {user_id}: {e}")
+        return False # Default to not unseen
+    except ValueError as e:
+        print(f"Timestamp format error in check_subforum_unseen_status for subforum {subforum_id}, user {user_id}: {e}")
+        return False
+
+def get_subforums_with_status(user_id):
+    """
+    Fetches all subforums and includes an 'has_unseen_content' status for each.
+    """
+    db = get_db()
+    cursor = db.cursor()
+    try:
+        cursor.execute("SELECT subforum_id, name FROM subforums ORDER BY name")
+        subforums_raw = cursor.fetchall()
+        subforums_with_status = []
+        for row in subforums_raw:
+            subforum_dict = dict(row)
+            subforum_dict['has_unseen_content'] = check_subforum_unseen_status(subforum_dict['subforum_id'], user_id)
+            subforums_with_status.append(subforum_dict)
+        return subforums_with_status
+    except sqlite3.Error as e:
+        print(f"Database error in get_subforums_with_status for user {user_id}: {e}")
+        return [] # Return empty list on error
+
+def get_topics_for_subforum_with_status(subforum_id, user_id):
+    """
+    Fetches all topics for a subforum and includes 'has_unseen_content' status for each.
+    """
+    db = get_db()
+    cursor = db.cursor()
+    try:
+        # Get the last time user viewed the subforum, to pass to check_topic_unseen_status
+        last_viewed_subforum_ts_raw = get_last_viewed_timestamp(user_id, 'subforum', subforum_id)
+        
+        if last_viewed_subforum_ts_raw:
+            if isinstance(last_viewed_subforum_ts_raw, str):
+                last_viewed_subforum_ts = datetime.datetime.strptime(last_viewed_subforum_ts_raw, '%Y-%m-%d %H:%M:%S')
+            elif isinstance(last_viewed_subforum_ts_raw, datetime.datetime): # if it's already datetime
+                last_viewed_subforum_ts = last_viewed_subforum_ts_raw
+            else: # fallback for unexpected types
+                last_viewed_subforum_ts = datetime.datetime.fromtimestamp(0)
+        else:
+            last_viewed_subforum_ts = datetime.datetime.fromtimestamp(0)
+
+        # Fetch topics (similar to handle_topics in forum_routes.py)
+        # Adding more fields that are typically useful for topic lists
+        cursor.execute("""
+            SELECT t.topic_id, t.title, t.created_at, u.username as author_username,
+                   (SELECT COUNT(*) FROM posts p WHERE p.topic_id = t.topic_id) as post_count,
+                   (SELECT MAX(p.created_at) FROM posts p WHERE p.topic_id = t.topic_id) as last_post_at
+            FROM topics t
+            JOIN users u ON t.user_id = u.user_id
+            WHERE t.subforum_id = ?
+            ORDER BY last_post_at DESC
+        """, (subforum_id,))
+        topics_raw = cursor.fetchall()
+        
+        topics_with_status = []
+        for row in topics_raw:
+            topic_dict = dict(row)
+            # The requirement was 'has_unseen_replies' but my function is 'check_topic_unseen_status'
+            # which covers new topics AND new replies. 'has_unseen_content' seems more fitting.
+            topic_dict['has_unseen_content'] = check_topic_unseen_status(
+                topic_dict['topic_id'], 
+                user_id, 
+                last_viewed_subforum_ts # Pass the subforum view timestamp here
+            )
+            topics_with_status.append(topic_dict)
+        return topics_with_status
+    except sqlite3.Error as e:
+        print(f"Database error in get_topics_for_subforum_with_status for subforum {subforum_id}, user {user_id}: {e}")
+        return []
+    except ValueError as e: # Catch potential strptime errors if raw ts is malformed
+        print(f"Timestamp format error in get_topics_for_subforum_with_status for subforum {subforum_id}, user {user_id}: {e}")
+        return []
+
+# ------------------- RECENT ACTIVITY PAGE LOGIC -------------------
+
+def get_recent_topics(user_id, limit=10):
+    """
+    Fetches recent topics that are considered new to the user.
+    A topic is new if its created_at is after the user's last_viewed_at for its parent subforum.
+    Additionally, it filters out topics the user has explicitly viewed, unless new posts exist in that topic
+    (this part is simplified here to: topic's own last_viewed_at is before topic.created_at, which means it was never truly "viewed" if it shows up).
+    """
+    db = get_db()
+    cursor = db.cursor()
+    try:
+        # This query aims to find topics in subforums that are new since the subforum was last viewed,
+        # or topics in subforums that were never viewed.
+        # It also considers if the topic itself has been viewed.
+        # A topic is considered "new" if:
+        # 1. It was created after the subforum was last viewed by the user.
+        #    (If subforum never viewed, all its topics are candidates here).
+        # 2. The topic itself has either never been viewed by the user, or if it has,
+        #    this specific query doesn't check for newer posts within it but relies on the topic's creation date
+        #    vs its own last view date.
+        #    A more sophisticated check (like check_topic_unseen_status) is not used here to keep it focused on "recent topics".
+        
+        # Using datetime.datetime.fromtimestamp(0).strftime('%Y-%m-%d %H:%M:%S') for epoch
+        epoch_ts_str = datetime.datetime.fromtimestamp(0).strftime('%Y-%m-%d %H:%M:%S')
+
+        query = """
+            SELECT
+                t.topic_id, t.title, t.created_at AS topic_created_at,
+                s.subforum_id, s.name AS subforum_name
+            FROM topics t
+            JOIN subforums s ON t.subforum_id = s.subforum_id
+            LEFT JOIN user_activity ua_subforum ON ua_subforum.item_type = 'subforum'
+                AND ua_subforum.item_id = s.subforum_id AND ua_subforum.user_id = :user_id
+            LEFT JOIN user_activity ua_topic ON ua_topic.item_type = 'topic'
+                AND ua_topic.item_id = t.topic_id AND ua_topic.user_id = :user_id
+            WHERE
+                t.created_at > COALESCE(ua_subforum.last_viewed_at, :epoch_ts)
+            AND
+                (ua_topic.last_viewed_at IS NULL OR t.created_at > ua_topic.last_viewed_at)
+            ORDER BY t.created_at DESC
+            LIMIT :limit
+        """
+        # The condition `t.created_at > ua_topic.last_viewed_at` for an already viewed topic implies
+        # that the topic was viewed *before* it was created, which is impossible.
+        # This effectively means "if topic was viewed, it's not new by creation date alone".
+        # A better condition for "new activity in an already viewed topic" would be to check posts.
+        # However, the prompt focuses on "topics that are new".
+        # If a topic is created at T1, subforum viewed at T0 (T0 < T1), topic viewed at T2 (T1 < T2).
+        # If then a new post P1 is made at T3 (T2 < T3).
+        # The current query would filter out this topic if T2 exists.
+        # Re-evaluating: "only return topics that are 'new' to the user. A topic is new if its created_at is after user_activity.last_viewed_at for its parent subforum"
+        # "Alternatively, or additionally, filter out topics the user has already explicitly viewed"
+        # This means if ua_topic.last_viewed_at exists, it should NOT be shown.
+        
+        # Simpler interpretation: Show topics created after subforum view, UNLESS topic itself has been viewed.
+        query_revised = """
+            SELECT
+                t.topic_id, t.title, t.created_at AS topic_created_at,
+                s.subforum_id, s.name AS subforum_name
+            FROM topics t
+            JOIN subforums s ON t.subforum_id = s.subforum_id
+            LEFT JOIN user_activity ua_subforum ON ua_subforum.item_type = 'subforum'
+                AND ua_subforum.item_id = s.subforum_id AND ua_subforum.user_id = :user_id
+            LEFT JOIN user_activity ua_topic ON ua_topic.item_type = 'topic'
+                AND ua_topic.item_id = t.topic_id AND ua_topic.user_id = :user_id
+            WHERE
+                t.created_at > COALESCE(ua_subforum.last_viewed_at, :epoch_ts)
+            AND
+                ua_topic.last_viewed_at IS NULL  -- Only include topics that have no 'topic' view record for the user
+            ORDER BY t.created_at DESC
+            LIMIT :limit
+        """
+
+        cursor.execute(query_revised, {"user_id": user_id, "epoch_ts": epoch_ts_str, "limit": limit})
+        recent_topics = [dict(row) for row in cursor.fetchall()]
+        return recent_topics
+    except sqlite3.Error as e:
+        print(f"Database error in get_recent_topics for user {user_id}: {e}")
+        return []
+
+def get_recent_replies(user_id, limit=10):
+    """
+    Fetches recent replies (posts) that are new to the user.
+    A reply is new if its created_at is after the user's last_viewed_at for its parent topic.
+    """
+    db = get_db()
+    cursor = db.cursor()
+    epoch_ts_str = datetime.datetime.fromtimestamp(0).strftime('%Y-%m-%d %H:%M:%S')
+    try:
+        query = """
+            SELECT
+                p.post_id, 
+                SUBSTR(p.content, 1, 100) AS content_snippet, 
+                p.created_at AS reply_created_at,
+                t.topic_id, t.title AS topic_title,
+                s.subforum_id, s.name AS subforum_name
+            FROM posts p
+            JOIN topics t ON p.topic_id = t.topic_id
+            JOIN subforums s ON t.subforum_id = s.subforum_id
+            LEFT JOIN user_activity ua_topic ON ua_topic.item_type = 'topic'
+                AND ua_topic.item_id = t.topic_id AND ua_topic.user_id = :user_id
+            WHERE 
+                p.parent_post_id IS NOT NULL  -- Ensure it's a reply
+            AND 
+                p.created_at > COALESCE(ua_topic.last_viewed_at, :epoch_ts)
+            ORDER BY p.created_at DESC
+            LIMIT :limit
+        """
+        cursor.execute(query, {"user_id": user_id, "epoch_ts": epoch_ts_str, "limit": limit})
+        recent_replies = [dict(row) for row in cursor.fetchall()]
+        return recent_replies
+    except sqlite3.Error as e:
+        print(f"Database error in get_recent_replies for user {user_id}: {e}")
+        return []
+
+def get_recent_personas(limit=10):
+    """
+    Fetches the most recently created active personas.
+    """
+    db = get_db()
+    cursor = db.cursor()
+    try:
+        query = """
+            SELECT persona_id, name, created_at
+            FROM personas
+            WHERE is_active = 1
+            ORDER BY created_at DESC
+            LIMIT :limit
+        """
+        cursor.execute(query, {"limit": limit})
+        recent_personas = [dict(row) for row in cursor.fetchall()]
+        return recent_personas
+    except sqlite3.Error as e:
+        print(f"Database error in get_recent_personas: {e}")
+        return []
 
 def get_subforum_details(subforum_id):
     try:

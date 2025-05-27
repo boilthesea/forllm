@@ -56,7 +56,7 @@ graph TD
 
 *   **`forllm_server/`** (Core Server Logic Package):
     *   **`config.py`**: Manages all static configuration values and constants for the application (database paths, API URLs, default settings, etc.).
-    *   **`database.py`**: Handles all aspects of database interaction: provides connection objects (`get_db`), manages connection teardown (`close_db`), and contains the initial database schema creation and migration logic (`init_db`). Also includes logic for persona CRUD, versioning, assignment, and fallback.
+    *   **`database.py`**: Handles all aspects of database interaction: provides connection objects (`get_db`), manages connection teardown (`close_db`), and contains the initial database schema creation and migration logic (`init_db`). Also includes logic for persona CRUD, versioning, assignment, and fallback. Contains helper functions for the user activity feature.
     *   **`markdown_config.py`**: Configures and provides the `MarkdownIt` instance used for rendering Markdown content to HTML, including custom Pygments syntax highlighting.
     *   **`llm_queue.py`**: Manages the in-memory queue for LLM requests (`llm_request_queue`) and contains the main loop for the background LLM processing thread (`llm_worker`), which polls both the in-memory and database queues.
     *   **`llm_processing.py`**: Contains the core logic for interacting with the LLM service (currently Ollama), including prompt construction, API call execution (`process_llm_request`), streaming response handling, and error management for LLM communication. Includes logic to determine and fetch the appropriate persona prompt instructions for an LLM request based on user override, subforum default, global default, or built-in fallback.
@@ -71,6 +71,10 @@ graph TD
         *   `POST /api/personas/generate/subforum_expert`: Queues generation of a subforum expert persona.
         *   `POST /api/personas/generate/subforum_experts_batch`: Queues batch generation of multiple subforum expert personas.
         *   `POST /api/personas/preview`: (If this endpoint was kept for prompt previewing, it should be listed).
+    *   **`routes/activity_routes.py`**: Defines Flask Blueprint for API endpoints related to the Recent Activity Page. Includes:
+        *   `GET /api/activity/recent_topics`: Fetches topics considered new to the user.
+        *   `GET /api/activity/recent_replies`: Fetches replies considered new to the user.
+        *   `GET /api/activity/recent_personas`: Fetches recently created active personas.
     *   **`persona_prompt_templates/`**: Contains subdirectories (`expansion/`, `refinement/`) for multi-stage persona generation prompts (e.g., `from_name_and_description.txt`, `subforum_expert.txt`).
 
 *   **`templates/index.html`**:
@@ -92,6 +96,7 @@ graph TD
     *   **`schedule.js`**: Manages the scheduling functionality, including loading, rendering, and saving user-defined processing schedules, as well as displaying the next scheduled time and the current processor status.
     *   **`settings.js`**: Deals with application-wide settings, including loading, rendering, and saving user preferences like selected LLM model, personas and LLM link security. Also handles loading available Ollama models. Integrates persona management into the settings navigation and display.
     *   **`queue.js`**: Manages the display of the LLM processing queue, including fetching and rendering the list of queued tasks.
+    *   **`activity.js`**: Contains the frontend JavaScript logic for the Recent Activity Page, including fetching data from the activity API endpoints (recent topics, replies, personas) and rendering it into the respective panels on the activity page. Manages navigation from activity items to their respective content areas.
     *   **`editor.js`**: Responsible for initializing and configuring the EasyMDE Markdown editor instances used for creating new topics and replies.
 
 *   **`static/css/base.css`**: Contains fundamental styles like body, typography, basic resets, and CSS variables. 
@@ -116,6 +121,7 @@ graph TD
         *   `personas`: Stores persona details, including `name`, `prompt_instructions`, `creation/update timestamps`, `creator`, `generation_source` (e.g., 'user_created', 'llm_generated_from_name_and_description', 'llm_generated_subforum_expert'), and `generation_input_details` (JSON string of parameters used for generation).
         *   `subforum_personas`: Links subforums and personas, indicating which personas are assigned to a subforum and the default for that subforum.
         *   `persona_versions`: Stores historical versions of persona details for versioning and revert capability.
+        *   `user_activity`: Tracks user views of subforums and topics (`user_id`, `item_type` ('subforum' or 'topic'), `item_id`, `last_viewed_at`). This supports features like notification badges and identifying new content.
 
 ## 3. Phased Development Plan
 
@@ -199,7 +205,20 @@ graph TD
 **Features:**
 *   **Dark Mode Only:** [DONE] Switch to dark mode only for comfort and reduction in css complexity.
 *   **Markdown Support:** [DONE] Implement Markdown rendering for posts (e.g., using a Python library on the backend and a JS library on the frontend).
-*   **Notifications:** [TODO] Simple in-app indicator (e.g., a badge on the navigation) when new LLM responses have arrived since the last view. (Desktop notifications could be a later addition).
+*   **Notifications:** [WIP] In-app indicators for new content.
+    *   `[DONE] Notification badges for subforums with new/updated content.`
+    *   `[DONE] Notification badges for topics with new replies.`
+    *   `[TODO] Desktop notifications (future consideration).`
+*   **Recent Activity Page:** [WIP] Provides a central location to see new content and activities.
+    *   `[DONE] Dedicated page section for recent activities.`
+    *   `[DONE] Activity page set as the default view on application load and when other sections are closed.`
+    *   `[DONE] Panel for "New Topics" showing topics in unvisited subforums or new topics the user hasn't seen.`
+    *   `[DONE] Panel for "New Replies" showing recent replies in topics the user has engaged with.`
+    *   `[DONE] Panel for "New Personas" showing recently created personas.`
+    *   `[DONE] Links from activity items navigate to the respective content (topic, reply's topic, persona editor).`
+    *   `[TODO] Real-time updates or a manual refresh button for the activity page (currently refreshes on page visit).`
+    *   `[TODO] Minimized version of the activity page as a potential top toolbar element.`
+    *   `[TODO] Integration of Direct Messages or other future activity types.`
 *   **Progress Indicators:** [TODO] Basic visual feedback in the UI showing which requests are queued or actively being processed by the background worker.
 *   **Search Functionality:** [TODO] Implement basic text search across topics and posts.
 *   **Voting/Ranking (Optional):** [TODO] Simple up/down voting mechanism for posts/replies.

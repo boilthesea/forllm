@@ -2,43 +2,71 @@
 
 import {
     subforumNav,
+    subforumNav,
     topicListSection,
     topicViewSection,
     settingsPageSection,
     queuePageSection,
-    scheduleModal // Needed for closing schedule modal
+    activityPageSection, // Added for activity page
+    scheduleModal
 } from './dom.js';
 
 import { currentSettings } from './settings.js'; // Need currentSettings for link security
 
-let lastVisibleSectionId = 'topic-list-section'; // Keep track of the last main view
+let lastVisibleSectionId = 'activity-page-section'; // Default to activity page
+
+// Import loadActivityData from activity.js
+import { loadActivityData } from './activity.js';
 
 export function showSection(sectionIdToShow) {
+    if (!sectionIdToShow) {
+        sectionIdToShow = 'activity-page-section'; // Default to activity page
+    }
+
     // Always keep the sidebar visible
     subforumNav.style.display = 'flex'; // Use flex as defined in CSS
 
     // Hide all main content sections first
-    topicListSection.style.display = 'none';
-    topicViewSection.style.display = 'none';
-    settingsPageSection.style.display = 'none';
-    queuePageSection.style.display = 'none';
+    if (topicListSection) topicListSection.style.display = 'none';
+    if (topicViewSection) topicViewSection.style.display = 'none';
+    if (settingsPageSection) settingsPageSection.style.display = 'none';
+    if (queuePageSection) queuePageSection.style.display = 'none';
+    if (activityPageSection) activityPageSection.style.display = 'none'; // Hide activity page too
 
     // Show the requested section
     const sectionElement = document.getElementById(sectionIdToShow);
     if (sectionElement) {
         sectionElement.style.display = 'block'; // Or 'flex' if it uses flex layout internally
-        // Update last visible section only if it's a main content view
-        if (['topic-list-section', 'topic-view-section'].includes(sectionIdToShow)) {
+        
+        // Update last visible section only if it's a main content view that isn't a modal-like page
+        // or if it's the new default activity page.
+        if (['topic-list-section', 'topic-view-section', 'activity-page-section'].includes(sectionIdToShow)) {
              lastVisibleSectionId = sectionIdToShow;
+        }
+
+        if (sectionIdToShow === 'activity-page-section') {
+            if (typeof loadActivityData === 'function') {
+                loadActivityData();
+            } else {
+                console.error("loadActivityData is not a function or not yet set.");
+            }
         }
     } else if (sectionIdToShow === 'subforum-list-only') {
          // Special case: only show sidebar, hide all right-pane sections
          // This might be triggered by back-to-subforums button
     } else {
-        console.warn(`Section with ID ${sectionIdToShow} not found.`);
-        // Optionally default to showing the topic list or subforum list
-         topicListSection.style.display = 'block';
-         lastVisibleSectionId = 'topic-list-section';
+        console.warn(`Section with ID ${sectionIdToShow} not found. Defaulting to activity page.`);
+        if (activityPageSection) {
+            activityPageSection.style.display = 'block';
+            lastVisibleSectionId = 'activity-page-section';
+            if (typeof loadActivityData === 'function') {
+                loadActivityData();
+            }
+        } else {
+            // Fallback if activityPageSection itself is somehow missing
+            if (topicListSection) topicListSection.style.display = 'block';
+            lastVisibleSectionId = 'topic-list-section';
+        }
     }
 }
 

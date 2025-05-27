@@ -49,6 +49,16 @@ export function renderSubforumList(subforums) {
             loadTopics(subforum.subforum_id, subforum.name);
         });
         li.appendChild(a);
+
+        // Add notification badge for subforum
+        if (subforum.has_unseen_content) {
+            const badge = document.createElement('span');
+            badge.className = 'notification-badge';
+            // Optionally, add a title or ARIA label for accessibility
+            badge.title = 'Unseen content'; 
+            a.appendChild(badge); // Append to the link itself to keep it inline
+        }
+
         subforumList.appendChild(li);
     });
 }
@@ -76,6 +86,16 @@ export function renderTopicList(topics) {
         meta.textContent = `Started by ${topic.username} | Posts: ${topic.post_count} | Last post: ${new Date(topic.last_post_at).toLocaleString()}`;
         li.appendChild(a);
         li.appendChild(meta);
+
+        // Add notification badge for topic
+        if (topic.has_unseen_content) {
+            const badge = document.createElement('span');
+            badge.className = 'notification-badge';
+            badge.title = 'Unseen content';
+            // Prepend to the link or append to the <li>. Appending to <a> might be better for alignment.
+            a.appendChild(badge); // Append to the link
+        }
+        
         topicList.appendChild(li);
     });
 }
