@@ -1,13 +1,12 @@
 // This file will contain general UI logic.
 
 import {
-    subforumNav,
-    subforumNav,
+    subforumNav, // Only one occurrence
     topicListSection,
     topicViewSection,
     settingsPageSection,
     queuePageSection,
-    activityPageSection, // Added for activity page
+    activityPageSection,
     scheduleModal
 } from './dom.js';
 
