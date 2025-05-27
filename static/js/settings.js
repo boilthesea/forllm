@@ -290,7 +290,8 @@ export async function saveSettings() {
 
     if (!modelSelectElement || !linkSecurityToggleInput || !saveButton || !settingsErrorElement) {
         console.error("Settings elements not found for saving.");
-        alert("An error occurred. Could not save settings.");
+        // Changed alert to console.error to avoid blocking UI in case of programmatic call
+        console.error("An error occurred. Could not save settings. Required elements missing.");
         return;
     }
 
@@ -346,7 +347,63 @@ export async function saveSettings() {
         settingsErrorElement.textContent = `Error saving settings: ${error.message}`;
         console.error("Error saving settings:", error);
     } finally {
-        saveButton.disabled = false;
-        saveButton.textContent = 'Save Settings';
+        if (saveButton) { // Check if saveButton exists before modifying
+            saveButton.disabled = false;
+            saveButton.textContent = 'Save Settings';
+        }
     }
+}
+
+export function showSettingsPage(navigateToPersonasTab = false) {
+    console.debug('[Settings] showSettingsPage called. Navigate to Personas:', navigateToPersonasTab);
+    renderSettingsPage(); // Ensure content is created/updated
+    showSection('settings-page-section');
+
+    if (navigateToPersonasTab) {
+        const pageContent = document.getElementById('settings-page-content');
+        if (pageContent) {
+            const personasNavTab = pageContent.querySelector('#settings-nav-personas');
+            if (personasNavTab) {
+                console.debug('[Settings] Programmatically clicking Personas tab.');
+                personasNavTab.click(); // This should trigger loading personas list if not already loaded
+            } else {
+                console.error('[Settings] Personas navigation tab not found.');
+            }
+        } else {
+            console.error('[Settings] Settings page content container not found.');
+        }
+    }
+}
+
+
+export function openPersonaForEditing(personaId) {
+    console.debug(`[Settings] openPersonaForEditing called for ID: ${personaId}`);
+    showSettingsPage(true); // Show settings page and navigate to personas tab
+
+    // The settings page content container
+    const settingsContentContainer = document.getElementById('settings-page-content');
+    if (!settingsContentContainer) {
+        console.error('[Settings:openPersonaForEditing] Settings page content container not found.');
+        return;
+    }
+    
+    // The specific container for the personas tab content, used as context for openPersonaInModal
+    const personasTabContentContainer = settingsContentContainer.querySelector('#settings-personas-section');
+    if (!personasTabContentContainer) {
+        console.error('[Settings:openPersonaForEditing] Personas tab content container not found.');
+        return;
+    }
+
+    // Wait for personasModule to be loaded and tab switch to potentially complete UI updates.
+    // personasModule is loaded by renderSettingsPage, and tab click might have async aspects.
+    setTimeout(() => {
+        if (window.personasModule && typeof window.personasModule.openPersonaInModal === 'function') {
+            console.debug(`[Settings:openPersonaForEditing] Calling personasModule.openPersonaInModal for ID: ${personaId}`);
+            window.personasModule.openPersonaInModal(personaId, personasTabContentContainer);
+        } else {
+            console.error('[Settings:openPersonaForEditing] personasModule or openPersonaInModal is not available.');
+            // Optionally, provide user feedback here if the modal can't be opened.
+            alert('Error: Could not open persona editor. Personas module not ready.');
+        }
+    }, 150); // Increased timeout slightly to allow tab switch and potential async ops within it.
 }

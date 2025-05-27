@@ -137,32 +137,11 @@ async function loadPersonasList(container) {
 
     // Add event listeners for new "Edit" buttons
     listContainer.querySelectorAll('.edit-persona-btn').forEach(button => {
-      button.addEventListener('click', async (e) => {
+      button.addEventListener('click', (e) => { // No longer async here
         e.preventDefault();
         const personaId = e.target.dataset.id;
-        editingPersonaId = parseInt(personaId);
-        debugLog('editPersonaBtn.click', `Editing persona ID: ${editingPersonaId}`);
-
-        try {
-          const persona = await safeApiRequest(container, `/api/personas/${editingPersonaId}`);
-          const nameInput = Elements.personaNameInput();
-          const instructionsInput = Elements.personaInstructionsInput();
-          const modal = Elements.personaModal();
-          const modalTitle = modal ? modal.querySelector('#persona-modal-title') : null;
-          const deleteBtn = Elements.deletePersonaBtn();
-
-          if (nameInput) nameInput.value = persona.name;
-          if (instructionsInput) instructionsInput.value = persona.prompt_instructions;
-          
-          if (modalTitle) modalTitle.textContent = 'Edit Persona';
-          if (deleteBtn) deleteBtn.style.display = 'inline-block';
-          
-          if (modal) modal.style.display = 'block';
-          if (nameInput) nameInput.focus();
-
-        } catch (err) {
-          showMessage(container, `Error fetching persona details: ${err.message || err}`, 'error');
-        }
+        // `container` here is the one passed to loadPersonasList, which is the settingsContainer
+        openPersonaInModal(personaId, container); 
       });
     });
     
@@ -491,3 +470,40 @@ const personas = {
 
 // Export the personas object
 export default personas;
+
+export async function openPersonaInModal(personaId, settingsContainer) {
+  editingPersonaId = parseInt(personaId);
+  debugLog('openPersonaInModal', `Editing persona ID: ${editingPersonaId}`);
+
+  try {
+    const persona = await safeApiRequest(settingsContainer, `/api/personas/${editingPersonaId}`);
+    const nameInput = Elements.personaNameInput();
+    const instructionsInput = Elements.personaInstructionsInput();
+    const modal = Elements.personaModal();
+    const modalTitle = modal ? modal.querySelector('#persona-modal-title') : null;
+    const deleteBtn = Elements.deletePersonaBtn();
+    const previewDiv = Elements.personaPromptPreview();
+    const versionsContainer = Elements.personaVersionsContainer();
+
+    if (nameInput) nameInput.value = persona.name;
+    if (instructionsInput) instructionsInput.value = persona.prompt_instructions;
+    
+    if (modalTitle) modalTitle.textContent = 'Edit Persona';
+    if (deleteBtn) deleteBtn.style.display = 'inline-block';
+    if (previewDiv) previewDiv.innerHTML = ''; // Clear previous preview
+    if (versionsContainer) versionsContainer.innerHTML = ''; // Clear previous versions
+
+    // TODO: Optionally load and display persona versions here if desired upon opening.
+    // For now, versions are typically loaded/displayed if a dedicated "View Versions" button is clicked.
+    
+    if (modal) {
+      modal.style.display = 'block';
+      modal.setAttribute('data-mode', 'edit'); // Indicate edit mode
+    }
+    if (nameInput) nameInput.focus();
+
+  } catch (err) {
+    // settingsContainer is the context for showMessage if an error occurs fetching persona
+    showMessage(settingsContainer, `Error fetching persona details: ${err.message || err}`, 'error');
+  }
+}

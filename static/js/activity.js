@@ -101,15 +101,9 @@ async function renderNewPersonas() {
                 a.href = '#';
                 a.textContent = persona.name;
                 a.dataset.personaId = persona.persona_id;
-                a.addEventListener('click', async (e) => {
+                a.addEventListener('click', (e) => { // No longer async here
                     e.preventDefault();
-                    // Navigate to settings, then personas tab, then open this persona.
-                    // This relies on settings.js providing a way to do this.
-                    showSettingsPage(true); // true to indicate navigating to personas tab
-                    // A slight delay might be needed if showSettingsPage involves async ops before tab switching logic
-                    setTimeout(() => {
-                        openPersonaForEditing(persona.persona_id);
-                    }, 100); // Small delay to ensure persona tab is visible
+                    openPersonaForEditing(persona.persona_id); // Directly call the new function
                 });
                 li.appendChild(a);
                 activityNewPersonasList.appendChild(li);
