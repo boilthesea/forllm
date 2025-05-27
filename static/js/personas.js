@@ -63,7 +63,24 @@ const Elements = {
   personaVersionsContainer: function() {
     const modal = Elements.personaModal();
     return modal ? modal.querySelector('#persona-versions-container') : null;
+  },
+  // New elements for persona generation UI
+  personaGenNameHintInput: function(container) { 
+    return container.querySelector('#persona-gen-name-hint-input'); 
+  },
+  personaGenDescHintInput: function(container) { 
+    return container.querySelector('#persona-gen-desc-hint-input'); 
+  },
+  generatePersonaBtn: function(container) { 
+    return container.querySelector('#generate-persona-btn'); 
+  },
+  personaGenMessage: function(container) { 
+    return container.querySelector('#persona-gen-message'); 
   }
+  // Potentially personaGenModelSelect if model selection is added:
+  // personaGenModelSelect: function(container) { 
+  //  return container.querySelector('#persona-gen-model-select');
+  // },
 };
 
 let editingPersonaId = null;
@@ -388,6 +405,76 @@ export function attachHandlers(container) {
   } else {
     if (!previewBtn) debugLog('attachHandlers', 'Preview button not found in modal.');
     if (!previewDiv) debugLog('attachHandlers', 'Preview div not found in modal.');
+  }
+
+  // Event listener for the new "Generate Persona" button
+  const genPersonaButton = Elements.generatePersonaBtn(container);
+  if (genPersonaButton) {
+      debugLog('attachHandlers', 'Setting up Generate Persona button');
+      genPersonaButton.addEventListener('click', async (e) => {
+          e.preventDefault();
+          debugLog('generatePersonaBtn.click', 'Generate button clicked');
+
+          const nameHintInput = Elements.personaGenNameHintInput(container);
+          const descHintInput = Elements.personaGenDescHintInput(container);
+          const genMessageEl = Elements.personaGenMessage(container);
+          // const modelSelect = Elements.personaGenModelSelect ? Elements.personaGenModelSelect(container) : null; // If model selection is added
+
+          const name_hint = nameHintInput ? nameHintInput.value.trim() : '';
+          const description_hint = descHintInput ? descHintInput.value.trim() : '';
+          // let llm_model_for_generation = modelSelect ? modelSelect.value : ''; // If model selection is added
+          // if (llm_model_for_generation === "Use Global Default") llm_model_for_generation = ''; // API will use global if empty
+
+          if (!description_hint) {
+              if (genMessageEl) {
+                  genMessageEl.textContent = 'Description hint is required.';
+                  genMessageEl.className = 'message-area error'; // Assuming you have CSS for .error
+                  genMessageEl.style.display = 'block';
+                  setTimeout(() => { genMessageEl.style.display = 'none'; }, 3000);
+              }
+              return;
+          }
+
+          const payload = {
+              name_hint: name_hint,
+              description_hint: description_hint
+              // llm_model_for_generation: llm_model_for_generation // If model selection is added
+          };
+
+          try {
+              if (genMessageEl) {
+                  genMessageEl.textContent = 'Queueing persona generation...';
+                  genMessageEl.className = 'message-area info'; // Assuming CSS for .info
+                  genMessageEl.style.display = 'block';
+              }
+              
+              const result = await safeApiRequest(container, '/api/personas/generate/from_details', 'POST', payload);
+              
+              if (genMessageEl) {
+                  genMessageEl.textContent = `Persona generation queued. Request ID: ${result.request_id}. It will appear in the list once processed.`;
+                  genMessageEl.className = 'message-area success'; // Assuming CSS for .success
+                  // Do not hide immediately, let user see the message.
+                  // Consider automatically refreshing the queue view or persona list after a delay,
+                  // or instructing the user to check the queue.
+              }
+              if (nameHintInput) nameHintInput.value = ''; // Clear input on success
+              if (descHintInput) descHintInput.value = ''; // Clear input on success
+
+              // The persona list will update when the queue processor finishes and the main polling updates the UI.
+              // Or, if there's a specific function to refresh the queue view, call it here.
+              // e.g., if (window.queue && window.queue.loadQueue) window.queue.loadQueue(); 
+              // For MVP, relying on existing persona list refresh (e.g., when settings tab is re-focused or via global polling) is okay.
+
+          } catch (err) {
+              debugLog('generatePersonaBtn.click', 'Error:', err);
+              if (genMessageEl) {
+                  genMessageEl.textContent = `Error: ${err.message || 'Failed to queue generation.'}`;
+                  genMessageEl.className = 'message-area error';
+                  genMessageEl.style.display = 'block';
+                  // Do not hide error immediately.
+              }
+          }
+      });
   }
 }
 

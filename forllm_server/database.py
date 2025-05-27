@@ -68,13 +68,16 @@ def init_db():
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS llm_requests (
                 request_id INTEGER PRIMARY KEY AUTOINCREMENT,
-                post_id_to_respond_to INTEGER NOT NULL,
+                post_id_to_respond_to INTEGER, -- Made nullable
                 requested_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 status TEXT NOT NULL DEFAULT 'pending', -- pending, processing, complete, error
                 llm_model TEXT,
                 llm_persona TEXT,
                 processed_at TIMESTAMP,
                 error_message TEXT,
+                full_prompt_sent TEXT, -- Ensuring this column is part of the main definition
+                request_type TEXT,     -- New field
+                request_params TEXT,   -- New field
                 FOREIGN KEY (post_id_to_respond_to) REFERENCES posts(post_id)
             )
         ''')
@@ -236,6 +239,8 @@ def init_db():
                 created_by_user INTEGER,
                 version INTEGER DEFAULT 1,
                 is_active BOOLEAN DEFAULT TRUE,
+                generation_source TEXT,                 -- New field
+                generation_input_details TEXT,          -- New field
                 FOREIGN KEY (created_by_user) REFERENCES users(user_id)
             )
         ''')
@@ -301,6 +306,8 @@ def init_db():
             created_by_user INTEGER,
             version INTEGER DEFAULT 1,
             is_active BOOLEAN DEFAULT TRUE,
+            generation_source TEXT,                 -- New field
+            generation_input_details TEXT,          -- New field
             FOREIGN KEY (created_by_user) REFERENCES users(user_id)
         )
     ''')
@@ -393,6 +400,19 @@ def create_persona(name, prompt_instructions, created_by_user):
         print(f"Database error in create_persona: {e}")
         if db:
             db.rollback()
+        return None
+
+def get_subforum_details(subforum_id):
+    try:
+        db = get_db()
+        cursor = db.cursor()
+        cursor.execute("SELECT name, description FROM subforums WHERE subforum_id = ?", (subforum_id,))
+        row = cursor.fetchone()
+        if row:
+            return {"name": row["name"], "description": row["description"]}
+        return None
+    except sqlite3.Error as e:
+        print(f"Database error in get_subforum_details for subforum_id {subforum_id}: {e}")
         return None
 
 def get_persona(persona_id, active_only=True):
@@ -629,3 +649,34 @@ def get_effective_persona_for_subforum(subforum_id, override_persona_id=None):
         return row
     # 4. Fallback (persona_id=1)
     return get_persona(1)
+
+def save_generated_persona(persona_name, prompt_instructions, generation_source, generation_input_details, created_by_user):
+    db = get_db()
+    cursor = db.cursor()
+    try:
+        cursor.execute('''
+            INSERT INTO personas (name, prompt_instructions, generation_source, generation_input_details, created_by_user, is_active, version)
+            VALUES (?, ?, ?, ?, ?, 1, 1)
+        ''', (persona_name, prompt_instructions, generation_source, generation_input_details, created_by_user))
+        persona_id = cursor.lastrowid
+        
+        if persona_id: # Ensure persona_id is valid before inserting into versions
+            cursor.execute('''
+                INSERT INTO persona_versions (persona_id, name, prompt_instructions, updated_by_user, version)
+                VALUES (?, ?, ?, ?, 1)
+            ''', (persona_id, persona_name, prompt_instructions, created_by_user))
+            db.commit()
+            return persona_id
+        else:
+            # This case should ideally not happen if the first insert was successful and returned a valid rowid.
+            # Adding a rollback and error message for robustness.
+            print(f"Error: Failed to get lastrowid after inserting into personas table for '{persona_name}'.")
+            if db:
+                db.rollback()
+            return None
+
+    except sqlite3.Error as e:
+        print(f"Database error in save_generated_persona for '{persona_name}': {e}")
+        if db:
+            db.rollback()
+        return None

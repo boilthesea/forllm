@@ -74,6 +74,23 @@ export function renderSettingsPage() {
     <h2>Personas</h2>
     <button id="add-persona-btn">Add Persona</button>
     <div id="personas-list-container"></div>
+
+    <!-- New Section for Generating Personas -->
+    <hr class="modal-hr">
+    <h4>Generate New Persona (MVP)</h4>
+    <div class="setting-item">
+        <label for="persona-gen-name-hint-input">Name Hint (Optional):</label>
+        <input type="text" id="persona-gen-name-hint-input" class="text-input">
+    </div>
+    <div class="setting-item">
+        <label for="persona-gen-desc-hint-input">Description Hint:</label>
+        <textarea id="persona-gen-desc-hint-input" class="textarea-input" rows="3"></textarea>
+    </div>
+    <button id="generate-persona-btn" class="button-primary">Generate Persona</button>
+    <p id="persona-gen-message" class="message-area" style="display: none;"></p>
+    <!-- End New Section -->
+
+    <hr class="modal-hr">
     <h3>Global Default Persona</h3>
     <select id="global-default-persona-select"></select>
     <button id="save-global-default-persona-btn">Save Global Default</button>

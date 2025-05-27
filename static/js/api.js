@@ -42,10 +42,12 @@ export async function apiRequest(url, method = 'GET', data = null, isFormData = 
             console.error('API Error:', errorData);
             throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
         }
-        if (response.status === 204 || response.status === 202) { // Handle 202 Accepted as well
-            return null; // No content to parse
+        if (response.status === 204) { // No Content
+            return null; 
         }
-        return await response.json();
+        // For 200 OK, 201 Created, 202 Accepted, etc., try to parse JSON,
+        // as the persona generation queueing endpoint *does* return a JSON body with 202.
+        return await response.json(); 
     } catch (error) {
         console.error('Fetch Error:', error);
         alert(`An error occurred: ${error.message}`); // Consider making alerts less intrusive or configurable
