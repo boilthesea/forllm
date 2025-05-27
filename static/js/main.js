@@ -45,16 +45,20 @@ import {
     exitSettingsBtn,
     queueBtn,
     exitQueueBtn,
-    subforumList, // Needed for backToTopicsBtn
-    scheduleModal // Needed for schedule modal listeners
+    activityPageSection, // Added
+    exitActivityBtn,     // Added
+    subforumList, 
+    scheduleModal
 } from './dom.js';
+
+// Import loadActivityData for the exit button, though ui.js handles calling it on showSection
+import { loadActivityData } from './activity.js';
 
 // --- Initial Load & Periodic Updates ---
 function initialLoad() {
     loadSubforums().then(() => {
-        // After subforums load, decide initial view
-        // For now, default to showing topic list section (empty until subforum clicked)
-        showSection('topic-list-section');
+        // After subforums load, show the default section (now activity page via showSection(null))
+        showSection(null);
     });
     loadSettings(); // Loads settings (which includes dark mode and model list trigger)
     loadCurrentStatus();
@@ -77,7 +81,7 @@ document.addEventListener('DOMContentLoaded', () => {
             e.preventDefault();
             // currentSubforumId = null; // State is managed within forum.js now
             // currentTopicId = null; // State is managed within forum.js now
-            showSection('subforum-list-only'); // Hide right pane sections
+            showSection('activity-page-section'); // Go back to the activity page
         });
     }
 
@@ -145,6 +149,18 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Initial Load
     initialLoad();
+
+    // Activity Page Listener
+    if (exitActivityBtn) {
+        exitActivityBtn.addEventListener('click', () => {
+            // Refresh the activity data when exiting (or clicking the 'exit' which acts as refresh)
+            if (typeof loadActivityData === 'function') {
+                loadActivityData();
+            }
+            // Optionally, ensure the section is shown if it wasn't already
+            // showSection('activity-page-section'); // ui.js showSection will call loadActivityData
+        });
+    }
 
     // Attachment File Input Listeners
     const newTopicAttachmentInput = document.getElementById('new-topic-attachment-input');

@@ -54,3 +54,10 @@ export const exitQueueBtn = document.getElementById('exit-queue-btn');
 export const fullPromptModal = document.getElementById('full-prompt-modal');
 export const fullPromptContent = document.getElementById('full-prompt-content');
 export const fullPromptClose = fullPromptModal ? fullPromptModal.querySelector('.close-btn') : null;
+
+// Activity Page Elements
+export const activityPageSection = document.getElementById('activity-page-section');
+export const exitActivityBtn = document.getElementById('exit-activity-btn');
+export const activityNewTopicsList = document.getElementById('activity-new-topics-list');
+export const activityNewRepliesList = document.getElementById('activity-new-replies-list');
+export const activityNewPersonasList = document.getElementById('activity-new-personas-list');

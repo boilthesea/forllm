@@ -254,3 +254,13 @@ input:checked + .slider:before {
 }
 
 /* nav#subforum-nav button styling is inherited from general button styles */
+
+.notification-badge {
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    background-color: #ff3b30; /* A noticeable red color */
+    border-radius: 50%;
+    margin-left: 8px;
+    vertical-align: middle; /* Or adjust as needed */
+}

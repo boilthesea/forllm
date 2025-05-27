@@ -49,6 +49,16 @@ export function renderSubforumList(subforums) {
             loadTopics(subforum.subforum_id, subforum.name);
         });
         li.appendChild(a);
+
+        // Add notification badge for subforum
+        if (subforum.has_unseen_content) {
+            const badge = document.createElement('span');
+            badge.className = 'notification-badge';
+            // Optionally, add a title or ARIA label for accessibility
+            badge.title = 'Unseen content'; 
+            a.appendChild(badge); // Append to the link itself to keep it inline
+        }
+
         subforumList.appendChild(li);
     });
 }
@@ -76,6 +86,16 @@ export function renderTopicList(topics) {
         meta.textContent = `Started by ${topic.username} | Posts: ${topic.post_count} | Last post: ${new Date(topic.last_post_at).toLocaleString()}`;
         li.appendChild(a);
         li.appendChild(meta);
+
+        // Add notification badge for topic
+        if (topic.has_unseen_content) {
+            const badge = document.createElement('span');
+            badge.className = 'notification-badge';
+            badge.title = 'Unseen content';
+            // Prepend to the link or append to the <li>. Appending to <a> might be better for alignment.
+            a.appendChild(badge); // Append to the link
+        }
+        
         topicList.appendChild(li);
     });
 }
@@ -177,11 +197,13 @@ function renderPostNode(post, parentElement, depth) {
 
 
 // --- Loading Functions ---
-export async function loadSubforums() {
+export async function loadSubforums(shouldShowSection = true) {
     try {
         const subforums = await apiRequest('/api/subforums');
         renderSubforumList(subforums);
-        showSection('subforum-nav'); // This might need adjustment in main.js
+        if (shouldShowSection) {
+            showSection('subforum-nav'); // This might need adjustment in main.js
+        }
     } catch (error) {
         // Error logged by apiRequest
     }
@@ -208,6 +230,10 @@ export async function loadPosts(topicId, topicTitle) {
         renderPosts(posts);
         showSection('topic-view-section');
         hideReplyForm();
+        // After successfully loading posts and updating user activity for the topic,
+        // refresh the subforum list to update badges.
+        // Pass false to prevent loadSubforums from hiding the topic view section
+        loadSubforums(false);
     } catch (error) {
         // Error logged by apiRequest
     }
@@ -612,6 +638,20 @@ async function uploadStagedAttachments(postId, attachmentsToUpload, tempDisplayL
 export { currentSubforumId, currentTopicId, currentPosts };
 // Export new attachment handlers
 export { renderAttachmentItem }; // handleFileUploadsForPost is removed
+
+export function setCurrentTopicAndSubforum(subforumId, topicId, subforumName, topicTitle) {
+    currentSubforumId = subforumId;
+    currentTopicId = topicId;
+    // Update UI elements if they exist (e.g., breadcrumbs or titles)
+    if (currentSubforumName && subforumName) {
+        currentSubforumName.textContent = subforumName;
+    }
+    if (currentTopicTitle && topicTitle) {
+        currentTopicTitle.textContent = topicTitle;
+    }
+    // This function primarily sets state. UI updates related to showing sections
+    // or loading data are handled by functions like loadPosts, loadTopics.
+}
 
 /**
  * Handles file selection from an input element, adding files to a staging area.
