@@ -81,7 +81,7 @@ document.addEventListener('DOMContentLoaded', () => {
             e.preventDefault();
             // currentSubforumId = null; // State is managed within forum.js now
             // currentTopicId = null; // State is managed within forum.js now
-            showSection('subforum-list-only'); // Hide right pane sections
+            showSection('activity-page-section'); // Go back to the activity page
         });
     }
 

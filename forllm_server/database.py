@@ -470,7 +470,10 @@ def check_topic_unseen_status(topic_id, user_id, last_viewed_subforum_ts=None):
 
         # Timestamps are stored as strings, convert to datetime objects
         # SQLite's CURRENT_TIMESTAMP format is 'YYYY-MM-DD HH:MM:SS'
-        topic_created_at = datetime.datetime.strptime(topic_row['created_at'], '%Y-%m-%d %H:%M:%S')
+        # Timestamps are stored as strings, convert to datetime objects
+        # SQLite's CURRENT_TIMESTAMP format is 'YYYY-MM-DD HH:MM:SS'
+        # With detect_types=sqlite3.PARSE_DECLTYPES, it should already be a datetime object
+        topic_created_at = topic_row['created_at']
 
         last_viewed_topic_ts_raw = get_last_viewed_timestamp(user_id, 'topic', topic_id)
         
@@ -550,7 +553,9 @@ def check_subforum_unseen_status(subforum_id, user_id):
         for topic_row in topics:
             topic_id = topic_row['topic_id']
             # Convert topic_created_at from string to datetime for comparison
-            topic_created_at = datetime.datetime.strptime(topic_row['created_at'], '%Y-%m-%d %H:%M:%S')
+            # Convert topic_created_at from string to datetime for comparison
+            # With detect_types=sqlite3.PARSE_DECLTYPES, it should already be a datetime object
+            topic_created_at = topic_row['created_at']
 
             if topic_created_at > last_viewed_subforum_ts:
                 return True # New topic since subforum was last viewed

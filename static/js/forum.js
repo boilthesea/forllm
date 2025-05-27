@@ -197,11 +197,13 @@ function renderPostNode(post, parentElement, depth) {
 
 
 // --- Loading Functions ---
-export async function loadSubforums() {
+export async function loadSubforums(shouldShowSection = true) {
     try {
         const subforums = await apiRequest('/api/subforums');
         renderSubforumList(subforums);
-        showSection('subforum-nav'); // This might need adjustment in main.js
+        if (shouldShowSection) {
+            showSection('subforum-nav'); // This might need adjustment in main.js
+        }
     } catch (error) {
         // Error logged by apiRequest
     }
@@ -228,6 +230,10 @@ export async function loadPosts(topicId, topicTitle) {
         renderPosts(posts);
         showSection('topic-view-section');
         hideReplyForm();
+        // After successfully loading posts and updating user activity for the topic,
+        // refresh the subforum list to update badges.
+        // Pass false to prevent loadSubforums from hiding the topic view section
+        loadSubforums(false);
     } catch (error) {
         // Error logged by apiRequest
     }
