@@ -1,6 +1,6 @@
 // This file will handle forum-specific logic.
 
-import { apiRequest } from './api.js';
+import { apiRequest, fetchActivePersonas, tagPostForPersonaResponse } from './api.js'; // Added imports
 import {
     subforumList,
     newSubforumNameInput,
@@ -25,6 +25,12 @@ let currentSubforumId = null;
 let currentTopicId = null;
 let currentPosts = []; // Store posts for the current topic
 let currentPersonaId = null;
+
+// --- Persona Tagging Cache for forum.js ---
+let forumActivePersonasCache = [];
+let forumPersonasCacheTimestamp = 0;
+const FORUM_PERSONA_CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
+
 
 let stagedAttachments = []; // For managing files selected in UI before actual upload
 let nextStagedAttachmentId = 0; // Counter for unique IDs for staged attachments
@@ -149,7 +155,12 @@ function renderPostNode(post, parentElement, depth) {
 
     const contentDiv = document.createElement('div');
     contentDiv.className = 'post-content';
-    contentDiv.innerHTML = post.content;
+    contentDiv.innerHTML = post.content; // Original content set here
+
+    // Apply visual marker for @[Persona Name](persona_id) tags
+    // This should be done AFTER setting innerHTML from post.content
+    contentDiv.innerHTML = contentDiv.innerHTML.replace(/@\[([^\]]+)\]\((\d+)\)/g, '<span class="persona-tag-placeholder">@{$1}</span>');
+
 
     const actionsDiv = document.createElement('div');
     actionsDiv.className = 'post-actions';
@@ -165,6 +176,47 @@ function renderPostNode(post, parentElement, depth) {
         llmButton.addEventListener('click', () => requestLlm(post.post_id));
         actionsDiv.appendChild(llmButton);
     }
+
+    // --- UI for Tagging Existing Post ---
+    const tagPersonaContainer = document.createElement('div');
+    tagPersonaContainer.className = 'tag-persona-container';
+    
+    const tagInput = document.createElement('input');
+    tagInput.setAttribute('type', 'text');
+    tagInput.setAttribute('placeholder', 'Tag persona to respond...');
+    tagInput.className = 'tag-persona-input';
+    tagInput.dataset.postId = post.post_id; // Store postId for later
+
+    const tagSuggestionsDiv = document.createElement('div');
+    tagSuggestionsDiv.className = 'tag-persona-suggestions';
+    tagSuggestionsDiv.style.display = 'none'; // Initially hidden
+    tagSuggestionsDiv.style.border = '1px solid #ccc';
+    tagSuggestionsDiv.style.backgroundColor = 'white';
+    tagSuggestionsDiv.style.position = 'absolute'; // Or relative to container
+    tagSuggestionsDiv.style.zIndex = '999'; // Ensure it's above other post content if absolute
+
+    tagInput.addEventListener('input', async (e) => {
+        const query = e.target.value;
+        const currentPostId = e.target.dataset.postId; // Retrieve postId
+        if (query.length > 0) { // Or some other condition like query.startsWith('@')
+            await displayPostTagSuggestions(query, tagSuggestionsDiv, currentPostId, tagInput);
+        } else {
+            tagSuggestionsDiv.style.display = 'none';
+        }
+    });
+    
+    tagInput.addEventListener('blur', () => {
+        // Delay hiding to allow click on suggestion items
+        setTimeout(() => {
+            if (!tagSuggestionsDiv.matches(':hover')) { // Only hide if mouse isn't over suggestions
+                tagSuggestionsDiv.style.display = 'none';
+            }
+        }, 200);
+    });
+
+    tagPersonaContainer.appendChild(tagInput);
+    tagPersonaContainer.appendChild(tagSuggestionsDiv); // Suggestions div associated with this input
+    actionsDiv.appendChild(tagPersonaContainer); // Add to actions or directly to postDiv
 
     postDiv.appendChild(metaDiv);
     postDiv.appendChild(contentDiv);
