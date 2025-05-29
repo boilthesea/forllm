@@ -37,14 +37,11 @@ export let replyEditor = null;
 function createPersonaSuggestionsUI() {
     if (!personaSuggestionsDiv) {
         personaSuggestionsDiv = document.createElement('div');
-        personaSuggestionsDiv.id = 'persona-suggestions';
-        personaSuggestionsDiv.style.position = 'absolute';
-        personaSuggestionsDiv.style.border = '1px solid #ccc';
-        personaSuggestionsDiv.style.backgroundColor = 'white';
-        personaSuggestionsDiv.style.display = 'none';
-        personaSuggestionsDiv.style.zIndex = '1000'; // Ensure it's above the editor
-        personaSuggestionsDiv.style.maxHeight = '200px';
-        personaSuggestionsDiv.style.overflowY = 'auto';
+        // Ensure this ID matches the one in index.html and targeted by editor.css
+        personaSuggestionsDiv.id = 'personaMentionSuggestions'; 
+        // Styles are primarily handled by CSS. Ensure functional styles like position and initial display are set.
+        personaSuggestionsDiv.style.position = 'absolute'; 
+        personaSuggestionsDiv.style.display = 'none'; 
         document.body.appendChild(personaSuggestionsDiv);
     }
 }
@@ -52,6 +49,7 @@ function createPersonaSuggestionsUI() {
 function hidePersonaSuggestions() {
     if (personaSuggestionsDiv) {
         personaSuggestionsDiv.style.display = 'none';
+        personaSuggestionsDiv.innerHTML = ''; // Clear previous suggestions
     }
     currentMentionState.active = false;
     currentMentionState.editor = null;
@@ -81,33 +79,34 @@ async function displayPersonaSuggestions(cm, query) {
     );
 
     currentMentionState.currentResults = filteredPersonas;
-    currentMentionState.selectedIndex = -1; // Reset selection
+    currentMentionState.selectedIndex = -1; 
 
+    personaSuggestionsDiv.innerHTML = ''; // Clear previous suggestions
     if (!filteredPersonas.length) {
-        personaSuggestionsDiv.innerHTML = '<div>No matching personas</div>';
-        // Optionally hide if no results, or show "No results"
-        // For now, keep it visible to show "No matching personas"
+        const noResultsItem = document.createElement('div');
+        noResultsItem.textContent = 'No matching personas';
+        noResultsItem.classList.add('suggestion-item', 'no-results'); // Add classes for styling
+        personaSuggestionsDiv.appendChild(noResultsItem);
     } else {
-        personaSuggestionsDiv.innerHTML = ''; // Clear previous
         filteredPersonas.forEach((persona, index) => {
             const item = document.createElement('div');
             item.textContent = persona.name;
-            item.style.padding = '5px';
-            item.style.cursor = 'pointer';
+            item.classList.add('suggestion-item'); // Add a common class for items
             item.dataset.id = persona.persona_id;
             item.dataset.name = persona.name;
 
             item.addEventListener('mouseenter', () => {
-                // Optional: highlight on mouse enter
+                // Remove 'selected' from previously selected item if any
                 if (currentMentionState.selectedIndex !== -1 && personaSuggestionsDiv.children[currentMentionState.selectedIndex]) {
-                    personaSuggestionsDiv.children[currentMentionState.selectedIndex].style.backgroundColor = 'white';
+                    personaSuggestionsDiv.children[currentMentionState.selectedIndex].classList.remove('selected');
                 }
-                item.style.backgroundColor = '#eee';
+                // Add 'selected' to current item and update index
+                item.classList.add('selected');
                 currentMentionState.selectedIndex = index;
             });
             item.addEventListener('mouseleave', () => {
-                 // Optional: remove highlight on mouse leave if not selected by keyboard
-                // item.style.backgroundColor = 'white'; 
+                item.classList.remove('selected');
+                 // Optional: reset selectedIndex if mouse leaves, or rely on keyboard nav to manage it
             });
 
             item.addEventListener('click', () => {
@@ -117,10 +116,18 @@ async function displayPersonaSuggestions(cm, query) {
         });
     }
 
-    const cursorPos = cm.cursorCoords(true, 'local');
-    personaSuggestionsDiv.style.left = `${cursorPos.left}px`;
-    personaSuggestionsDiv.style.top = `${cursorPos.bottom + 5}px`; // A bit below the cursor
+    // Position suggestion div. Consider editor scroll and viewport.
+    const editorWrapper = cm.getWrapperElement();
+    const editorRect = editorWrapper.getBoundingClientRect();
+    const bodyRect = document.body.getBoundingClientRect(); // To offset body scrolling if #personaMentionSuggestions is child of body
+
+    // Get coordinates of the '@' character or start of the query
+    const startCoords = cm.cursorCoords(currentMentionState.startPos, 'local');
+
+    personaSuggestionsDiv.style.left = `${editorRect.left + startCoords.left - bodyRect.left}px`;
+    personaSuggestionsDiv.style.top = `${editorRect.top + startCoords.bottom - bodyRect.top + 5}px`; // 5px below the line
     personaSuggestionsDiv.style.display = 'block';
+    updateSuggestionsHighlight(false); // Update highlight without scrolling initially
 }
 
 function insertPersonaTag(cm, persona) {
@@ -130,81 +137,86 @@ function insertPersonaTag(cm, persona) {
     }
     const textToInsert = `@[${persona.name}](${persona.persona_id})`;
     const currentCursor = cm.getCursor();
-    // Replace from the '@' symbol up to the current cursor position
+    // Replace from the '@' symbol (startPos) up to the current cursor position
     cm.replaceRange(textToInsert, currentMentionState.startPos, currentCursor);
     hidePersonaSuggestions();
-    cm.focus(); // Refocus editor
+    cm.focus(); 
 }
 
 function handleEditorKeyEvent(cm, event, type) {
-    if (type === 'keyup') {
-        const cursor = cm.getCursor();
-        const token = cm.getTokenAt(cursor);
-        let charBefore = '';
-        if (cursor.ch > 0) {
-            charBefore = cm.getRange({ line: cursor.line, ch: cursor.ch - 1 }, cursor);
+    // If suggestions are active, certain key events are handled differently
+    if (currentMentionState.active && currentMentionState.editor === cm) {
+        if (type === 'keydown') {
+            if (['Escape', 'Enter', 'Tab', 'ArrowUp', 'ArrowDown'].includes(event.key)) {
+                event.preventDefault(); // Prevent default editor actions for these keys
+                if (event.key === 'Escape') {
+                    hidePersonaSuggestions();
+                } else if (event.key === 'Enter' || event.key === 'Tab') {
+                    if (currentMentionState.selectedIndex !== -1 && currentMentionState.currentResults[currentMentionState.selectedIndex]) {
+                        insertPersonaTag(cm, currentMentionState.currentResults[currentMentionState.selectedIndex]);
+                    } else {
+                        hidePersonaSuggestions(); // Or insert query as plain text if no selection
+                    }
+                } else if (event.key === 'ArrowDown') {
+                    if (currentMentionState.currentResults.length > 0) {
+                        currentMentionState.selectedIndex = (currentMentionState.selectedIndex + 1) % currentMentionState.currentResults.length;
+                        updateSuggestionsHighlight();
+                    }
+                } else if (event.key === 'ArrowUp') {
+                    if (currentMentionState.currentResults.length > 0) {
+                        currentMentionState.selectedIndex = (currentMentionState.selectedIndex - 1 + currentMentionState.currentResults.length) % currentMentionState.currentResults.length;
+                        updateSuggestionsHighlight();
+                    }
+                }
+                return; // Event handled
+            }
         }
-
-        if (charBefore === '@') {
-            currentMentionState.active = true;
-            currentMentionState.editor = cm;
-            currentMentionState.query = '';
-            currentMentionState.startPos = { line: cursor.line, ch: cursor.ch - 1 };
-            displayPersonaSuggestions(cm, '');
-        } else if (currentMentionState.active && currentMentionState.editor === cm) {
-            if (event.key && event.key.length === 1 && !event.altKey && !event.ctrlKey && event.key !== '@') { // Alphanumeric or symbol
-                const prevCursor = { line: currentMentionState.startPos.line, ch: currentMentionState.startPos.ch + 1 };
-                currentMentionState.query = cm.getRange(prevCursor, cursor);
-                displayPersonaSuggestions(cm, currentMentionState.query);
-            } else if (event.key === 'Backspace') {
-                const prevCursor = { line: currentMentionState.startPos.line, ch: currentMentionState.startPos.ch +1 };
-                 // Check if cursor is still after startPos.ch
-                if (cursor.ch > currentMentionState.startPos.ch) {
-                    currentMentionState.query = cm.getRange(prevCursor, cursor);
+        // For keyup, or other keydown events when suggestions are active
+        if (type === 'keyup') {
+            const cursor = cm.getCursor();
+            // Check if cursor is still within a potential mention
+            if (cursor.line === currentMentionState.startPos.line && cursor.ch >= currentMentionState.startPos.ch) {
+                const textFromAt = cm.getRange(currentMentionState.startPos, cursor);
+                if (textFromAt.startsWith('@') && !textFromAt.includes(' ') && textFromAt.length <= 50) { // Basic validation
+                    currentMentionState.query = textFromAt.substring(1); // Remove '@'
                     displayPersonaSuggestions(cm, currentMentionState.query);
                 } else {
-                    hidePersonaSuggestions(); // Cursor moved before or at @
+                    hidePersonaSuggestions(); // Invalid mention (e.g., space typed, or @ deleted)
                 }
-            } else if (!cm.getRange(currentMentionState.startPos, cursor).startsWith('@')) {
-                 // If the @ is deleted or structure is broken
-                 hidePersonaSuggestions();
-            }
-        }
-    } else if (type === 'keydown' && currentMentionState.active && currentMentionState.editor === cm) {
-        if (event.key === 'Escape') {
-            event.preventDefault();
-            hidePersonaSuggestions();
-        } else if (event.key === 'Enter') {
-            event.preventDefault();
-            if (currentMentionState.selectedIndex !== -1 && currentMentionState.currentResults[currentMentionState.selectedIndex]) {
-                insertPersonaTag(cm, currentMentionState.currentResults[currentMentionState.selectedIndex]);
             } else {
-                hidePersonaSuggestions(); // Or insert current query as plain text? For now, just hide.
+                hidePersonaSuggestions(); // Cursor moved out of mention line/context
             }
-        } else if (event.key === 'ArrowDown') {
-            event.preventDefault();
-            if (currentMentionState.selectedIndex < currentMentionState.currentResults.length - 1) {
-                currentMentionState.selectedIndex++;
-                updateSuggestionsHighlight();
-            }
-        } else if (event.key === 'ArrowUp') {
-            event.preventDefault();
-            if (currentMentionState.selectedIndex > 0) {
-                currentMentionState.selectedIndex--;
-                updateSuggestionsHighlight();
+            return; // Event handled (or decided to hide)
+        }
+    }
+
+    // If suggestions are NOT active, check if we need to activate them
+    if (type === 'keyup' && !currentMentionState.active) {
+        const cursor = cm.getCursor();
+        if (cursor.ch > 0) {
+            const charBefore = cm.getRange({ line: cursor.line, ch: cursor.ch - 1 }, cursor);
+            if (charBefore === '@') {
+                currentMentionState.active = true;
+                currentMentionState.editor = cm;
+                currentMentionState.query = '';
+                currentMentionState.startPos = { line: cursor.line, ch: cursor.ch - 1 };
+                displayPersonaSuggestions(cm, '');
             }
         }
     }
 }
 
-function updateSuggestionsHighlight() {
+function updateSuggestionsHighlight(shouldScroll = true) {
     if (!personaSuggestionsDiv || !currentMentionState.active) return;
     Array.from(personaSuggestionsDiv.children).forEach((child, index) => {
+        if (child.classList.contains('no-results')) return; // Skip "no results" item
         if (index === currentMentionState.selectedIndex) {
-            child.style.backgroundColor = '#ddd'; // Highlight color
-            child.scrollIntoView({ block: 'nearest' });
+            child.classList.add('selected');
+            if (shouldScroll) {
+                child.scrollIntoView({ block: 'nearest' });
+            }
         } else {
-            child.style.backgroundColor = 'white'; // Default background
+            child.classList.remove('selected');
         }
     });
 }
@@ -212,17 +224,26 @@ function updateSuggestionsHighlight() {
 
 function initializeEditorPersonaTagging(editorInstance) {
     if (!editorInstance) return;
-    createPersonaSuggestionsUI(); // Ensure UI is created
+    createPersonaSuggestionsUI(); 
     const cm = editorInstance.codemirror;
 
     cm.on('keyup', (cmInstance, event) => {
+        // Filter out keys that should not trigger suggestion logic / query updates
+        if (['Control', 'Alt', 'Shift', 'Meta', 'CapsLock', 'Escape', 'Enter', 'Tab', 
+             'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 
+             'Home', 'End', 'PageUp', 'PageDown'].includes(event.key)) {
+            return;
+        }
         handleEditorKeyEvent(cmInstance, event, 'keyup');
     });
     cm.on('keydown', (cmInstance, event) => {
-        handleEditorKeyEvent(cmInstance, event, 'keydown');
+        // Only pass to handler if suggestions are active and it's a relevant key
+        if (currentMentionState.active && currentMentionState.editor === cmInstance &&
+            ['Escape', 'Enter', 'Tab', 'ArrowUp', 'ArrowDown'].includes(event.key)) {
+            handleEditorKeyEvent(cmInstance, event, 'keydown');
+        }
     });
     cm.on('blur', (cmInstance) => {
-        // Delay hiding to allow click on suggestion box
         setTimeout(() => {
             // Check if the new active element is part of our suggestion box
             if (personaSuggestionsDiv && !personaSuggestionsDiv.contains(document.activeElement)) {

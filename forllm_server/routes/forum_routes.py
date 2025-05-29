@@ -10,10 +10,10 @@ from ..database import (
     assign_persona_to_subforum, unassign_persona_from_subforum, list_personas_for_subforum,
     set_subforum_default_persona, get_subforum_default_persona, update_user_activity,
     get_subforums_with_status, get_topics_for_subforum_with_status,
-    # Potentially add a function to get persona model if needed, or handle in route
+    get_persona # Import get_persona for validation
 )
 from ..markdown_config import md
-from ..config import CURRENT_USER_ID, DEFAULT_MODEL # Added DEFAULT_MODEL
+from ..config import CURRENT_USER_ID, DEFAULT_MODEL
 
 forum_api_bp = Blueprint('forum_api', __name__, url_prefix='/api')
 
@@ -127,20 +127,16 @@ def handle_topics(subforum_id):
 
             # --- Create LLM Requests for tagged personas ---
             if tagged_persona_ids:
-                # Fetch persona details (e.g., model) if needed. For now, assume default model or worker handles it.
-                # Consider fetching persona specific model:
-                # persona_models = {} # {persona_id: model_name} - fetch if personas have specific models
-                # For simplicity, using DEFAULT_MODEL or NULL for llm_model in llm_requests for now.
-                # The llm_worker can decide based on llm_persona.
-                
                 for p_id in tagged_persona_ids:
-                    # TODO: Check if persona p_id actually exists and is active before creating a request.
-                    # This might involve a quick DB check here. For now, proceeding assuming valid IDs.
-                    # cursor.execute("SELECT is_active FROM personas WHERE persona_id = ?", (p_id,))
-                    # persona_exists_active = cursor.fetchone()
-                    # if not persona_exists_active or not persona_exists_active['is_active']:
-                    #     current_app.logger.warning(f"Skipping LLM request for non-existent or inactive persona ID: {p_id}")
-                    #     continue
+                    # Validate persona ID before creating LLM request
+                    # get_persona uses its own db context (via get_db()) so it's safe to call here
+                    persona_check = get_persona(p_id, active_only=True) 
+                    if not persona_check:
+                        current_app.logger.warning(
+                            f"Persona ID {p_id} tagged in content for new topic (post {post_id}) "
+                            f"not found or not active. Skipping LLM request for this tag."
+                        )
+                        continue # Skip to the next persona_id
 
                     cursor.execute("""
                         INSERT INTO llm_requests 
@@ -213,7 +209,15 @@ def handle_posts(topic_id):
             # --- Create LLM Requests for tagged personas ---
             if tagged_persona_ids:
                 for p_id in tagged_persona_ids:
-                    # TODO: Check persona existence/activity as in new topic creation.
+                    # Validate persona ID before creating LLM request
+                    persona_check = get_persona(p_id, active_only=True)
+                    if not persona_check:
+                        current_app.logger.warning(
+                            f"Persona ID {p_id} tagged in content for reply to post {parent_post_id} (new post {post_id}) "
+                            f"not found or not active. Skipping LLM request for this tag."
+                        )
+                        continue # Skip to the next persona_id
+                        
                     cursor.execute("""
                         INSERT INTO llm_requests 
                         (post_id_to_respond_to, llm_persona, requested_by_user_id, request_type, status, llm_model)

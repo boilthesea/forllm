@@ -291,3 +291,64 @@ input[type="file"]::file-selector-button:hover {
 /* Redundant body.dark-mode rules for staged attachments can be removed as base styles are now dark */
 /* .staged-user-prompt inherits dark mode from .form-input if that's styled for dark mode */
 /* .staged-attachment-action-btn inherits from .btn, .btn-secondary, .btn-danger which should have dark mode variants */
+
+/* --- "Tag Persona to Respond" UI in Post Actions --- */
+.tag-persona-container {
+    margin-top: 10px;
+    position: relative; /* For positioning the suggestions div */
+    display: flex; /* Align input and potential button nicely */
+    align-items: center;
+}
+
+.tag-persona-input {
+    flex-grow: 1; /* Input takes available space */
+    padding: 6px 10px;
+    border: 1px solid var(--input-border, #ccc);
+    border-radius: 4px;
+    background-color: var(--input-bg, #fff);
+    color: var(--input-text, #333);
+    font-size: 0.9em;
+}
+
+/* Suggestions list for tagging existing posts */
+.tag-persona-suggestions {
+    display: none; /* Initially hidden */
+    position: absolute;
+    top: 100%; /* Position below the input field container */
+    left: 0;
+    right: 0; /* Make it full width of its container */
+    background-color: var(--input-bg, #fff);
+    border: 1px solid var(--input-border, #ccc);
+    border-top: none; /* Optional: if it should look attached to input */
+    box-shadow: 0px 4px 6px rgba(0,0,0,0.1);
+    max-height: 160px; /* Limit height and make scrollable */
+    overflow-y: auto;
+    z-index: 1000; /* Ensure it's above other post content */
+    border-radius: 0 0 4px 4px; /* Rounded bottom corners */
+}
+
+.tag-persona-suggestions > div {
+    padding: 8px 12px;
+    cursor: pointer;
+    color: var(--text-color, #333);
+    border-bottom: 1px solid var(--border-color, #eee);
+}
+
+.tag-persona-suggestions > div:last-child {
+    border-bottom: none;
+}
+
+.tag-persona-suggestions > div:hover {
+    background-color: var(--hover-bg, #f0f0f0);
+}
+
+/* --- Rendered Persona Tag in Post Content --- */
+.persona-tag {
+    background-color: var(--accent-bg-light, #e0eafc); /* Light blue/purple */
+    color: var(--accent-text-dark, #3367d6);       /* Darker blue text */
+    padding: 2px 8px;
+    border-radius: 12px; /* More pill-shaped */
+    font-size: 0.85em;
+    font-weight: 500;
+    white-space: nowrap; /* Prevent wrapping if possible */
+}

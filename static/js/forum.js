@@ -159,7 +159,10 @@ function renderPostNode(post, parentElement, depth) {
 
     // Apply visual marker for @[Persona Name](persona_id) tags
     // This should be done AFTER setting innerHTML from post.content
-    contentDiv.innerHTML = contentDiv.innerHTML.replace(/@\[([^\]]+)\]\((\d+)\)/g, '<span class="persona-tag-placeholder">@{$1}</span>');
+    contentDiv.innerHTML = contentDiv.innerHTML.replace(
+        /@\[([^\]]+)\]\((\d+)\)/g, 
+        '<span class="persona-tag" data-persona-id="$2" title="Persona: $1 (ID: $2)">@$1</span>'
+    );
 
 
     const actionsDiv = document.createElement('div');
@@ -184,16 +187,15 @@ function renderPostNode(post, parentElement, depth) {
     const tagInput = document.createElement('input');
     tagInput.setAttribute('type', 'text');
     tagInput.setAttribute('placeholder', 'Tag persona to respond...');
-    tagInput.className = 'tag-persona-input';
-    tagInput.dataset.postId = post.post_id; // Store postId for later
+    tagInput.className = 'tag-persona-input'; // Ensure CSS targets this
+    tagInput.dataset.postId = post.post_id; 
 
     const tagSuggestionsDiv = document.createElement('div');
-    tagSuggestionsDiv.className = 'tag-persona-suggestions';
-    tagSuggestionsDiv.style.display = 'none'; // Initially hidden
-    tagSuggestionsDiv.style.border = '1px solid #ccc';
-    tagSuggestionsDiv.style.backgroundColor = 'white';
-    tagSuggestionsDiv.style.position = 'absolute'; // Or relative to container
-    tagSuggestionsDiv.style.zIndex = '999'; // Ensure it's above other post content if absolute
+    tagSuggestionsDiv.className = 'tag-persona-suggestions'; // Ensure CSS targets this
+    // Most styling for tagSuggestionsDiv should come from forum.css
+    // Ensure display:none is here as it's toggled by JS
+    tagSuggestionsDiv.style.display = 'none'; 
+
 
     tagInput.addEventListener('input', async (e) => {
         const query = e.target.value;
