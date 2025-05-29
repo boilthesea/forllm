@@ -161,3 +161,78 @@ def api_get_effective_persona(subforum_id):
     if not persona:
         return jsonify({'error': 'No persona found'}), 404
     return jsonify(dict(persona))
+
+@llm_api_bp.route('/posts/<int:post_id>/tag_persona', methods=['POST'])
+def tag_persona_on_post(post_id):
+    db = get_db()
+    cursor = db.cursor()
+
+    # 1. Get persona_id from request body
+    data = request.get_json()
+    if not data or 'persona_id' not in data:
+        return jsonify({'error': 'persona_id is missing from request body'}), 400
+    
+    persona_id_to_tag = data['persona_id']
+    try:
+        persona_id_to_tag = int(persona_id_to_tag)
+    except ValueError:
+        return jsonify({'error': 'persona_id must be an integer'}), 400
+
+    # 2. Get current user ID
+    tagged_by_user_id = CURRENT_USER_ID # Relies on top-level import
+
+    # 3. Validate post_id
+    cursor.execute("SELECT post_id FROM posts WHERE post_id = ?", (post_id,))
+    post_row = cursor.fetchone()
+    if not post_row:
+        return jsonify({'error': f'Post with ID {post_id} not found'}), 404
+
+    # 4. Validate persona_id (exists and is active)
+    # Using the existing get_persona function from database.py
+    # Make sure get_persona is imported: from ..database import get_persona
+    persona_row = get_persona(persona_id_to_tag, active_only=True)
+    if not persona_row:
+        return jsonify({'error': f'Active persona with ID {persona_id_to_tag} not found'}), 404
+
+    try:
+        # 5. Add record to post_persona_tags
+        cursor.execute("""
+            INSERT INTO post_persona_tags (post_id, persona_id, tagged_by_user_id)
+            VALUES (?, ?, ?)
+        """, (post_id, persona_id_to_tag, tagged_by_user_id))
+        tag_id = cursor.lastrowid
+
+        # 6. Create entry in llm_requests
+        # request_type 'respond_to_post_tag' as used in previous task
+        # llm_model is None, worker can decide
+        cursor.execute("""
+            INSERT INTO llm_requests 
+            (post_id_to_respond_to, llm_persona, requested_by_user_id, request_type, status, llm_model)
+            VALUES (?, ?, ?, ?, ?, ?)
+        """, (post_id, persona_id_to_tag, tagged_by_user_id, 'respond_to_post_tag', 'pending', None))
+        request_id = cursor.lastrowid
+        
+        db.commit()
+        
+        return jsonify({
+            'message': 'Persona tagged successfully and LLM request created.',
+            'tag_id': tag_id,
+            'llm_request_id': request_id,
+            'post_id': post_id,
+            'persona_id': persona_id_to_tag
+        }), 201
+
+    except sqlite3.IntegrityError as e:
+        db.rollback()
+        # This might happen if the combination of (post_id, persona_id, tagged_by_user_id) must be unique
+        # or if other integrity constraints are violated.
+        # The current post_persona_tags schema doesn't enforce such unique constraint on all three,
+        # but a (post_id, persona_id) might be a sensible unique constraint to prevent duplicate tags by different users
+        # (if that's the desired logic) or duplicate tags by the same user.
+        # For now, assuming a generic integrity error.
+        return jsonify({'error': f'Database integrity error: {str(e)}'}), 409 # 409 Conflict
+    except Exception as e:
+        db.rollback()
+        # Log the exception e for debugging
+        print(f"Unexpected error in tag_persona_on_post: {e}")
+        return jsonify({'error': f'An unexpected error occurred: {str(e)}'}), 500
