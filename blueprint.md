@@ -62,14 +62,15 @@ graph TD
     *   **`llm_processing.py`**: Contains the core logic for interacting with the LLM service (currently Ollama), including prompt construction, API call execution (`process_llm_request`), streaming response handling, and error management for LLM communication. Includes logic to determine and fetch the appropriate persona prompt instructions for an LLM request based on user override, subforum default, global default, or built-in fallback.
     *   **`scheduler.py`**: Implements the logic to determine if the LLM processor should be active based on defined schedules (`is_processing_time`), and provides utility functions to get current status and next schedule information.
     *   **`routes/main_routes.py`**: Defines Flask Blueprint for main application routes, including serving the `index.html` and static assets.
-    *   **`routes/forum_routes.py`**: Defines Flask Blueprint for API endpoints related to forum management: subforums, topics, and posts (CRUD operations, listing). Includes endpoints for assigning/unassigning multiple personas per subforum and setting the per-subforum default persona.
-    *   **`routes/llm_routes.py`**: Defines Flask Blueprint for API endpoints related to LLM interactions: requesting an LLM response for a post and fetching available Ollama models. Allows persona override at LLM request time.
+    *   **`routes/forum_routes.py`**: Defines Flask Blueprint for API endpoints related to forum management: subforums, topics, and posts (CRUD operations, listing). Includes endpoints for assigning/unassigning multiple personas per subforum and setting the per-subforum default persona. Handles parsing of `@[Persona Name](persona_id)` tags from post content, stores extracted IDs in `posts.tagged_personas_in_content`, and queues `llm_requests` for tagged personas.
+    *   **`routes/llm_routes.py`**: Defines Flask Blueprint for API endpoints related to LLM interactions: requesting an LLM response for a post and fetching available Ollama models. Allows persona override at LLM request time. `POST /api/posts/<int:post_id>/tag_persona`: Allows users to tag an existing post with a persona, creating an entry in `post_persona_tags` and queuing an `llm_request`.
     *   **`routes/schedule_routes.py`**: Defines Flask Blueprint for API endpoints managing LLM processing schedules: CRUD operations for schedules, and status/next schedule information.
     *   **`routes/settings_routes.py`**: Defines Flask Blueprint for API endpoints to get and update application-wide settings. Includes endpoints for persona management (list, create, update, delete, get, version history) and global default persona.
     *   **`routes/persona_routes.py`**: Defines Flask Blueprint for API endpoints related to persona generation. Includes:
         *   `POST /api/personas/generate/from_details`: Queues generation of a persona from name/description hints.
         *   `POST /api/personas/generate/subforum_expert`: Queues generation of a subforum expert persona.
         *   `POST /api/personas/generate/subforum_experts_batch`: Queues batch generation of multiple subforum expert personas.
+        *   `GET /api/personas/list_active`: Returns a list of active personas for UI suggestions.
         *   `POST /api/personas/preview`: (If this endpoint was kept for prompt previewing, it should be listed).
     *   **`routes/activity_routes.py`**: Defines Flask Blueprint for API endpoints related to the Recent Activity Page. Includes:
         *   `GET /api/activity/recent_topics`: Fetches topics considered new to the user.
@@ -115,9 +116,16 @@ graph TD
         *   `subforums`: Definitions of different forum categories (`subforum_id`, `name`, `description`).
         *   `topics`: Topic titles and metadata, linked to subforums and users.
         *   `posts`: User-generated content and LLM responses, forming threaded discussions.
+            *   `tagged_personas_in_content` (TEXT, storing a JSON array of persona IDs from @mentions in content).
         *   `llm_requests`: Queue for LLM processing, tracking `status`, `model`, `persona`, `request_type` (e.g., 'respond_to_post', 'generate_persona'), and `request_params` (JSON string containing details for the request type).
         *   `schedule`: Defines active hours and days for the LLM processor.
         *   `settings`: Stores application-wide settings like selected LLM model. Also stores the global default persona ID.
+        *   `post_persona_tags`: Facilitates tagging existing posts to request a response from a specific persona.
+            *   `tag_id` (INTEGER PRIMARY KEY AUTOINCREMENT)
+            *   `post_id` (INTEGER, Foreign Key to `posts.post_id`)
+            *   `persona_id` (INTEGER, Foreign Key to `personas.persona_id`)
+            *   `tagged_by_user_id` (INTEGER, Foreign Key to `users.user_id`)
+            *   `created_at` (DATETIME, DEFAULT CURRENT_TIMESTAMP)
         *   `personas`: Stores persona details, including `name`, `prompt_instructions`, `creation/update timestamps`, `creator`, `generation_source` (e.g., 'user_created', 'llm_generated_from_name_and_description', 'llm_generated_subforum_expert'), and `generation_input_details` (JSON string of parameters used for generation).
         *   `subforum_personas`: Links subforums and personas, indicating which personas are assigned to a subforum and the default for that subforum.
         *   `persona_versions`: Stores historical versions of persona details for versioning and revert capability.
@@ -238,7 +246,7 @@ graph TD
     *   UI for basic "from_details" generation is implemented in the settings modal.
     *   TODO: UI for subforum expert generation (single and batch) needs to be designed and implemented.
     *   TODO: Autogenerated subforum personas should have a regenerate button next to them for those that aren't up to snuff. Queuable.
-*   **Inter-Persona Communication (Tagging):** [TODO] Implement `@PersonaName` or similar tagging in user replies to direct a specific LLM/Persona to respond. Requires parsing logic in the backend.
+*   **Inter-Persona Communication (Tagging):** [COMPLETED] Implemented a comprehensive persona tagging system. Users can tag personas directly in new topics or replies using an `@mention` style (e.g., `@PersonaName`) with typeahead suggestions, which inserts a `@[Persona Name](persona_id)` tag into the content. For existing posts, a dedicated input field allows users to select a persona to tag for a response. Both methods result in LLM requests being queued for the tagged persona(s). Rendered posts visually highlight these tags.
 *   **Optional Automated Persona Interaction:** [TODO] A setting (per-topic?) to allow enabled personas to automatically reply to each other's posts within certain limits (e.g., depth, time). *Requires careful design to avoid runaway computation.*
 *   **Summarization Tools:** [TODO] Add a feature to use an LLM to summarize a selected topic thread or a set of LLM replies.
 *   **Rich Text Editor (Optional):** [DONE] Replace plain text area with a simple WYSIWYG editor. (EasyMDE implemented)

@@ -133,6 +133,69 @@ export function renderPosts(posts) {
     rootPosts.forEach(post => renderPostNode(post, postList, 0));
 }
 
+async function displayPostTagSuggestions(query, suggestionsDiv, postId, inputElement) {
+    const now = Date.now();
+    if (!forumActivePersonasCache.length || (now - forumPersonasCacheTimestamp > FORUM_PERSONA_CACHE_DURATION)) {
+        console.log("Fetching personas for post tagging...");
+        forumActivePersonasCache = await fetchActivePersonas() || [];
+        forumPersonasCacheTimestamp = now;
+        if (!forumActivePersonasCache.length) {
+            console.log("No active personas found or failed to fetch for post tagging.");
+        }
+    }
+
+    const filteredPersonas = forumActivePersonasCache.filter(p =>
+        p.name.toLowerCase().includes(query.toLowerCase())
+    );
+
+    suggestionsDiv.innerHTML = ''; // Clear previous suggestions
+    if (!filteredPersonas.length) {
+        const noResultsItem = document.createElement('div');
+        noResultsItem.textContent = 'No matching personas';
+        noResultsItem.classList.add('suggestion-item', 'no-results'); // Use classes for styling
+        suggestionsDiv.appendChild(noResultsItem);
+        // Keep suggestionsDiv visible to show "No results", or hide if preferred:
+        // suggestionsDiv.style.display = 'none'; 
+        // return;
+    } else {
+        filteredPersonas.forEach(persona => {
+            const item = document.createElement('div');
+            item.textContent = persona.name;
+            item.classList.add('suggestion-item'); // Common class for styling from CSS
+            item.dataset.personaId = persona.persona_id; // Store ID for action
+            item.dataset.personaName = persona.name; // Store name for action
+
+            // Hover effects will be handled by CSS :hover on .suggestion-item
+            
+            // Use mousedown to ensure it fires before the input's blur event
+            item.addEventListener('mousedown', async (e) => { 
+                e.preventDefault(); // Prevent the input from losing focus immediately
+                try {
+                    console.log(`Tagging post ${postId} with persona ${persona.persona_id} (${persona.name})`);
+                    await tagPostForPersonaResponse(String(postId), String(persona.persona_id));
+                    inputElement.value = ''; 
+                    suggestionsDiv.style.display = 'none';
+                    suggestionsDiv.innerHTML = ''; // Clear items
+                    alert(`Post ${postId} tagged for ${persona.name} to respond.`);
+                    // Consider a less intrusive notification or UI update here
+                } catch (error) {
+                    // Error already logged by tagPostForPersonaResponse/apiRequest
+                    alert(`Failed to tag post for ${persona.name}.`);
+                }
+            });
+            suggestionsDiv.appendChild(item);
+        });
+    }
+    
+    // Position suggestionsDiv - This assumes .tag-persona-container is position:relative
+    // and .tag-persona-suggestions is position:absolute.
+    suggestionsDiv.style.left = '0'; 
+    suggestionsDiv.style.top = `${inputElement.offsetHeight}px`; // Position directly below input
+    suggestionsDiv.style.width = `${inputElement.offsetWidth}px`; // Match width
+        
+    suggestionsDiv.style.display = 'block';
+}
+
 function renderPostNode(post, parentElement, depth) {
     const postDiv = document.createElement('div');
     postDiv.className = 'post';
@@ -249,6 +312,7 @@ function renderPostNode(post, parentElement, depth) {
     }
 }
 
+// Removed displayPostTagSuggestions from here as it's moved above renderPostNode
 
 // --- Loading Functions ---
 export async function loadSubforums(shouldShowSection = true) {

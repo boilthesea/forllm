@@ -1,7 +1,7 @@
 import json
 import sqlite3
 from flask import Blueprint, request, jsonify
-from forllm_server.database import get_db
+from forllm_server.database import get_db, list_personas # Import list_personas
 # CURRENT_USER_ID might be used later for ownership or logging, keep if part of standard imports
 from forllm_server.config import CURRENT_USER_ID 
 from forllm_server.config import DEFAULT_MODEL # Import for fallback
