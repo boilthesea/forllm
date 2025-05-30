@@ -144,8 +144,11 @@ async function displayPostTagSuggestions(query, suggestionsDiv, postId, inputEle
         }
     }
 
+    // Sanitize query: remove leading '@' if present, as persona names don't have it.
+    const sanitizedQuery = query.startsWith('@') ? query.substring(1) : query;
+
     const filteredPersonas = forumActivePersonasCache.filter(p =>
-        p.name.toLowerCase().includes(query.toLowerCase())
+        p.name.toLowerCase().includes(sanitizedQuery.toLowerCase())
     );
 
     suggestionsDiv.innerHTML = ''; // Clear previous suggestions
@@ -286,6 +289,16 @@ function renderPostNode(post, parentElement, depth) {
     postDiv.appendChild(metaDiv);
     postDiv.appendChild(contentDiv);
     postDiv.appendChild(actionsDiv);
+
+    // Add event listeners to persona tags to prevent default navigation
+    const personaTagElements = contentDiv.querySelectorAll('.persona-tag');
+    personaTagElements.forEach(tagEl => {
+        tagEl.addEventListener('click', function(event) {
+            event.preventDefault();
+            console.log('Persona tag clicked: ID ' + tagEl.dataset.personaId + '. Navigation prevented.');
+            // Future: Implement modal display or other desired interaction here.
+        });
+    });
 
     // --- Render Attachments for the post ---
     if (post.attachments && Array.isArray(post.attachments) && post.attachments.length > 0) {
