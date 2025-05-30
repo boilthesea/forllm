@@ -1,7 +1,7 @@
 import json
 import sqlite3
 from flask import Blueprint, request, jsonify
-from forllm_server.database import get_db
+from forllm_server.database import get_db, list_personas # Import list_personas
 # CURRENT_USER_ID might be used later for ownership or logging, keep if part of standard imports
 from forllm_server.config import CURRENT_USER_ID 
 from forllm_server.config import DEFAULT_MODEL # Import for fallback
@@ -291,3 +291,41 @@ def generate_subforum_experts_batch_api():
         print(f"Unexpected error during batch persona generation: {e.__class__.__name__}: {e}")
         return jsonify({"error": "An unexpected error occurred while queuing batch persona generation"}), 500
     # No finally block needed to close db, as Flask handles g.db
+
+@persona_routes_bp.route('/list_active', methods=['GET'])
+def list_active_personas_api():
+    try:
+        # The list_personas function is imported from database.py, but we need to call it
+        # through the database module, or import it directly.
+        # Assuming database.py is structured to allow direct calls after get_db() context is established.
+        # However, typically, functions like list_personas are standalone or part of a class.
+        # Re-checking database.py structure, list_personas is a standalone function.
+        # It internally calls get_db().
+        
+        active_personas_rows = list_personas(active_only=True)
+
+        if active_personas_rows is None:
+            # This case handles if list_personas itself returns None (e.g., on DB error)
+            print("Error fetching active personas: list_personas returned None.")
+            return jsonify({"error": "Failed to retrieve personas due to a database error"}), 500
+
+        # Convert rows to list of dicts, selecting only required fields
+        personas_list = []
+        for row in active_personas_rows:
+            personas_list.append({
+                "persona_id": row["persona_id"],
+                "name": row["name"]
+            })
+        
+        # Sort alphabetically by persona name
+        personas_list.sort(key=lambda x: x['name'])
+        
+        return jsonify(personas_list), 200
+
+    except sqlite3.Error as e:
+        print(f"Database error in list_active_personas_api: {e}")
+        return jsonify({"error": "A database error occurred while retrieving active personas."}), 500
+    except Exception as e:
+        # Catch any other unexpected errors
+        print(f"Unexpected error in list_active_personas_api: {e.__class__.__name__}: {e}")
+        return jsonify({"error": "An unexpected error occurred."}), 500

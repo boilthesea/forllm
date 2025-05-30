@@ -1,6 +1,6 @@
 // This file will handle forum-specific logic.
 
-import { apiRequest } from './api.js';
+import { apiRequest, fetchActivePersonas, tagPostForPersonaResponse } from './api.js'; // Added imports
 import {
     subforumList,
     newSubforumNameInput,
@@ -25,6 +25,12 @@ let currentSubforumId = null;
 let currentTopicId = null;
 let currentPosts = []; // Store posts for the current topic
 let currentPersonaId = null;
+
+// --- Persona Tagging Cache for forum.js ---
+let forumActivePersonasCache = [];
+let forumPersonasCacheTimestamp = 0;
+const FORUM_PERSONA_CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
+
 
 let stagedAttachments = []; // For managing files selected in UI before actual upload
 let nextStagedAttachmentId = 0; // Counter for unique IDs for staged attachments
@@ -127,6 +133,72 @@ export function renderPosts(posts) {
     rootPosts.forEach(post => renderPostNode(post, postList, 0));
 }
 
+async function displayPostTagSuggestions(query, suggestionsDiv, postId, inputElement) {
+    const now = Date.now();
+    if (!forumActivePersonasCache.length || (now - forumPersonasCacheTimestamp > FORUM_PERSONA_CACHE_DURATION)) {
+        console.log("Fetching personas for post tagging...");
+        forumActivePersonasCache = await fetchActivePersonas() || [];
+        forumPersonasCacheTimestamp = now;
+        if (!forumActivePersonasCache.length) {
+            console.log("No active personas found or failed to fetch for post tagging.");
+        }
+    }
+
+    // Sanitize query: remove leading '@' if present, as persona names don't have it.
+    const sanitizedQuery = query.startsWith('@') ? query.substring(1) : query;
+
+    const filteredPersonas = forumActivePersonasCache.filter(p =>
+        p.name.toLowerCase().includes(sanitizedQuery.toLowerCase())
+    );
+
+    suggestionsDiv.innerHTML = ''; // Clear previous suggestions
+    if (!filteredPersonas.length) {
+        const noResultsItem = document.createElement('div');
+        noResultsItem.textContent = 'No matching personas';
+        noResultsItem.classList.add('suggestion-item', 'no-results'); // Use classes for styling
+        suggestionsDiv.appendChild(noResultsItem);
+        // Keep suggestionsDiv visible to show "No results", or hide if preferred:
+        // suggestionsDiv.style.display = 'none'; 
+        // return;
+    } else {
+        filteredPersonas.forEach(persona => {
+            const item = document.createElement('div');
+            item.textContent = persona.name;
+            item.classList.add('suggestion-item'); // Common class for styling from CSS
+            item.dataset.personaId = persona.persona_id; // Store ID for action
+            item.dataset.personaName = persona.name; // Store name for action
+
+            // Hover effects will be handled by CSS :hover on .suggestion-item
+            
+            // Use mousedown to ensure it fires before the input's blur event
+            item.addEventListener('mousedown', async (e) => { 
+                e.preventDefault(); // Prevent the input from losing focus immediately
+                try {
+                    console.log(`Tagging post ${postId} with persona ${persona.persona_id} (${persona.name})`);
+                    await tagPostForPersonaResponse(String(postId), String(persona.persona_id));
+                    inputElement.value = ''; 
+                    suggestionsDiv.style.display = 'none';
+                    suggestionsDiv.innerHTML = ''; // Clear items
+                    alert(`Post ${postId} tagged for ${persona.name} to respond.`);
+                    // Consider a less intrusive notification or UI update here
+                } catch (error) {
+                    // Error already logged by tagPostForPersonaResponse/apiRequest
+                    alert(`Failed to tag post for ${persona.name}.`);
+                }
+            });
+            suggestionsDiv.appendChild(item);
+        });
+    }
+    
+    // Position suggestionsDiv - This assumes .tag-persona-container is position:relative
+    // and .tag-persona-suggestions is position:absolute.
+    suggestionsDiv.style.left = '0'; 
+    suggestionsDiv.style.top = `${inputElement.offsetHeight}px`; // Position directly below input
+    suggestionsDiv.style.width = `${inputElement.offsetWidth}px`; // Match width
+        
+    suggestionsDiv.style.display = 'block';
+}
+
 function renderPostNode(post, parentElement, depth) {
     const postDiv = document.createElement('div');
     postDiv.className = 'post';
@@ -149,7 +221,15 @@ function renderPostNode(post, parentElement, depth) {
 
     const contentDiv = document.createElement('div');
     contentDiv.className = 'post-content';
-    contentDiv.innerHTML = post.content;
+    contentDiv.innerHTML = post.content; // Original content set here
+
+    // Apply visual marker for @[Persona Name](persona_id) tags
+    // This should be done AFTER setting innerHTML from post.content
+    contentDiv.innerHTML = contentDiv.innerHTML.replace(
+        /@\[([^\]]+)\]\((\d+)\)/g, 
+        '<span class="persona-tag" data-persona-id="$2" title="Persona: $1 (ID: $2)">@$1</span>'
+    );
+
 
     const actionsDiv = document.createElement('div');
     actionsDiv.className = 'post-actions';
@@ -166,9 +246,59 @@ function renderPostNode(post, parentElement, depth) {
         actionsDiv.appendChild(llmButton);
     }
 
+    // --- UI for Tagging Existing Post ---
+    const tagPersonaContainer = document.createElement('div');
+    tagPersonaContainer.className = 'tag-persona-container';
+    
+    const tagInput = document.createElement('input');
+    tagInput.setAttribute('type', 'text');
+    tagInput.setAttribute('placeholder', 'Tag persona to respond...');
+    tagInput.className = 'tag-persona-input'; // Ensure CSS targets this
+    tagInput.dataset.postId = post.post_id; 
+
+    const tagSuggestionsDiv = document.createElement('div');
+    tagSuggestionsDiv.className = 'tag-persona-suggestions'; // Ensure CSS targets this
+    // Most styling for tagSuggestionsDiv should come from forum.css
+    // Ensure display:none is here as it's toggled by JS
+    tagSuggestionsDiv.style.display = 'none'; 
+
+
+    tagInput.addEventListener('input', async (e) => {
+        const query = e.target.value;
+        const currentPostId = e.target.dataset.postId; // Retrieve postId
+        if (query.length > 0) { // Or some other condition like query.startsWith('@')
+            await displayPostTagSuggestions(query, tagSuggestionsDiv, currentPostId, tagInput);
+        } else {
+            tagSuggestionsDiv.style.display = 'none';
+        }
+    });
+    
+    tagInput.addEventListener('blur', () => {
+        // Delay hiding to allow click on suggestion items
+        setTimeout(() => {
+            if (!tagSuggestionsDiv.matches(':hover')) { // Only hide if mouse isn't over suggestions
+                tagSuggestionsDiv.style.display = 'none';
+            }
+        }, 200);
+    });
+
+    tagPersonaContainer.appendChild(tagInput);
+    tagPersonaContainer.appendChild(tagSuggestionsDiv); // Suggestions div associated with this input
+    actionsDiv.appendChild(tagPersonaContainer); // Add to actions or directly to postDiv
+
     postDiv.appendChild(metaDiv);
     postDiv.appendChild(contentDiv);
     postDiv.appendChild(actionsDiv);
+
+    // Add event listeners to persona tags to prevent default navigation
+    const personaTagElements = contentDiv.querySelectorAll('.persona-tag');
+    personaTagElements.forEach(tagEl => {
+        tagEl.addEventListener('click', function(event) {
+            event.preventDefault();
+            console.log('Persona tag clicked: ID ' + tagEl.dataset.personaId + '. Navigation prevented.');
+            // Future: Implement modal display or other desired interaction here.
+        });
+    });
 
     // --- Render Attachments for the post ---
     if (post.attachments && Array.isArray(post.attachments) && post.attachments.length > 0) {
@@ -195,6 +325,7 @@ function renderPostNode(post, parentElement, depth) {
     }
 }
 
+// Removed displayPostTagSuggestions from here as it's moved above renderPostNode
 
 // --- Loading Functions ---
 export async function loadSubforums(shouldShowSection = true) {

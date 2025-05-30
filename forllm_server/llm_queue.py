@@ -114,24 +114,24 @@ def llm_worker(flask_app): # Added flask_app parameter
                         if request_type == 'generate_persona':
                             print(f"LLM Worker: Delegating persona generation for request_id {request_id}")
                             _handle_persona_generation_request(request_id, request_params_json, flask_app)
-                        elif request_type == 'respond_to_post':
+                        elif request_type == 'respond_to_post' or request_type == 'respond_to_post_tag': # Modified condition
                             if post_id_to_respond_to is None:
-                                print(f"Error: post_id_to_respond_to is missing for respond_to_post request_id {request_id}. Marking as error.")
+                                print(f"Error: post_id_to_respond_to is missing for {request_type} request_id {request_id}. Marking as error.")
                                 # This error case needs its own DB connection to update status
                                 temp_db_err = sqlite3.connect(DATABASE)
                                 temp_cur_err = temp_db_err.cursor()
-                                temp_cur_err.execute("UPDATE llm_requests SET status = 'error', error_message = ?, processed_at = CURRENT_TIMESTAMP WHERE request_id = ?", ("Missing post_id_to_respond_to for post response type", request_id))
+                                temp_cur_err.execute("UPDATE llm_requests SET status = 'error', error_message = ?, processed_at = CURRENT_TIMESTAMP WHERE request_id = ?", (f"Missing post_id_to_respond_to for {request_type} type", request_id))
                                 temp_db_err.commit()
                                 temp_db_err.close()
                             else:
-                                print(f"LLM Worker: Delegating post response for request_id {request_id}")
+                                print(f"LLM Worker: Delegating {request_type} for request_id {request_id}")
                                 process_llm_request({
                                     'request_id': request_id,
                                     'post_id': post_id_to_respond_to,
-                                    'model': llm_model_for_response or "default_model", 
-                                    'persona': llm_persona_for_response 
+                                    'model': llm_model_for_response, # Keep as is, process_llm_request will handle default
+                                    'persona': llm_persona_for_response
                                 }, flask_app)
-                        else: 
+                        else:
                             print(f"Unknown request_type: {request_type} for request_id {request_id}. Marking as error.")
                             temp_db_err = sqlite3.connect(DATABASE)
                             temp_cur_err = temp_db_err.cursor()

@@ -250,6 +250,10 @@
         </section>
     </main>
 
+    <!-- Container for @mention persona suggestions, used by editor.js -->
+    <div id="personaMentionSuggestions" class="suggestions-container" style="display:none;">
+        <!-- Suggestions will be populated here by editor.js -->
+    </div>
 
     <script type="module" src="{{ url_for('static', filename='js/api.js') }}"></script>
     <script type="module" src="{{ url_for('static', filename='js/dom.js') }}"></script>

@@ -25,10 +25,29 @@ def process_llm_request(request_details, flask_app): # Added flask_app parameter
     try:
         # --- Start of main logic block ---
         
-        # Get selected model using local cursor
-        cursor.execute("SELECT setting_value FROM settings WHERE setting_key = 'selectedModel'")
-        model_setting = cursor.fetchone()
-        model = model_setting['setting_value'] if model_setting else DEFAULT_MODEL
+        # --- Model Selection Logic ---
+        # Priority:
+        # 1. Model specified in the request_details (from llm_requests.llm_model)
+        # 2. Global default model from settings
+        # 3. Hardcoded DEFAULT_MODEL
+        requested_model = request_details.get('model') # From llm_requests.llm_model
+        model_to_use = None
+
+        if requested_model:
+            model_to_use = requested_model
+            print(f"Using model specified in LLM request: '{model_to_use}' for request {request_id}.")
+        else:
+            # Get global selected model from settings using local cursor
+            cursor.execute("SELECT setting_value FROM settings WHERE setting_key = 'selectedModel'")
+            model_setting = cursor.fetchone()
+            if model_setting and model_setting['setting_value']:
+                model_to_use = model_setting['setting_value']
+                print(f"No model in request, using global setting: '{model_to_use}' for request {request_id}.")
+            else:
+                model_to_use = DEFAULT_MODEL
+                print(f"No model in request or global setting, using hardcoded DEFAULT_MODEL: '{model_to_use}' for request {request_id}.")
+        
+        model = model_to_use # Use 'model' variable hereafter as it's used later in the function.
 
         # Persona ID handling (parsing)
         persona_id_str = request_details.get('persona')

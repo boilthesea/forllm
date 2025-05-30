@@ -1,5 +1,7 @@
 import sqlite3
 import os
+import re # Added for persona tagging
+import json # Added for storing persona IDs
 from werkzeug.utils import secure_filename
 from flask import Blueprint, request, jsonify, current_app
 from bs4 import BeautifulSoup # For link modification in LLM responses
@@ -7,12 +9,16 @@ from ..database import (
     get_db,
     assign_persona_to_subforum, unassign_persona_from_subforum, list_personas_for_subforum,
     set_subforum_default_persona, get_subforum_default_persona, update_user_activity,
-    get_subforums_with_status, get_topics_for_subforum_with_status
+    get_subforums_with_status, get_topics_for_subforum_with_status,
+    get_persona # Import get_persona for validation
 )
 from ..markdown_config import md
-from ..config import CURRENT_USER_ID
+from ..config import CURRENT_USER_ID, DEFAULT_MODEL
 
 forum_api_bp = Blueprint('forum_api', __name__, url_prefix='/api')
+
+# Regex for parsing persona tags: @[Persona Name](persona_id)
+PERSONA_TAG_REGEX = r'@\[([^\]]+)\]\((\d+)\)'
 
 # Helper function to check for plain text
 def is_plain_text(file_stream):
@@ -98,17 +104,53 @@ def handle_topics(subforum_id):
         content = data.get('content')
         if not title or not content:
             return jsonify({'error': 'Title and content are required for a new topic'}), 400
+        
+        # --- Persona Tagging Logic ---
+        tagged_persona_ids = []
+        if content:
+            matches = re.findall(PERSONA_TAG_REGEX, content)
+            # Extract unique persona IDs (group 2 of the regex match is the ID)
+            tagged_persona_ids = sorted(list(set([int(match[1]) for match in matches])))
+        
+        tagged_personas_json = json.dumps(tagged_persona_ids)
+        # --- End Persona Tagging Logic ---
+
         try:
             cursor.execute('INSERT INTO topics (subforum_id, user_id, title) VALUES (?, ?, ?)',
                            (subforum_id, CURRENT_USER_ID, title))
             topic_id = cursor.lastrowid
-            cursor.execute('INSERT INTO posts (topic_id, user_id, content) VALUES (?, ?, ?)',
-                           (topic_id, CURRENT_USER_ID, content))
+            
+            # Insert post with tagged persona IDs
+            cursor.execute('INSERT INTO posts (topic_id, user_id, content, tagged_personas_in_content) VALUES (?, ?, ?, ?)',
+                           (topic_id, CURRENT_USER_ID, content, tagged_personas_json))
             post_id = cursor.lastrowid
+
+            # --- Create LLM Requests for tagged personas ---
+            if tagged_persona_ids:
+                for p_id in tagged_persona_ids:
+                    # Validate persona ID before creating LLM request
+                    # get_persona uses its own db context (via get_db()) so it's safe to call here
+                    persona_check = get_persona(p_id, active_only=True) 
+                    if not persona_check:
+                        current_app.logger.warning(
+                            f"Persona ID {p_id} tagged in content for new topic (post {post_id}) "
+                            f"not found or not active. Skipping LLM request for this tag."
+                        )
+                        continue # Skip to the next persona_id
+
+                    cursor.execute("""
+                        INSERT INTO llm_requests 
+                        (post_id_to_respond_to, llm_persona, requested_by_user_id, request_type, status, llm_model)
+                        VALUES (?, ?, ?, ?, ?, ?)
+                    """, (post_id, p_id, CURRENT_USER_ID, 'respond_to_post_tag', 'pending', None)) 
+                    # Using None for llm_model, worker can determine based on persona.
+            # --- End LLM Requests ---
+
             db.commit()
-            return jsonify({'topic_id': topic_id, 'title': title, 'initial_post_id': post_id}), 201
+            return jsonify({'topic_id': topic_id, 'title': title, 'initial_post_id': post_id, 'tagged_personas': tagged_persona_ids}), 201
         except Exception as e:
             db.rollback()
+            current_app.logger.error(f"Error creating topic or LLM requests: {e}")
             return jsonify({'error': f'Failed to create topic: {e}'}), 500
     else: # GET
         # cursor.execute("""
@@ -144,19 +186,68 @@ def handle_posts(topic_id):
             return jsonify({'error': 'Content is required for a reply'}), 400
         if not parent_post_id:
              return jsonify({'error': 'Parent post ID is required for a reply'}), 400
+        
         cursor.execute("SELECT post_id FROM posts WHERE post_id = ? AND topic_id = ?", (parent_post_id, topic_id))
         if not cursor.fetchone():
             return jsonify({'error': 'Parent post not found in this topic'}), 404
+
+        # --- Persona Tagging Logic ---
+        tagged_persona_ids = []
+        if content:
+            matches = re.findall(PERSONA_TAG_REGEX, content)
+            tagged_persona_ids = sorted(list(set([int(match[1]) for match in matches])))
+        
+        tagged_personas_json = json.dumps(tagged_persona_ids)
+        # --- End Persona Tagging Logic ---
+
         try:
-            cursor.execute('INSERT INTO posts (topic_id, user_id, parent_post_id, content) VALUES (?, ?, ?, ?)',
-                           (topic_id, CURRENT_USER_ID, parent_post_id, content))
+            # Insert post with tagged persona IDs
+            cursor.execute('INSERT INTO posts (topic_id, user_id, parent_post_id, content, tagged_personas_in_content) VALUES (?, ?, ?, ?, ?)',
+                           (topic_id, CURRENT_USER_ID, parent_post_id, content, tagged_personas_json))
             post_id = cursor.lastrowid
+
+            # --- Create LLM Requests for tagged personas ---
+            if tagged_persona_ids:
+                for p_id in tagged_persona_ids:
+                    # Validate persona ID before creating LLM request
+                    persona_check = get_persona(p_id, active_only=True)
+                    if not persona_check:
+                        current_app.logger.warning(
+                            f"Persona ID {p_id} tagged in content for reply to post {parent_post_id} (new post {post_id}) "
+                            f"not found or not active. Skipping LLM request for this tag."
+                        )
+                        continue # Skip to the next persona_id
+                        
+                    cursor.execute("""
+                        INSERT INTO llm_requests 
+                        (post_id_to_respond_to, llm_persona, requested_by_user_id, request_type, status, llm_model)
+                        VALUES (?, ?, ?, ?, ?, ?)
+                    """, (post_id, p_id, CURRENT_USER_ID, 'respond_to_post_tag', 'pending', None))
+            # --- End LLM Requests ---
+            
             db.commit()
-            cursor.execute("SELECT p.*, u.username FROM posts p JOIN users u ON p.user_id = u.user_id WHERE p.post_id = ?", (post_id,))
-            new_post = cursor.fetchone()
-            return jsonify(dict(new_post)), 201
+            
+            # Fetch the newly created post to return in the response
+            cursor.execute("""
+                SELECT p.*, u.username 
+                FROM posts p 
+                JOIN users u ON p.user_id = u.user_id 
+                WHERE p.post_id = ?
+            """, (post_id,))
+            new_post_row = cursor.fetchone()
+            
+            if not new_post_row: # Should not happen if insert was successful
+                db.rollback() # Should be redundant if commit succeeded, but for safety.
+                return jsonify({'error': 'Failed to retrieve newly created post after insert.'}), 500
+
+            new_post_dict = dict(new_post_row)
+            # Add tagged persona IDs to the response for clarity
+            new_post_dict['tagged_personas_explicitly_in_content'] = tagged_persona_ids
+            
+            return jsonify(new_post_dict), 201
         except Exception as e:
             db.rollback()
+            current_app.logger.error(f"Error creating post reply or LLM requests: {e}")
             return jsonify({'error': f'Failed to create post: {e}'}), 500
     else: # GET
         cursor.execute("""

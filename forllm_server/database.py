@@ -66,6 +66,31 @@ def init_db():
                 FOREIGN KEY (parent_post_id) REFERENCES posts(post_id)
             )
         ''')
+        # Add 'tagged_personas_in_content' to 'posts'
+        cursor.execute("PRAGMA table_info(posts)")
+        columns = [col[1] for col in cursor.fetchall()]
+        if 'tagged_personas_in_content' not in columns:
+            print("Updating posts table: Adding 'tagged_personas_in_content' column...")
+            try:
+                cursor.execute("ALTER TABLE posts ADD COLUMN tagged_personas_in_content TEXT") # JSON array of persona IDs
+                db.commit()
+                print("'tagged_personas_in_content' column added to posts.")
+            except Exception as e:
+                print(f"Error adding 'tagged_personas_in_content' column to posts: {e}")
+                db.rollback()
+
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS post_persona_tags (
+                tag_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                post_id INTEGER,
+                persona_id INTEGER,
+                tagged_by_user_id INTEGER,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY(post_id) REFERENCES posts(post_id),
+                FOREIGN KEY(persona_id) REFERENCES personas(persona_id),
+                FOREIGN KEY(tagged_by_user_id) REFERENCES users(user_id)
+            )
+        ''')
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS llm_requests (
                 request_id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -79,9 +104,24 @@ def init_db():
                 full_prompt_sent TEXT, -- Ensuring this column is part of the main definition
                 request_type TEXT,     -- New field
                 request_params TEXT,   -- New field
-                FOREIGN KEY (post_id_to_respond_to) REFERENCES posts(post_id)
+                requested_by_user_id INTEGER, -- New field for tracking who triggered the LLM
+                FOREIGN KEY (post_id_to_respond_to) REFERENCES posts(post_id),
+                FOREIGN KEY (requested_by_user_id) REFERENCES users(user_id)
             )
         ''')
+        # Add 'requested_by_user_id' to 'llm_requests' if it doesn't exist (for existing databases)
+        cursor.execute("PRAGMA table_info(llm_requests)")
+        columns = [col[1] for col in cursor.fetchall()]
+        if 'requested_by_user_id' not in columns:
+            print("Updating llm_requests table: Adding 'requested_by_user_id' column...")
+            try:
+                cursor.execute("ALTER TABLE llm_requests ADD COLUMN requested_by_user_id INTEGER REFERENCES users(user_id)")
+                db.commit()
+                print("'requested_by_user_id' column added to llm_requests.")
+            except Exception as e:
+                print(f"Error adding 'requested_by_user_id' column to llm_requests: {e}")
+                db.rollback()
+
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS attachments (
                 attachment_id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -305,6 +345,35 @@ def init_db():
 
     # --- Persona Management Tables (Ensure these always exist and have defaults) ---
     # This section is now outside the initial if/else, so it runs every time.
+
+    # --- Check and add 'tagged_personas_in_content' to 'posts' if DB already exists ---
+    # This ensures the column is added if the table was created in a previous version
+    # without this column.
+    cursor.execute("PRAGMA table_info(posts)")
+    columns = [col[1] for col in cursor.fetchall()]
+    if 'tagged_personas_in_content' not in columns:
+        print("Updating posts table (post-initial check): Adding 'tagged_personas_in_content' column...")
+        try:
+            cursor.execute("ALTER TABLE posts ADD COLUMN tagged_personas_in_content TEXT") # JSON array of persona IDs
+            db.commit()
+            print("'tagged_personas_in_content' column added to posts (post-initial check).")
+        except Exception as e:
+            print(f"Error adding 'tagged_personas_in_content' column to posts (post-initial check): {e}")
+            db.rollback()
+
+    # --- Check and add 'requested_by_user_id' to 'llm_requests' if DB already exists ---
+    cursor.execute("PRAGMA table_info(llm_requests)")
+    columns = [col[1] for col in cursor.fetchall()]
+    if 'requested_by_user_id' not in columns:
+        print("Updating llm_requests table (post-initial check): Adding 'requested_by_user_id' column...")
+        try:
+            cursor.execute("ALTER TABLE llm_requests ADD COLUMN requested_by_user_id INTEGER REFERENCES users(user_id)")
+            db.commit()
+            print("'requested_by_user_id' column added to llm_requests (post-initial check).")
+        except Exception as e:
+            print(f"Error adding 'requested_by_user_id' column to llm_requests (post-initial check): {e}")
+            db.rollback()
+
     print("Verifying/Creating Persona management tables and defaults...")
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS personas (
@@ -369,10 +438,28 @@ def init_db():
     # If the persona already existed, this ensures its version 1 is also there.
     cursor.execute("INSERT OR IGNORE INTO persona_versions (persona_id, version, name, prompt_instructions, updated_by_user) VALUES (?, ?, ?, ?, ?)",
                    (1, 1, 'fallback', 'You are a helpful assistant.', CURRENT_USER_ID))
+    
+    # --- Create post_persona_tags table (ensure it always exists) ---
+    # This is outside the initial if/else, so it runs every time.
+    print("Verifying/Creating post_persona_tags table...")
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS post_persona_tags (
+            tag_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            post_id INTEGER,
+            persona_id INTEGER,
+            tagged_by_user_id INTEGER,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY(post_id) REFERENCES posts(post_id),
+            FOREIGN KEY(persona_id) REFERENCES personas(persona_id),
+            FOREIGN KEY(tagged_by_user_id) REFERENCES users(user_id)
+        )
+    ''')
+    # Add indexes for fast lookup
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_post_persona_tags_post ON post_persona_tags(post_id)')
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_post_persona_tags_persona ON post_persona_tags(persona_id)')
 
-
-    db.commit() # Commit after ensuring all persona tables, indexes, and default data.
-    print("Persona management tables and defaults verified/created.")
+    db.commit() # Commit after ensuring all persona tables, indexes, default data, and post_persona_tags table.
+    print("Persona management tables, defaults, and post_persona_tags table verified/created.")
 
     # One-time cleanup of old darkMode setting
     try:

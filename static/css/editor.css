@@ -70,3 +70,37 @@
 #new-topic-content, #reply-content {
    margin-bottom: 0.5rem; /* Keep some space below editor */
 }
+
+/* --- Persona @mention Suggestions --- */
+#personaMentionSuggestions {
+    display: none; /* Initially hidden, shown by JS */
+    position: absolute; /* Positioned by JS near cursor */
+    background-color: var(--input-bg, #fff); /* Use theme background */
+    border: 1px solid var(--input-border, #ccc);
+    box-shadow: 2px 2px 5px rgba(0,0,0,0.15);
+    max-height: 200px;
+    overflow-y: auto;
+    z-index: 1050; /* High z-index to appear above editor and other elements */
+    min-width: 180px; /* Minimum width for readability */
+    border-radius: 4px; /* Slightly rounded corners */
+}
+
+#personaMentionSuggestions > div {
+    padding: 8px 12px;
+    cursor: pointer;
+    border-bottom: 1px solid var(--border-color, #eee); /* Use theme border color */
+    color: var(--text-color, #333); /* Use theme text color */
+}
+
+#personaMentionSuggestions > div:last-child {
+    border-bottom: none;
+}
+
+#personaMentionSuggestions > div:hover {
+    background-color: var(--hover-bg, #f0f0f0); /* Use theme hover background */
+}
+
+#personaMentionSuggestions > div.selected { /* For keyboard navigation */
+    background-color: var(--active-bg, #e0e0e0); /* Use theme active/selected background */
+    color: var(--button-text, #000); /* Ensure text is readable on selection */
+}
