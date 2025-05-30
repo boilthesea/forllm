@@ -2,7 +2,7 @@ import sqlite3
 import requests
 from flask import Blueprint, request, jsonify
 from ..database import get_db, get_effective_persona_for_subforum, get_persona # Import get_persona
-from ..config import OLLAMA_TAGS_URL, DEFAULT_MODEL # Removed unused llm_request_queue, processing_active
+from ..config import OLLAMA_TAGS_URL, DEFAULT_MODEL, CURRENT_USER_ID # Added CURRENT_USER_ID
 
 llm_api_bp = Blueprint('llm_api', __name__, url_prefix='/api')
 
