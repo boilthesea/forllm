@@ -6,6 +6,11 @@ import os # Added os
 from flask import current_app # Added current_app
 from requests.exceptions import ConnectionError, RequestException
 from datetime import datetime
+import logging # Added logging
+from forllm_server.tokenizer_utils import count_tokens # Added count_tokens import
+
+# Configure logging
+logger = logging.getLogger(__name__)
 
 # Removed sys.path manipulation and direct 'from forllm import app' import
 
@@ -148,6 +153,24 @@ def process_llm_request(request_details, flask_app): # Added flask_app parameter
         # Attachments first, then persona instructions, then user's post
         prompt_content = f"{attachments_string}{persona_instructions}\n\nUser wrote: {original_post['content']}\n\nRespond to this post."
         print(f"Final prompt_content for request {request_id} (first 200 chars): {prompt_content[:200]}...")
+
+        # Token counting and logging
+        # Assuming no separate system prompt, persona_instructions acts as the main system/persona guidance
+        persona_prompt_tokens = count_tokens(persona_instructions)
+        logger.info(f"Request {request_id}: Persona instructions token count: {persona_prompt_tokens}")
+
+        user_post_content = original_post['content']
+        user_post_tokens = count_tokens(user_post_content)
+        logger.info(f"Request {request_id}: User post content token count: {user_post_tokens}")
+
+        attachments_token_count = 0
+        if attachments_string: # Check if there's any text from attachments
+            attachments_token_count = count_tokens(attachments_string)
+            logger.info(f"Request {request_id}: Attachments text token count: {attachments_token_count}")
+
+        # Log the token count of the actual final prompt string sent to the LLM
+        actual_final_prompt_tokens = count_tokens(prompt_content)
+        logger.info(f"Request {request_id}: Actual final prompt string token count: {actual_final_prompt_tokens}")
         
         # Store the constructed prompt using local cursor
         cursor.execute("UPDATE llm_requests SET full_prompt_sent = ? WHERE request_id = ?", (prompt_content, request_id))

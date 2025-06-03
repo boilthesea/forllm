@@ -58,10 +58,12 @@ graph TD
     *   **`config.py`**: Manages all static configuration values and constants for the application (database paths, API URLs, default settings, etc.).
     *   **`database.py`**: Handles all aspects of database interaction: provides connection objects (`get_db`), manages connection teardown (`close_db`), and contains the initial database schema creation and migration logic (`init_db`). Also includes logic for persona CRUD, versioning, assignment, and fallback. Contains helper functions for the user activity feature.
     *   **`markdown_config.py`**: Configures and provides the `MarkdownIt` instance used for rendering Markdown content to HTML, including custom Pygments syntax highlighting.
+    *   **`tokenizer_utils.py`**: Implements token counting functionality using the `tiktoken` library. Provides a `count_tokens` function to estimate the number of tokens in a given text string.
     *   **`llm_queue.py`**: Manages the in-memory queue for LLM requests (`llm_request_queue`) and contains the main loop for the background LLM processing thread (`llm_worker`), which polls both the in-memory and database queues.
-    *   **`llm_processing.py`**: Contains the core logic for interacting with the LLM service (currently Ollama), including prompt construction, API call execution (`process_llm_request`), streaming response handling, and error management for LLM communication. Includes logic to determine and fetch the appropriate persona prompt instructions for an LLM request based on user override, subforum default, global default, or built-in fallback.
+    *   **`llm_processing.py`**: Contains the core logic for interacting with the LLM service (currently Ollama), including prompt construction, API call execution (`process_llm_request`), streaming response handling, and error management for LLM communication. Includes logic to determine and fetch the appropriate persona prompt instructions for an LLM request based on user override, subforum default, global default, or built-in fallback. Logs token counts of prompt components.
     *   **`scheduler.py`**: Implements the logic to determine if the LLM processor should be active based on defined schedules (`is_processing_time`), and provides utility functions to get current status and next schedule information.
     *   **`routes/main_routes.py`**: Defines Flask Blueprint for main application routes, including serving the `index.html` and static assets.
+    *   **`routes/utility_routes.py`**: Defines Flask Blueprint for utility API endpoints, such as `/api/utils/count_tokens_for_text` for estimating token counts of text.
     *   **`routes/forum_routes.py`**: Defines Flask Blueprint for API endpoints related to forum management: subforums, topics, and posts (CRUD operations, listing). Includes endpoints for assigning/unassigning multiple personas per subforum and setting the per-subforum default persona. Handles parsing of `@[Persona Name](persona_id)` tags from post content, stores extracted IDs in `posts.tagged_personas_in_content`, and queues `llm_requests` for tagged personas.
     *   **`routes/llm_routes.py`**: Defines Flask Blueprint for API endpoints related to LLM interactions: requesting an LLM response for a post and fetching available Ollama models. Allows persona override at LLM request time. `POST /api/posts/<int:post_id>/tag_persona`: Allows users to tag an existing post with a persona, creating an entry in `post_persona_tags` and queuing an `llm_request`.
     *   **`routes/schedule_routes.py`**: Defines Flask Blueprint for API endpoints managing LLM processing schedules: CRUD operations for schedules, and status/next schedule information.
@@ -98,7 +100,7 @@ graph TD
     *   **`settings.js`**: Deals with application-wide settings, including loading, rendering, and saving user preferences like selected LLM model, personas and LLM link security. Also handles loading available Ollama models. Integrates persona management into the settings navigation and display.
     *   **`queue.js`**: Manages the display of the LLM processing queue, including fetching and rendering the list of queued tasks.
     *   **`activity.js`**: Contains the frontend JavaScript logic for the Recent Activity Page, including fetching data from the activity API endpoints (recent topics, replies, personas) and rendering it into the respective panels on the activity page. Manages navigation from activity items to their respective content areas.
-    *   **`editor.js`**: Responsible for initializing and configuring the EasyMDE Markdown editor instances used for creating new topics and replies.
+    *   **`editor.js`**: Responsible for initializing and configuring the EasyMDE Markdown editor instances used for creating new topics and replies. Integrates with a backend service to display an estimated token count for the text being edited.
 
 *   **`static/css/base.css`**: Contains fundamental styles like body, typography, basic resets, and CSS variables. 
 *   **`static/css/layout.css`**: Handles the main structural layout, including `main`, `nav#subforum-nav`, `section`, and future layouts. 
@@ -106,7 +108,7 @@ graph TD
 *   **`static/css/modals.css`**: Contains styles for all modal windows (general, schedule, settings, link warning) and related elements like close buttons and error messages. 
 *   **`static/css/forum.css`**: Styles specific to the forum content display (topic lists, posts, LLM responses, metadata, actions, threading). 
 *   **`static/css/markdown.css`**: Styles for rendering Markdown elements and Pygments syntax highlighting within posts. 
-*   **`static/css/editor.css`**: Contains style overrides specifically for the EasyMDE editor.
+*   **`static/css/editor.css`**: Contains style overrides specifically for the EasyMDE editor. Includes styles for the token count display associated with editors.
 *   **`static/css/status-indicator.css`**: Styles for the processing status indicator.
 
 *   **`forllm_data.db`** (Database File):
@@ -200,6 +202,11 @@ graph TD
     *   Modify the "Request LLM Response" UI to allow selecting from configured LLM backends and saved/default personas. (Model selection from settings is implemented, but not persona selection at request time).
     *   Store selected model/persona in the `llm_requests` table. (Model is stored, persona is default).
 *   **Basic Prompt Management:** [TODO]
+    *   **Tokenizer Integration:**
+        *   Implemented `tiktoken`-based tokenizer (`cl100k_base`) for accurate token counting.
+        *   Backend function `count_tokens(text)` available in `forllm_server.tokenizer_utils`.
+        *   LLM processing logs token counts for prompt components (persona, user post, attachments).
+        *   Frontend UI in the post/reply editor displays an estimated token count for the current text, updated dynamically via `/api/utils/count_tokens_for_text`.
     * Chat history construction for replies.
 *   **Basic File Attachment:** [DONE]
 *   **Improved Error Handling & Status:** [WIP]

@@ -11,27 +11,27 @@ Here's a phased development plan, incorporating your groundwork steps and then e
 ---
 
 *   **Sub-Phase 1.1: Tokenizer Setup & Basic Integration**
-    *   **Task 1.1.1 (Backend): Install and Configure Tokenizer.**
-        *   In `routes/tokenizer_utils.py`:
-            *   Add `tiktoken` to your project dependencies.
-            *   Implement a function `count_tokens(text: str) -> int` using `tiktoken.get_encoding("cl100k_base").encode(text)`.
-            *   Provide a fallback or clear error if `tiktoken` fails to initialize.
+    *   **[DONE] Task 1.1.1 (Backend): Install and Configure Tokenizer.**
+        *   In `forllm_server/tokenizer_utils.py` (Note: actual path):
+            *   Added `tiktoken` to `requirements.txt`.
+            *   Implemented `count_tokens(text: str) -> int` using `tiktoken.get_encoding("cl100k_base").encode(text)`.
+            *   Includes logging for initialization success or failure, and returns 0 if not initialized.
         *   Benefit: Establishes a consistent way to estimate token counts. `cl100k_base` is a good general-purpose default.
-    *   **Task 1.1.2 (Backend): Initial Token Counting for Core Components.**
-        *   Modify `llm_processing.py` where prompts are constructed (before sending to Ollama):
-            *   Calculate token counts for:
-                *   The system prompt (if you have a global one).
-                *   The selected persona's `prompt_instructions`.
-                *   The user's current post content.
-                *   Content of any attachments (if they are text-based and part of the prompt).
-            *   Initially, just log these counts or use them for internal debugging.
+    *   **[DONE] Task 1.1.2 (Backend): Initial Token Counting for Core Components.**
+        *   Modified `forllm_server/llm_processing.py` where prompts are constructed (before sending to Ollama):
+            *   Calculates and logs token counts for:
+                *   `persona_instructions`
+                *   `original_post['content']` (user's current post content)
+                *   `attachments_string` (concatenated text from attachments)
+                *   The final `prompt_content`
+            *   These counts are logged via Python's `logging` module.
         *   Benefit: Understands the token cost of existing prompt components.
-    *   **Task 1.1.3 (Frontend - Optional Early Feedback): Basic Token Estimator UI.**
-        *   In `static/js/editor.js` or `static/js/forum.js` (where new posts/replies are handled):
+    *   **[DONE] Task 1.1.3 (Frontend - Optional Early Feedback): Basic Token Estimator UI.**
+        *   In `static/js/editor.js`:
             *   As the user types in the EasyMDE editor for a new post/reply:
-                *   On `keyup` or a debounced change event, send the current text to a new backend endpoint (e.g., `/api/utils/count_tokens_for_text`) that uses the `count_tokens` function.
-                *   Display this estimated count near the editor: "Post content: ~X tokens".
-        *   Benefit: Gives the user immediate (though potentially slightly delayed if using backend) feedback on their post's size.
+                *   On a debounced `change` event, sends the current text to a new backend endpoint `/api/utils/count_tokens_for_text` (in `forllm_server/routes/utility_routes.py`) which uses the `count_tokens` function.
+                *   Displays this estimated count (`Tokens: ~X`) near the editor. Added CSS for styling in `static/css/editor.css`.
+        *   Benefit: Gives the user immediate feedback on their post's size.
 
 ---
 

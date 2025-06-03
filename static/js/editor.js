@@ -262,6 +262,7 @@ if (newTopicContentInput) {
         element: newTopicContentInput
     });
     initializeEditorPersonaTagging(newTopicEditor);
+    initializeTokenCountDisplay(newTopicEditor, 'newTopicContent'); // Added token count display
 }
 
 if (replyContentInput) {
@@ -270,4 +271,90 @@ if (replyContentInput) {
         element: replyContentInput
     });
     initializeEditorPersonaTagging(replyEditor);
+    initializeTokenCountDisplay(replyEditor, 'replyContent'); // Added token count display
+}
+
+// --- Token Counting ---
+
+// Debounce function
+function debounce(func, delay) {
+    let timeout;
+    return function(...args) {
+        const context = this;
+        clearTimeout(timeout);
+        timeout = setTimeout(() => func.apply(context, args), delay);
+    };
+}
+
+// Function to update token count via API
+async function updateTokenCountDisplay(editorInstance, displayElement) {
+    if (!editorInstance) return;
+    const text = editorInstance.value();
+    if (text === null || text.trim() === '') {
+        displayElement.textContent = 'Tokens: ~0';
+        return;
+    }
+
+    try {
+        const response = await fetch('/api/utils/count_tokens_for_text', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ text: text }),
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json();
+            console.error('Error fetching token count:', errorData.error || response.statusText);
+            displayElement.textContent = 'Tokens: Error';
+            return;
+        }
+
+        const data = await response.json();
+        displayElement.textContent = `Tokens: ~${data.token_count}`;
+    } catch (error) {
+        console.error('Failed to send request for token count:', error);
+        displayElement.textContent = 'Tokens: Error';
+    }
+}
+
+// Function to set up token count for an editor instance
+function initializeTokenCountDisplay(editorInstance, editorIdSuffix) {
+    if (!editorInstance || !editorInstance.codemirror) {
+        console.warn(`Editor instance or CodeMirror not found for ID suffix ${editorIdSuffix}. Token count disabled.`);
+        return;
+    }
+
+    // Create the token count display element
+    let tokenCountElement = document.getElementById(`token-count-${editorIdSuffix}`);
+    if (!tokenCountElement) {
+        tokenCountElement = document.createElement('div');
+        tokenCountElement.id = `token-count-${editorIdSuffix}`;
+        tokenCountElement.className = 'editor-token-count'; // For styling
+        tokenCountElement.textContent = 'Tokens: ~0';
+
+        // Insert the token count display after the editor's container
+        const editorWrapper = editorInstance.element.nextSibling; // EasyMDE typically wraps the textarea, and this gets the .EasyMDEContainer
+        if (editorWrapper && editorWrapper.classList && editorWrapper.classList.contains('EasyMDEContainer')) {
+            editorWrapper.parentNode.insertBefore(tokenCountElement, editorWrapper.nextSibling);
+        } else if (editorInstance.element.parentElement) {
+            // Fallback if structure is slightly different
+            editorInstance.element.parentElement.appendChild(tokenCountElement);
+        } else {
+            console.warn(`Could not find a suitable place to insert token count display for ${editorIdSuffix}.`);
+            return;
+        }
+    }
+
+    // Debounced update function specific to this editor instance
+    const debouncedTokenUpdate = debounce(() => {
+        updateTokenCountDisplay(editorInstance, tokenCountElement);
+    }, 500); // 500ms debounce delay
+
+    // Listen for changes in the editor
+    editorInstance.codemirror.on('change', debouncedTokenUpdate);
+
+    // Initial count update
+    updateTokenCountDisplay(editorInstance, tokenCountElement);
 }
