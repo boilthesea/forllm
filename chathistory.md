@@ -36,30 +36,35 @@ Here's a phased development plan, incorporating your groundwork steps and then e
 ---
 
 *   **Sub-Phase 1.2: Model Context Window Discovery (Ollama)**
-    *   **Task 1.2.1 (Backend): Fetch Model Details from Ollama.**
-        *   In `llm_processing.py` or a new `ollama_utils.py`:
-            *   Create a function `get_ollama_model_details(model_name: str) -> dict`.
-                *   This function will make an API call to Ollama's `/api/show` endpoint for the given `model_name`.
-                *   Handle potential errors (model not found, Ollama not reachable).
-        *   **Benefit:** Centralizes Ollama model introspection.
-    *   **Task 1.2.2 (Backend): Parse `num_ctx` from Model Details.**
-        *   In `get_ollama_model_details` or a helper:
-            *   Parse the `parameters` string in the response from `/api/show` to find the `num_ctx` value (or other relevant context length parameters like `max_sequence_length`).
-            *   Return this `num_ctx` value (or `None` if not found).
-        *   **Benefit:** Extracts the crucial context window size.
-    *   **Task 1.2.3 (Backend & Database - Optional Persisting): Cache Model Context Length.**
-        *   In `database.py`:
-            *   Consider adding a new table: `llm_model_metadata (model_name TEXT PRIMARY KEY, context_window INTEGER, last_checked TIMESTAMP)`.
-        *   Modify `llm_processing.py`:
-            *   When `get_ollama_model_details` successfully retrieves `num_ctx`, store/update it in this new table.
-            *   Before calling `/api/show`, check this table first to avoid redundant API calls. Refresh periodically or when explicitly requested.
-        *   **Benefit:** Reduces API calls to Ollama and speeds up context length retrieval.
-    *   **Task 1.2.4 (Frontend & Backend): Display Model Context Length in Settings.**
+    *   **[DONE] Task 1.2.1 (Backend): Fetch Model Details from Ollama.**
+        *   In `forllm_server/ollama_utils.py` (new file):
+            *   Created function `get_ollama_model_details(model_name: str) -> dict`.
+                *   Makes an API call to Ollama's `/api/show`.
+                *   Handles errors.
+        *   Benefit: Centralizes Ollama model introspection.
+    *   **[DONE] Task 1.2.2 (Backend): Parse `num_ctx` from Model Details.**
+        *   In `forllm_server/ollama_utils.py`:
+            *   Created `parse_model_context_window(model_details: dict) -> int | None`.
+            *   Parses the `parameters` string from `/api/show` response (or checks `model_info`) for `num_ctx` or `max_sequence_length`.
+        *   Benefit: Extracts the crucial context window size.
+    *   **[DONE] Task 1.2.3 (Backend & Database): Cache Model Context Length.**
+        *   In `forllm_server/database.py`:
+            *   Added new table: `llm_model_metadata (model_name TEXT PRIMARY KEY, context_window INTEGER, last_checked DATETIME DEFAULT CURRENT_TIMESTAMP)`. Table created in `init_db()`.
+            *   Added helper functions `get_cached_model_context_window` and `cache_model_context_window`.
+        *   In `forllm_server/ollama_utils.py`:
+            *   Implemented `get_model_context_window(model_name: str, db)` which uses the database cache first, then falls back to fetching from Ollama via `get_ollama_model_details` and `parse_model_context_window`, then caches the result.
+        *   Benefit: Reduces API calls to Ollama and speeds up context length retrieval.
+    *   **[DONE] Task 1.2.4 (Frontend & Backend): Display Model Context Length in Settings.**
+        *   In `forllm_server/routes/llm_routes.py`:
+            *   Created new GET endpoint: `/api/llm/models/<path:model_name>/context_window`. Uses `ollama_utils.get_model_context_window`.
         *   In `static/js/settings.js`:
-            *   When displaying the list of available Ollama models, for the currently selected model (or all of them if fetched):
-                *   Call a new backend endpoint (e.g., `/api/llm/models/<model_name>/context_window`) that uses the logic from 1.2.1-1.2.3.
-                *   Display: "Selected Model (<model_name>): Detected Context ~Y tokens".
-        *   **Benefit:** Makes users aware of their chosen model's capabilities.
+            *   Modified `loadOllamaModels` and added `fetchAndDisplayModelContextWindow` and `handleModelSelectionChange`.
+            *   When displaying the list of available Ollama models, or when the selection changes, calls the new backend endpoint.
+            *   Displays: "Selected Model (<model_name>): (Context: ~Y tokens)" or "(Context: Not Available)" in the settings UI (via a new `<span>` in `index.html`).
+        *   Benefit: Makes users aware of their chosen model's capabilities.
+
+    **Implementation Summary for Sub-Phase 1.2:**
+    This sub-phase was completed by introducing a new utility module `forllm_server/ollama_utils.py` which handles direct communication with the Ollama `/api/show` endpoint to fetch model details and parse the context window size (`num_ctx` or `max_sequence_length`). To optimize performance, a caching layer was added using a new SQLite table `llm_model_metadata` (managed in `forllm_server/database.py`), which stores the retrieved context window sizes. A new API endpoint `/api/llm/models/<path:model_name>/context_window` was created in `forllm_server/routes/llm_routes.py` to expose this information. The frontend was updated in `static/js/settings.js` and `templates/index.html` to call this endpoint and display the context window for the selected Ollama model on the settings page, providing users with immediate feedback on model capabilities.
 
 ---
 

@@ -1,6 +1,7 @@
 import sqlite3
 import datetime
-from flask import g
+import logging # ADDED
+from flask import g, current_app # Added current_app for logger access
 from .config import DATABASE, CURRENT_USER_ID, CURRENT_USERNAME, DEFAULT_MODEL
 
 def get_db():
@@ -473,7 +474,80 @@ def init_db():
         # db.rollback() # Only if part of a transaction that should be reverted entirely
 
     print("Database initialization complete.")
+
+    # --- Create llm_model_metadata table (NEW) ---
+    # This section is outside the initial if/else, so it runs every time to ensure table existence.
+    print("Verifying/Creating llm_model_metadata table...")
+    try:
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS llm_model_metadata (
+                model_name TEXT PRIMARY KEY,
+                context_window INTEGER,
+                last_checked DATETIME DEFAULT CURRENT_TIMESTAMP
+            );
+        """)
+        db.commit()
+        print("llm_model_metadata table verified/created.")
+    except sqlite3.Error as e:
+        print(f"Error creating/verifying llm_model_metadata table: {e}")
+        # No rollback needed here usually for CREATE IF NOT EXISTS, but good practice if part of larger transaction block
+        # db.rollback()
+
     db.close()
+
+# --- LLM Model Metadata Cache Logic ---
+
+def get_cached_model_context_window(db, model_name: str) -> int | None:
+    """
+    Retrieves the cached context window size for a given model.
+    Args:
+        db: Database connection object.
+        model_name: The name of the model.
+    Returns:
+        The context window size as an integer if found and valid, None otherwise.
+    """
+    logger = current_app.logger if current_app and hasattr(current_app, 'logger') else logging.getLogger(__name__)
+    try:
+        cursor = db.execute("SELECT context_window FROM llm_model_metadata WHERE model_name = ?", (model_name,))
+        row = cursor.fetchone()
+        if row and row[0] is not None:
+            logger.info(f"Found cached context window for {model_name}: {row[0]}")
+            return int(row[0])
+        logger.info(f"No cached context window found for {model_name}.")
+        return None
+    except sqlite3.Error as e:
+        logger.error(f"Database error in get_cached_model_context_window for {model_name}: {e}")
+        return None
+    except ValueError as e:
+        logger.error(f"ValueError converting context window for {model_name}: {e}")
+        return None
+
+
+def cache_model_context_window(db, model_name: str, context_window: int):
+    """
+    Caches the context window size for a given model.
+    Updates the last_checked timestamp automatically.
+    Args:
+        db: Database connection object.
+        model_name: The name of the model.
+        context_window: The context window size to cache.
+    """
+    logger = current_app.logger if current_app and hasattr(current_app, 'logger') else logging.getLogger(__name__)
+    if model_name is None or context_window is None:
+        logger.warning(f"Attempted to cache None model_name or context_window for {model_name}.")
+        return
+    try:
+        db.execute("""
+            INSERT INTO llm_model_metadata (model_name, context_window, last_checked)
+            VALUES (?, ?, CURRENT_TIMESTAMP)
+            ON CONFLICT(model_name) DO UPDATE SET
+                context_window = excluded.context_window,
+                last_checked = CURRENT_TIMESTAMP;
+        """, (model_name, context_window))
+        db.commit()
+        logger.info(f"Cached context window for {model_name}: {context_window}")
+    except sqlite3.Error as e:
+        logger.error(f"Database error in cache_model_context_window for {model_name}: {e}")
 
 # ------------------- PERSONA MANAGEMENT LOGIC -------------------
 

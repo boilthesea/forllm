@@ -241,12 +241,17 @@ export async function loadSettings() {
 export async function loadOllamaModels() {
     const modelSelectElement = settingsPageContent.querySelector('#model-select');
     const settingsErrorElement = settingsPageContent.querySelector('#settings-error');
+    const selectedOllamaModelDisplay = settingsPageContent.querySelector('#selected-ollama-model-display');
 
     // Ensure the select element exists before proceeding
     if (!modelSelectElement) {
          console.warn("Model select element not found yet in settings page.");
          return;
     }
+    if (!selectedOllamaModelDisplay) {
+        console.warn("Selected Ollama model display element not found.");
+    }
+
 
     // Set loading state
     modelSelectElement.innerHTML = '<option value="">Loading models...</option>';
@@ -256,27 +261,113 @@ export async function loadOllamaModels() {
     try {
         const modelsResult = await apiRequest('/api/ollama/models');
         let models = [];
-        if (Array.isArray(modelsResult)) {
+        let defaultModelFromBackend = modelsResult && modelsResult.models && modelsResult.models.length > 0 ? modelsResult.models[0] : null;
+
+        if (Array.isArray(modelsResult)) { // Direct array of model names
             models = modelsResult;
-        } else if (modelsResult && Array.isArray(modelsResult.models)) {
-            // Handle case where backend returns default list due to connection issue
+            defaultModelFromBackend = models.length > 0 ? models[0] : null;
+        } else if (modelsResult && Array.isArray(modelsResult.models)) { // Object with models array and possibly error
             models = modelsResult.models;
-            console.warn("Ollama connection issue reported by backend, using default model list:", modelsResult.error);
-             if(settingsErrorElement) settingsErrorElement.textContent = "Warning: Ollama connection issue. Displaying default models.";
+            if (modelsResult.error) {
+                console.warn("Ollama connection issue reported by backend, using default model list:", modelsResult.error);
+                if(settingsErrorElement) settingsErrorElement.textContent = "Warning: Ollama connection issue. Displaying default models.";
+            }
         } else {
-             // Handle unexpected format or error from backend
              console.error("Unexpected format or error fetching Ollama models:", modelsResult);
-             models = currentSettings.selectedModel ? [currentSettings.selectedModel] : []; // Use current if available, else empty
+             models = currentSettings.selectedModel ? [currentSettings.selectedModel] : [];
              if(settingsErrorElement) settingsErrorElement.textContent = "Error fetching models. Using current selection if available.";
         }
-        renderModelOptions(modelSelectElement, models, currentSettings.selectedModel); // Populate the select
+
+        // Determine the model to select: current setting, or first from list, or null
+        let modelToSelect = currentSettings.selectedModel || defaultModelFromBackend;
+        if (models.length === 0 && !currentSettings.selectedModel) {
+            modelToSelect = null; // No models, no selection
+        } else if (models.length > 0 && !models.includes(modelToSelect) && !currentSettings.selectedModel) {
+            // If currentSettings.selectedModel was null, and modelToSelect (first from backend) isn't in the (possibly filtered) list
+            modelToSelect = models[0]; // Fallback to the first model in the processed list
+        }
+
+
+        renderModelOptions(modelSelectElement, models, modelToSelect);
+
+        if (selectedOllamaModelDisplay) {
+            selectedOllamaModelDisplay.textContent = modelToSelect || 'None';
+        }
+        currentSettings.selectedModel = modelToSelect; // Update current setting state
+
+        if (modelToSelect && modelToSelect !== 'None') {
+            await fetchAndDisplayModelContextWindow(modelToSelect);
+        } else {
+            const contextDisplay = settingsPageContent.querySelector('#selected-model-context-window-display');
+            if (contextDisplay) contextDisplay.textContent = '';
+        }
+
+        // Add/Update event listener for changes
+        modelSelectElement.removeEventListener('change', handleModelSelectionChange); // Remove previous if any
+        modelSelectElement.addEventListener('change', handleModelSelectionChange);
+
     } catch (error) {
         console.error("Error fetching Ollama models:", error);
-        // Handle fetch error
-        renderModelOptions(modelSelectElement, currentSettings.selectedModel ? [currentSettings.selectedModel] : [], currentSettings.selectedModel); // Use current if available
+        renderModelOptions(modelSelectElement, currentSettings.selectedModel ? [currentSettings.selectedModel] : [], currentSettings.selectedModel);
         if(settingsErrorElement) settingsErrorElement.textContent = `Could not fetch models: ${error.message}`;
+        if (selectedOllamaModelDisplay) {
+            selectedOllamaModelDisplay.textContent = currentSettings.selectedModel || 'Error';
+        }
+         // Attempt to show context for a previously selected model if list fails to load
+        if (currentSettings.selectedModel) {
+            await fetchAndDisplayModelContextWindow(currentSettings.selectedModel);
+        }
     } finally {
-         if (modelSelectElement) modelSelectElement.disabled = false; // Re-enable select even on error
+         if (modelSelectElement) modelSelectElement.disabled = false;
+    }
+}
+
+async function handleModelSelectionChange(event) {
+    const selectedModel = event.target.value;
+    const selectedOllamaModelDisplay = settingsPageContent.querySelector('#selected-ollama-model-display');
+    if (selectedOllamaModelDisplay) {
+        selectedOllamaModelDisplay.textContent = selectedModel;
+    }
+    currentSettings.selectedModel = selectedModel;
+    // updateSetting('selected_model', selectedModel); // If you have a function to save to backend immediately
+    await fetchAndDisplayModelContextWindow(selectedModel);
+}
+
+// New function to fetch and display context window
+async function fetchAndDisplayModelContextWindow(modelName) {
+    const displayElement = settingsPageContent.querySelector('#selected-model-context-window-display');
+    if (!displayElement) {
+        console.error("Context window display element not found");
+        return;
+    }
+
+    if (!modelName || modelName === 'None') {
+        displayElement.textContent = '';
+        return;
+    }
+
+    displayElement.textContent = ' (Context: Loading...)'; // Temporary text
+
+    try {
+        const data = await apiRequest(`/api/llm/models/${encodeURIComponent(modelName)}/context_window`, 'GET');
+        // apiRequest is expected to throw on non-ok responses, so direct check for data
+        if (data && data.context_window !== undefined && data.context_window !== null) {
+            displayElement.textContent = ` (Context: ${data.context_window} tokens)`;
+        } else {
+             // This case might be reached if apiRequest resolves with no error but data is not as expected
+            displayElement.textContent = ' (Context: Not Available)';
+        }
+    } catch (error) { // error is expected to be an object from apiRequest with status and message
+        console.error(`Exception fetching context window for ${modelName}:`, error);
+        let errorMessage = 'Error';
+        if (error.status === 404) {
+            errorMessage = 'Not Available';
+        } else if (error.message) {
+            errorMessage = error.message;
+        } else if (error.status) {
+            errorMessage = `HTTP ${error.status}`;
+        }
+        displayElement.textContent = ` (Context: ${errorMessage})`;
     }
 }
 

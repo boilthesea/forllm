@@ -56,9 +56,10 @@ graph TD
 
 *   **`forllm_server/`** (Core Server Logic Package):
     *   **`config.py`**: Manages all static configuration values and constants for the application (database paths, API URLs, default settings, etc.).
-    *   **`database.py`**: Handles all aspects of database interaction: provides connection objects (`get_db`), manages connection teardown (`close_db`), and contains the initial database schema creation and migration logic (`init_db`). Also includes logic for persona CRUD, versioning, assignment, and fallback. Contains helper functions for the user activity feature.
+    *   **`database.py`**: Handles all aspects of database interaction: provides connection objects (`get_db`), manages connection teardown (`close_db`), and contains the initial database schema creation and migration logic (`init_db`). Also includes logic for persona CRUD, versioning, assignment, and fallback. Contains helper functions for the user activity feature *and model metadata caching*.
     *   **`markdown_config.py`**: Configures and provides the `MarkdownIt` instance used for rendering Markdown content to HTML, including custom Pygments syntax highlighting.
     *   **`tokenizer_utils.py`**: Implements token counting functionality using the `tiktoken` library. Provides a `count_tokens` function to estimate the number of tokens in a given text string.
+    *   **`ollama_utils.py`**: (NEW) Contains utility functions for interacting directly with the Ollama API, such as fetching detailed model information (including context window size) and parsing it.
     *   **`llm_queue.py`**: Manages the in-memory queue for LLM requests (`llm_request_queue`) and contains the main loop for the background LLM processing thread (`llm_worker`), which polls both the in-memory and database queues.
     *   **`llm_processing.py`**: Contains the core logic for interacting with the LLM service (currently Ollama), including prompt construction, API call execution (`process_llm_request`), streaming response handling, and error management for LLM communication. Includes logic to determine and fetch the appropriate persona prompt instructions for an LLM request based on user override, subforum default, global default, or built-in fallback. Logs token counts of prompt components.
     *   **`scheduler.py`**: Implements the logic to determine if the LLM processor should be active based on defined schedules (`is_processing_time`), and provides utility functions to get current status and next schedule information.
@@ -120,6 +121,10 @@ graph TD
         *   `posts`: User-generated content and LLM responses, forming threaded discussions.
             *   `tagged_personas_in_content` (TEXT, storing a JSON array of persona IDs from @mentions in content).
         *   `llm_requests`: Queue for LLM processing, tracking `status`, `model`, `persona`, `request_type` (e.g., 'respond_to_post', 'generate_persona'), and `request_params` (JSON string containing details for the request type).
+        *   `llm_model_metadata`: (NEW) Caches metadata about LLM models, primarily their context window size.
+            *   `model_name` (TEXT PRIMARY KEY): The unique name of the model.
+            *   `context_window` (INTEGER): The discovered context window size in tokens.
+            *   `last_checked` (DATETIME): Timestamp of when the metadata was last fetched/updated.
         *   `schedule`: Defines active hours and days for the LLM processor.
         *   `settings`: Stores application-wide settings like selected LLM model. Also stores the global default persona ID.
         *   `post_persona_tags`: Facilitates tagging existing posts to request a response from a specific persona.
