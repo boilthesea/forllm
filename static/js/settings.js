@@ -60,6 +60,9 @@ export function renderSettingsPage() {
         <select id="model-select">
             <option value="">Loading models...</option>
         </select>
+        <p style="margin-top: 5px;">Currently Selected: <strong id="selected-ollama-model-display">None</strong>
+           <span id="selected-model-context-window-display" style="font-size: 0.9em; color: #aaa;"></span>
+        </p>
     </div>
     <div class="setting-item">
         <label for="llm-link-security-toggle">LLM Link Security:</label>
