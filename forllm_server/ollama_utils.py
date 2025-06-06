@@ -106,9 +106,10 @@ def parse_model_context_window(model_details: dict) -> int | None:
         current_app.logger.debug(f"Model details causing error: {json.dumps(model_details, indent=2)}")
         return None
 
-def get_model_context_window(model_name: str, db) -> int | None:
+def get_model_context_window(model_name: str, db, force_refresh: bool = False) -> int | None:
     """
-    Gets the model context window, using cache first, then fetching from Ollama if not found.
+    Gets the model context window, using cache first (unless force_refresh is True),
+    then fetching from Ollama if not found or if refresh is forced.
 
     Args:
         model_name: The name of the model.
@@ -121,12 +122,17 @@ def get_model_context_window(model_name: str, db) -> int | None:
         current_app.logger.warning("get_model_context_window: model_name is empty.")
         return None
 
-    cached_window = get_cached_model_context_window(db, model_name)
-    if cached_window is not None:
-        current_app.logger.info(f"Using cached context window for {model_name}: {cached_window}")
-        return cached_window
+    if not force_refresh:
+        cached_window = get_cached_model_context_window(db, model_name)
+        if cached_window is not None:
+            current_app.logger.info(f"Using cached context window for {model_name}: {cached_window}")
+            return cached_window
+        current_app.logger.info(f"No cache found for {model_name} (or cache check skipped due to force_refresh={force_refresh}). Proceeding to fetch.")
+    else:
+        current_app.logger.info(f"Force refresh requested for {model_name}. Bypassing cache check.")
 
-    current_app.logger.info(f"No cache found for {model_name}. Fetching from Ollama.")
+    # If force_refresh is true, or if it's false but item was not in cache:
+    current_app.logger.info(f"Fetching context window from Ollama for {model_name}.")
 
     model_details = get_ollama_model_details(model_name)
     if not model_details:
@@ -134,9 +140,10 @@ def get_model_context_window(model_name: str, db) -> int | None:
 
     context_window = parse_model_context_window(model_details)
     if context_window is None:
+        current_app.logger.warning(f"Could not determine context window for {model_name} from Ollama.")
         return None
 
-    current_app.logger.info(f"Fetched and parsed context window for {model_name}: {context_window}. Caching now.")
+    current_app.logger.info(f"Fetched and parsed context window for {model_name}: {context_window}. Caching result.")
 
     try:
         cache_model_context_window(db, model_name, context_window)
@@ -186,38 +193,72 @@ if __name__ == '__main__':
     assert ctx_window == 4096
     print("Parse model context window tests (abbreviated, assume they pass from previous step).")
 
-    print("\n--- Testing get_model_context_window (with mocked DB & live Ollama if model exists) ---")
+    print("\n--- Testing get_model_context_window (with mocked DB & mocked Ollama interaction) ---")
 
+    # Store original functions to restore them later
     original_get_details = get_ollama_model_details
     original_parse_window = parse_model_context_window
 
-    def mock_get_details_success(model_name):
-        print(f"MOCK_OLLAMA: Called get_ollama_model_details for {model_name}")
-        if model_name == "test_model_cache_miss":
+    # Mock implementations for get_ollama_model_details and parse_model_context_window
+    # These mocks will simulate fetching details and parsing them.
+    def mock_get_details_for_test(model_name_param): # Renamed to avoid conflict
+        print(f"MOCK_OLLAMA (get_details): Called for {model_name_param}")
+        if model_name_param == "test_model_force_refresh_new_value":
+             # Simulate new value for force refresh test
+            return {"details": {"parameters": "num_ctx 3000"}} # New context window value
+        elif model_name_param.startswith("test_model"):
             return {"details": {"parameters": "num_ctx 2048"}}
         return None
 
-    def mock_parse_window_success(details):
-        print("MOCK_OLLAMA: Called parse_model_context_window")
-        if details and details.get("details", {}).get("parameters") == "num_ctx 2048":
-            return 2048
+    def mock_parse_window_for_test(details_param): # Renamed to avoid conflict
+        print(f"MOCK_OLLAMA (parse_window): Called with details: {details_param}")
+        if details_param and "details" in details_param and "parameters" in details_param["details"]:
+            params_str = details_param["details"]["parameters"]
+            if "num_ctx 3000" in params_str:
+                return 3000
+            elif "num_ctx 2048" in params_str:
+                return 2048
         return None
 
-    get_ollama_model_details = mock_get_details_success
-    parse_model_context_window = mock_parse_window_success
+    # Replace the actual functions with mocks for testing this unit
+    get_ollama_model_details = mock_get_details_for_test
+    parse_model_context_window = mock_parse_window_for_test
 
+    # Test scenarios
     print("\nTest A: Cache miss, successful fetch and cache")
     mock_db_cache.clear()
-    window_miss = get_model_context_window("test_model_cache_miss", None)
-    print(f"Result (miss): {window_miss}, Expected: 2048")
-    assert window_miss == 2048
-    assert mock_db_cache.get("test_model_cache_miss") == 2048
+    window_a = get_model_context_window("test_model_a", None, force_refresh=False)
+    print(f"Result (A - miss): {window_a}, Expected: 2048")
+    assert window_a == 2048, f"Test A failed: Expected 2048, got {window_a}"
+    assert mock_db_cache.get("test_model_a") == 2048, "Test A failed: Value not cached correctly"
 
     print("\nTest B: Cache hit")
-    window_hit = get_model_context_window("test_model_cache_miss", None)
-    print(f"Result (hit): {window_hit}, Expected: 2048")
-    assert window_hit == 2048
+    # get_ollama_model_details should NOT be called here
+    window_b = get_model_context_window("test_model_a", None, force_refresh=False)
+    print(f"Result (B - hit): {window_b}, Expected: 2048")
+    assert window_b == 2048, f"Test B failed: Expected 2048, got {window_b}"
 
+    print("\nTest C: Force refresh, successful fetch and cache update")
+    mock_db_cache["test_model_force_refresh_new_value"] = 2048 # Pre-populate cache with old value
+    print(f"Cache before force refresh for 'test_model_force_refresh_new_value': {mock_db_cache.get('test_model_force_refresh_new_value')}")
+    # get_ollama_model_details SHOULD be called here, and it will return a new value (3000)
+    window_c = get_model_context_window("test_model_force_refresh_new_value", None, force_refresh=True)
+    print(f"Result (C - force refresh): {window_c}, Expected: 3000")
+    assert window_c == 3000, f"Test C failed: Expected 3000, got {window_c}"
+    assert mock_db_cache.get("test_model_force_refresh_new_value") == 3000, "Test C failed: Cache not updated with new value"
+
+    print("\nTest D: Force refresh on a non-cached item")
+    mock_db_cache.clear()
+    window_d = get_model_context_window("test_model_d_force_non_cached", None, force_refresh=True)
+    # Assuming test_model_d_force_non_cached resolves to 2048 by mock_get_details_for_test
+    # (as it starts with "test_model")
+    expected_val_d = 2048
+    print(f"Result (D - force refresh non-cached): {window_d}, Expected: {expected_val_d}")
+    assert window_d == expected_val_d, f"Test D failed: Expected {expected_val_d}, got {window_d}"
+    assert mock_db_cache.get("test_model_d_force_non_cached") == expected_val_d, "Test D failed: Value not cached correctly"
+
+
+    # Restore original functions
     get_ollama_model_details = original_get_details
     parse_model_context_window = original_parse_window
     get_cached_model_context_window = original_get_cached

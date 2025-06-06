@@ -3,7 +3,7 @@ import requests
 from flask import Blueprint, request, jsonify, current_app # Added current_app
 from ..database import get_db, get_effective_persona_for_subforum, get_persona # Import get_persona
 from ..config import OLLAMA_TAGS_URL, DEFAULT_MODEL, CURRENT_USER_ID # Added CURRENT_USER_ID
-from .. import ollama_utils # Added ollama_utils import
+from ..ollama_utils import get_model_context_window # Changed import
 
 llm_api_bp = Blueprint('llm_api', __name__, url_prefix='/api')
 
@@ -73,28 +73,30 @@ def get_llm_model_context_window_route(model_name):
     current_app.logger.info(f"Route hit: /api/llm/models/{model_name}/context_window")
     db = get_db()
 
+    # Get 'refresh' query parameter
+    force_refresh_str = request.args.get('refresh', 'false')
+    force_refresh = force_refresh_str.lower() == 'true'
+    current_app.logger.info(f"Force refresh parameter: {force_refresh}")
+
     try:
         # Use the get_model_context_window function from ollama_utils
-        # This function handles caching and fetching from Ollama
-        context_window = ollama_utils.get_model_context_window(model_name, db)
+        # This function handles caching and fetching from Ollama, now with force_refresh
+        context_window_value = get_model_context_window(model_name, db, force_refresh=force_refresh)
 
-        if context_window is not None:
-            current_app.logger.info(f"Successfully retrieved context window for {model_name}: {context_window}")
-            return jsonify({
-                "model_name": model_name,
-                "context_window": context_window
-            }), 200
+        if context_window_value is not None:
+            current_app.logger.info(f"Successfully retrieved context window for {model_name} (force_refresh={force_refresh}): {context_window_value}")
+            return jsonify({'context_window': context_window_value}), 200 # Adjusted success response
         else:
             # This means it wasn't in cache and couldn't be fetched from Ollama (e.g., model not found by Ollama)
             current_app.logger.warning(f"Context window not found for model {model_name} (neither in cache nor from Ollama).")
-            return jsonify({
-                "error": f"Context window information not available for model '{model_name}'. Ensure the model exists and is accessible by the Ollama server."
-            }), 404
+            # Adjusted error response to match request
+            return jsonify({'context_window': None, 'error': 'Context window not found for model.'}), 404
 
     except Exception as e:
         current_app.logger.error(f"Error getting context window for model {model_name}: {e}")
         # It's good practice to avoid sending generic exception details to the client
         # For debugging, you might log e, but return a more generic error message.
+        # Keeping generic error for 500, but the 404 is now specific as per request.
         return jsonify({"error": "An internal server error occurred while retrieving model context window."}), 500
 
 # New route to get the list of queued requests

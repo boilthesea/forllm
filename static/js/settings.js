@@ -299,7 +299,7 @@ export async function loadOllamaModels() {
         currentSettings.selectedModel = modelToSelect; // Update current setting state
 
         if (modelToSelect && modelToSelect !== 'None') {
-            await fetchAndDisplayModelContextWindow(modelToSelect);
+            await fetchAndDisplayModelContextWindow(modelToSelect, false); // Explicitly false
         } else {
             const contextDisplay = settingsPageContent.querySelector('#selected-model-context-window-display');
             if (contextDisplay) contextDisplay.textContent = '';
@@ -318,7 +318,7 @@ export async function loadOllamaModels() {
         }
          // Attempt to show context for a previously selected model if list fails to load
         if (currentSettings.selectedModel) {
-            await fetchAndDisplayModelContextWindow(currentSettings.selectedModel);
+            await fetchAndDisplayModelContextWindow(currentSettings.selectedModel, false); // Explicitly false
         }
     } finally {
          if (modelSelectElement) modelSelectElement.disabled = false;
@@ -333,44 +333,63 @@ async function handleModelSelectionChange(event) {
     }
     currentSettings.selectedModel = selectedModel;
     // updateSetting('selected_model', selectedModel); // If you have a function to save to backend immediately
-    await fetchAndDisplayModelContextWindow(selectedModel);
+    await fetchAndDisplayModelContextWindow(selectedModel, false); // Explicitly false
 }
 
 // New function to fetch and display context window
-async function fetchAndDisplayModelContextWindow(modelName) {
+async function fetchAndDisplayModelContextWindow(modelName, isForcedRefresh = false) {
     const displayElement = settingsPageContent.querySelector('#selected-model-context-window-display');
     if (!displayElement) {
         console.error("Context window display element not found");
         return;
     }
 
+    // 5. If !modelName || modelName === 'None', set textContent to '' and no refresh icon.
     if (!modelName || modelName === 'None') {
         displayElement.textContent = '';
         return;
     }
 
+    displayElement.innerHTML = ''; // Clear previous content, including any refresh icon
     displayElement.textContent = ' (Context: Loading...)'; // Temporary text
 
+    const showErrorState = () => {
+        displayElement.innerHTML = ''; // Clear loading text
+        displayElement.textContent = 'context limit unavailable '; // 3. Set text content
+
+        const refreshSpan = document.createElement('span'); // 3. Create span
+        refreshSpan.textContent = '🔄'; // 3. Set textContent
+        refreshSpan.style.cursor = 'pointer'; // 3. Style cursor
+        refreshSpan.style.marginLeft = '5px'; // 3. Style margin
+        refreshSpan.title = 'Refresh context window'; // 3. Add title (aria-label is also good)
+        refreshSpan.setAttribute('aria-label', 'Refresh context window');
+
+        refreshSpan.addEventListener('click', (event) => { // 3. Attach event listener
+            event.preventDefault(); // 3. Prevent default
+            fetchAndDisplayModelContextWindow(modelName, true); // 3. Call self, with force refresh
+        });
+        displayElement.appendChild(refreshSpan); // 3. Append span
+    };
+
     try {
-        const data = await apiRequest(`/api/llm/models/${encodeURIComponent(modelName)}/context_window`, 'GET');
-        // apiRequest is expected to throw on non-ok responses, so direct check for data
+        let apiUrl = `/api/llm/models/${encodeURIComponent(modelName)}/context_window`;
+        if (isForcedRefresh) {
+            apiUrl += '?refresh=true';
+        }
+        const data = await apiRequest(apiUrl, 'GET');
+
+        // 2. API call successful and data.context_window is available
         if (data && data.context_window !== undefined && data.context_window !== null) {
             displayElement.textContent = ` (Context: ${data.context_window} tokens)`;
         } else {
-             // This case might be reached if apiRequest resolves with no error but data is not as expected
-            displayElement.textContent = ' (Context: Not Available)';
+            // API call was successful but context_window is null/undefined (e.g. API returned 404, which apiRequest might turn into a resolved promise with specific data structure)
+            // Or data object itself is not as expected.
+            console.warn(`Context window data not available for ${modelName}, or API response structure unexpected. Data:`, data);
+            showErrorState(); // 3. Call error/unavailable state handler
         }
-    } catch (error) { // error is expected to be an object from apiRequest with status and message
+    } catch (error) { // API call failed (e.g. network error, 5xx, or apiRequest threw an error)
         console.error(`Exception fetching context window for ${modelName}:`, error);
-        let errorMessage = 'Error';
-        if (error.status === 404) {
-            errorMessage = 'Not Available';
-        } else if (error.message) {
-            errorMessage = error.message;
-        } else if (error.status) {
-            errorMessage = `HTTP ${error.status}`;
-        }
-        displayElement.textContent = ` (Context: ${errorMessage})`;
+        showErrorState(); // 3. Call error/unavailable state handler
     }
 }
 
