@@ -504,37 +504,49 @@ def get_cached_model_context_window(db, model_name: str) -> int | None:
         db: Database connection object.
         model_name: The name of the model.
     Returns:
-        The context window size as an integer if found and valid, None otherwise.
+        A tuple (bool, int | None) indicating (found_in_cache, value).
+        Value is the context window size (int) or None if explicitly cached as not found/error.
     """
     logger = current_app.logger if current_app and hasattr(current_app, 'logger') else logging.getLogger(__name__)
     try:
         cursor = db.execute("SELECT context_window FROM llm_model_metadata WHERE model_name = ?", (model_name,))
         row = cursor.fetchone()
-        if row and row[0] is not None:
-            logger.info(f"Found cached context window for {model_name}: {row[0]}")
-            return int(row[0])
-        logger.info(f"No cached context window found for {model_name}.")
-        return None
+        if row:  # A row was found, meaning it's in the cache
+            # The stored context_window can itself be NULL if we cached a "not found" state
+            logger.info(f"Cache hit for {model_name}. Raw DB Value: {row['context_window']}")
+            # Ensure conversion to int if it's not None, otherwise pass None as is.
+            # This was previously handled by `if row and row[0] is not None: return int(row[0])`
+            # Now, we return the raw value (which can be int or None) from the DB.
+            db_value = row['context_window']
+            # It's assumed the database stores INTEGER NULL, which sqlite3.Row correctly maps to Python's None.
+            # If it's a non-None value, it should already be an int due to column type,
+            # but explicit conversion here is safer if schema affinity is weird.
+            # However, direct return is fine if schema is `context_window INTEGER`.
+            return True, db_value # db_value can be int or None
+        else:  # No row found, cache miss
+            logger.info(f"Cache miss for {model_name}.")
+            return False, None
     except sqlite3.Error as e:
         logger.error(f"Database error in get_cached_model_context_window for {model_name}: {e}")
-        return None
-    except ValueError as e:
-        logger.error(f"ValueError converting context window for {model_name}: {e}")
-        return None
+        return False, None
+    # ValueError should not occur here if db stores int/None correctly.
+    # If it did, it would be from trying to int(None) or int("non-int-string"),
+    # but we are now returning the direct DB value.
 
 
-def cache_model_context_window(db, model_name: str, context_window: int):
+def cache_model_context_window(db, model_name: str, context_window: int | None):
     """
     Caches the context window size for a given model.
+    The context_window can be None to indicate it's not found or an error occurred.
     Updates the last_checked timestamp automatically.
     Args:
         db: Database connection object.
         model_name: The name of the model.
-        context_window: The context window size to cache.
+        context_window: The context window size (int) or None to cache a "not found" state.
     """
     logger = current_app.logger if current_app and hasattr(current_app, 'logger') else logging.getLogger(__name__)
-    if model_name is None or context_window is None:
-        logger.warning(f"Attempted to cache None model_name or context_window for {model_name}.")
+    if model_name is None: # context_window being None is now allowed
+        logger.warning(f"Attempted to cache with None model_name.")
         return
     try:
         db.execute("""
@@ -543,9 +555,9 @@ def cache_model_context_window(db, model_name: str, context_window: int):
             ON CONFLICT(model_name) DO UPDATE SET
                 context_window = excluded.context_window,
                 last_checked = CURRENT_TIMESTAMP;
-        """, (model_name, context_window))
+        """, (model_name, context_window)) # context_window can be None here, SQLite handles it
         db.commit()
-        logger.info(f"Cached context window for {model_name}: {context_window}")
+        logger.info(f"Cached context window for {model_name}: {context_window if context_window is not None else 'Not Found (None)'}")
     except sqlite3.Error as e:
         logger.error(f"Database error in cache_model_context_window for {model_name}: {e}")
 

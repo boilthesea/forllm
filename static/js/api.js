@@ -1,6 +1,6 @@
 // This file will contain API helper functions.
 
-export async function apiRequest(url, method = 'GET', data = null, isFormData = false) {
+export async function apiRequest(url, method = 'GET', data = null, isFormData = false, silentError = false) {
     const options = {
         method,
         headers: {}, // Initialize headers
@@ -50,7 +50,9 @@ export async function apiRequest(url, method = 'GET', data = null, isFormData = 
         return await response.json(); 
     } catch (error) {
         console.error('Fetch Error:', error);
-        alert(`An error occurred: ${error.message}`); // Consider making alerts less intrusive or configurable
+        if (!silentError) {
+            alert(`An error occurred: ${error.message}`); // Consider making alerts less intrusive or configurable
+        }
         throw error;
     }
 }

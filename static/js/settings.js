@@ -60,7 +60,7 @@ export function renderSettingsPage() {
         <select id="model-select">
             <option value="">Loading models...</option>
         </select>
-        <p style="margin-top: 5px;">Currently Selected: <strong id="selected-ollama-model-display">None</strong>
+        <p style="margin-top: 5px;" id="model-info-display">
            <span id="selected-model-context-window-display" style="font-size: 0.9em; color: #aaa;"></span>
         </p>
     </div>
@@ -244,16 +244,16 @@ export async function loadSettings() {
 export async function loadOllamaModels() {
     const modelSelectElement = settingsPageContent.querySelector('#model-select');
     const settingsErrorElement = settingsPageContent.querySelector('#settings-error');
-    const selectedOllamaModelDisplay = settingsPageContent.querySelector('#selected-ollama-model-display');
+    // const selectedOllamaModelDisplay = settingsPageContent.querySelector('#selected-ollama-model-display'); // REMOVED
 
     // Ensure the select element exists before proceeding
     if (!modelSelectElement) {
          console.warn("Model select element not found yet in settings page.");
          return;
     }
-    if (!selectedOllamaModelDisplay) {
-        console.warn("Selected Ollama model display element not found.");
-    }
+    // if (!selectedOllamaModelDisplay) { // REMOVED
+    //     console.warn("Selected Ollama model display element not found."); // REMOVED
+    // } // REMOVED
 
 
     // Set loading state
@@ -262,7 +262,7 @@ export async function loadOllamaModels() {
     if(settingsErrorElement) settingsErrorElement.textContent = ""; // Clear previous errors
 
     try {
-        const modelsResult = await apiRequest('/api/ollama/models');
+        const modelsResult = await apiRequest('/api/ollama/models', 'GET', null, false, true); // Added silentError = true
         let models = [];
         let defaultModelFromBackend = modelsResult && modelsResult.models && modelsResult.models.length > 0 ? modelsResult.models[0] : null;
 
@@ -293,9 +293,9 @@ export async function loadOllamaModels() {
 
         renderModelOptions(modelSelectElement, models, modelToSelect);
 
-        if (selectedOllamaModelDisplay) {
-            selectedOllamaModelDisplay.textContent = modelToSelect || 'None';
-        }
+        // if (selectedOllamaModelDisplay) { // REMOVED
+        //     selectedOllamaModelDisplay.textContent = modelToSelect || 'None'; // REMOVED
+        // } // REMOVED
         currentSettings.selectedModel = modelToSelect; // Update current setting state
 
         if (modelToSelect && modelToSelect !== 'None') {
@@ -313,9 +313,9 @@ export async function loadOllamaModels() {
         console.error("Error fetching Ollama models:", error);
         renderModelOptions(modelSelectElement, currentSettings.selectedModel ? [currentSettings.selectedModel] : [], currentSettings.selectedModel);
         if(settingsErrorElement) settingsErrorElement.textContent = `Could not fetch models: ${error.message}`;
-        if (selectedOllamaModelDisplay) {
-            selectedOllamaModelDisplay.textContent = currentSettings.selectedModel || 'Error';
-        }
+        // if (selectedOllamaModelDisplay) { // REMOVED
+        //     selectedOllamaModelDisplay.textContent = currentSettings.selectedModel || 'Error'; // REMOVED
+        // } // REMOVED
          // Attempt to show context for a previously selected model if list fails to load
         if (currentSettings.selectedModel) {
             await fetchAndDisplayModelContextWindow(currentSettings.selectedModel, false); // Explicitly false
@@ -327,10 +327,10 @@ export async function loadOllamaModels() {
 
 async function handleModelSelectionChange(event) {
     const selectedModel = event.target.value;
-    const selectedOllamaModelDisplay = settingsPageContent.querySelector('#selected-ollama-model-display');
-    if (selectedOllamaModelDisplay) {
-        selectedOllamaModelDisplay.textContent = selectedModel;
-    }
+    // const selectedOllamaModelDisplay = settingsPageContent.querySelector('#selected-ollama-model-display'); // REMOVED
+    // if (selectedOllamaModelDisplay) { // REMOVED
+    //     selectedOllamaModelDisplay.textContent = selectedModel; // REMOVED
+    // } // REMOVED
     currentSettings.selectedModel = selectedModel;
     // updateSetting('selected_model', selectedModel); // If you have a function to save to backend immediately
     await fetchAndDisplayModelContextWindow(selectedModel, false); // Explicitly false
@@ -376,7 +376,7 @@ async function fetchAndDisplayModelContextWindow(modelName, isForcedRefresh = fa
         if (isForcedRefresh) {
             apiUrl += '?refresh=true';
         }
-        const data = await apiRequest(apiUrl, 'GET');
+        const data = await apiRequest(apiUrl, 'GET', null, false, true); // Added silentError = true
 
         // 2. API call successful and data.context_window is available
         if (data && data.context_window !== undefined && data.context_window !== null) {
@@ -429,7 +429,7 @@ export async function saveSettings() {
 
     try {
         // Use PUT request to update settings
-        const updatedSettings = await apiRequest('/api/settings', 'PUT', settingsToSave);
+        const updatedSettings = await apiRequest('/api/settings', 'PUT', settingsToSave, false, true); // Added silentError = true
 
         // Update local state immediately based on what was sent,
         // assuming the backend confirms or handles potential discrepancies.
