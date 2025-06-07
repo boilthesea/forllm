@@ -97,7 +97,7 @@ Here's a phased development plan, incorporating your groundwork steps and then e
         *   In `static/js/forum.js` (or `editor.js`):
             *   When the user is composing a post/reply:
                 *   Display an area showing estimated token counts for various components that *will* form the prompt. This requires more backend interaction or more JS logic.
-                *   **Option A (Backend-driven):**
+                *   **Implementation:**
                     *   Create a new backend endpoint: `/api/prompts/estimate_tokens`
                     *   Frontend sends: `current_post_text`, `selected_persona_id` (if chosen), `parent_post_id` (for future history), any attachment info.
                     *   Backend calculates:
@@ -108,10 +108,6 @@ Here's a phased development plan, incorporating your groundwork steps and then e
                         *   `tokens(chat_history)` (initially 0, placeholder for Phase 2)
                         *   `total_estimated_tokens`
                     *   Backend returns this breakdown.
-                *   **Option B (Frontend-driven estimation with backend helper for persona):**
-                    *   Frontend counts `current_post_text` (rough JS estimate or via `/api/utils/count_tokens_for_text`).
-                    *   Frontend fetches selected persona prompt (or its token count) via API if not already loaded.
-                    *   Frontend has a pre-defined system prompt token count (if static) or fetches it.
                 *   Display:
                     *   `Post Content: ~A tokens`
                     *   `Persona Prompt (<Persona Name>): ~B tokens`
@@ -121,10 +117,10 @@ Here's a phased development plan, incorporating your groundwork steps and then e
                     *   `--------------------`
                     *   `Total Estimated: ~X tokens / Y available (for <current_model_name>)`
                     *   A visual bar or color coding (green/yellow/red) if approaching/exceeding `Y`.
-        *   **Benefit:** Empowers users to manage their prompt size effectively *before* submitting, reducing errors and frustration. Option A is more accurate but chattier. Option B is faster but might be less precise for persona/system prompts unless their exact text is pulled to the FE.
     *   **Task 1.4.2 (Backend): "Pre-flight Check" in `llm_processing.py`.**
         *   Before actually sending to Ollama, the backend should perform its own definitive token count of the *final, assembled prompt* (including any history added in Phase 2).
         *   If this count (after applying a safety margin, e.g., 90-95% of `model_context_window`) exceeds the limit, the request should ideally not be sent to Ollama. Instead, an error should be logged, and the LLM request in the `llm_requests` table should be marked with an error like "Prompt too long after assembly."
+        *   Add this final count and breakdown to a new Prompt Metadata div below the Full Prompt div in the Queue for completed queue items.
         *   **Benefit:** Prevents Ollama errors due to excessive length and provides clearer feedback if pruning (from Phase 2) isn't enough.
 
 ---
