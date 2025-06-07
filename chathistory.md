@@ -68,7 +68,7 @@ Here's a phased development plan, incorporating your groundwork steps and then e
 
 ---
 
-*   **Sub-Phase 1.3: User-Configurable Fallback Context Length**
+*   **[DONE] Sub-Phase 1.3: User-Configurable Fallback Context Length**
     *   **Task 1.3.1 (Backend & Database): Store Fallback Setting.**
         *   In `database.py`, add to your `settings` table: `default_llm_context_window INTEGER`.
         *   Initialize with a sensible default (e.g., 2048 or 4096).
@@ -81,6 +81,13 @@ Here's a phased development plan, incorporating your groundwork steps and then e
             *   Add a field in the application settings UI for "Default LLM Context Window (if model-specific detection fails): [input number]".
             *   Save this to the database.
         *   **Benefit:** Provides a safety net if Ollama doesn't provide context info or if a non-Ollama model is used in the future.
+
+    **Implementation Summary for Sub-Phase 1.3:**
+    This sub-phase was completed by introducing a user-configurable fallback context length.
+    - In `forllm_server/database.py`, the `settings` table now stores a `default_llm_context_window` (defaulting to '4096'). This setting is added during initial DB creation and also when an older database is updated.
+    - The settings API in `forllm_server/routes/settings_routes.py` (`/api/settings`) was updated to allow GET and PUT operations for `default_llm_context_window`, ensuring the value is an integer (stored as a string).
+    - The frontend settings UI in `static/js/settings.js` was enhanced to include an input field for this value under the "General" settings tab. This involved updating `renderSettingsPage()` to create the input, `loadSettings()` to populate it, and `saveSettings()` to persist it, including validation for a non-negative integer.
+    - In `forllm_server/llm_processing.py`, the `process_llm_request` function now determines an `effective_context_window`. It prioritizes the model-specific context window (obtained via `ollama_utils.get_model_context_window`), falls back to the user-configured `default_llm_context_window` from settings if the specific one isn't found, and finally uses a hardcoded value (2048 tokens) if neither is available. The determined `effective_context_window` is logged.
 
 ---
 

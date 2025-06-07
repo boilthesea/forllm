@@ -181,6 +181,7 @@ def init_db():
         # Removed: cursor.execute("INSERT OR IGNORE INTO settings (setting_key, setting_value) VALUES (?, ?)", ('darkMode', 'false'))
         cursor.execute("INSERT OR IGNORE INTO settings (setting_key, setting_value) VALUES (?, ?)", ('selectedModel', DEFAULT_MODEL))
         cursor.execute("INSERT OR IGNORE INTO settings (setting_key, setting_value) VALUES (?, ?)", ('llmLinkSecurity', 'true')) # Added default
+        cursor.execute("INSERT OR IGNORE INTO settings (setting_key, setting_value) VALUES (?, ?)", ('default_llm_context_window', '4096')) # Added default
         print("Database schema verified/created.")
         db.commit() # Commit after initial schema creation/verification
     else:
@@ -334,7 +335,8 @@ def init_db():
         default_settings_to_check = {
             # Removed: 'darkMode': 'false',
             'selectedModel': DEFAULT_MODEL,
-            'llmLinkSecurity': 'true'
+            'llmLinkSecurity': 'true',
+            'default_llm_context_window': '4096' # Added this line
             # globalDefaultPersonaId is handled below
         }
         for key, default_value in default_settings_to_check.items():
