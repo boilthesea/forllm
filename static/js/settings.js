@@ -11,7 +11,8 @@ import { applyDarkMode, showSection, lastVisibleSectionId } from './ui.js'; // N
 // --- State Variables ---
 export let currentSettings = { // Store loaded settings
     selectedModel: null,
-    llmLinkSecurity: 'true' // Added default
+    llmLinkSecurity: 'true', // Added default
+    default_llm_context_window: '4096' // Initial default
 };
 
 // --- DEBUG: Global click logger ---
@@ -67,6 +68,11 @@ export function renderSettingsPage() {
     <div class="setting-item">
         <label for="llm-link-security-toggle">LLM Link Security:</label>
         <input type="checkbox" id="llm-link-security-toggle">
+    </div>
+    <div class="setting-item">
+        <label for="default-llm-context-window-input">Default LLM Context Window (tokens):</label>
+        <input type="number" id="default-llm-context-window-input" class="number-input" min="0" placeholder="e.g., 4096">
+        <p style="font-size: 0.8em; color: #888; margin-top: 3px;">Used if model-specific context window detection fails.</p>
     </div>
     <button id="save-settings-btn">Save Settings</button>
     <p id="settings-error" class="error-message"></p>
@@ -163,6 +169,11 @@ export function renderSettingsPage() {
                 if (linkSecurityToggleInput) {
                     linkSecurityToggleInput.checked = currentSettings.llmLinkSecurity === 'true';
                 }
+
+                const contextWindowInput = container.querySelector('#default-llm-context-window-input');
+                if (contextWindowInput) {
+                    contextWindowInput.value = currentSettings.default_llm_context_window;
+                }
                 
                 const saveButton = container.querySelector('#save-settings-btn');
                 if (saveButton) {
@@ -216,17 +227,26 @@ export async function loadSettings() {
         const settings = await apiRequest('/api/settings');
         currentSettings = {
             selectedModel: settings.selectedModel || null,
-            llmLinkSecurity: settings.llmLinkSecurity === 'true' ? 'true' : 'false' // Default to true if missing
+            llmLinkSecurity: settings.llmLinkSecurity === 'true' ? 'true' : 'false', // Default to true if missing
+            default_llm_context_window: settings.default_llm_context_window || '4096' // Load or default
         };
          if (settings.llmLinkSecurity === undefined) {
              currentSettings.llmLinkSecurity = 'true'; // Explicitly default if undefined
         }
+         if (settings.default_llm_context_window === undefined) {
+            currentSettings.default_llm_context_window = '4096'; // Explicitly default if undefined
+        }
         applyDarkMode(true); // Apply dark mode immediately
 
         // Update UI elements if they exist (they might be created later by renderSettingsPage)
+        // These direct updates here are less critical if renderIntoContainer correctly sets values based on currentSettings
         const linkSecurityToggleInput = settingsPageContent.querySelector('#llm-link-security-toggle');
         if (linkSecurityToggleInput) {
              linkSecurityToggleInput.checked = currentSettings.llmLinkSecurity === 'true';
+        }
+        const contextWindowInput = settingsPageContent.querySelector('#default-llm-context-window-input');
+        if (contextWindowInput) {
+            contextWindowInput.value = currentSettings.default_llm_context_window;
         }
 
         // Trigger model loading (it will handle populating the select later)
@@ -245,6 +265,7 @@ export async function loadOllamaModels() {
     const modelSelectElement = settingsPageContent.querySelector('#model-select');
     const settingsErrorElement = settingsPageContent.querySelector('#settings-error');
     // const selectedOllamaModelDisplay = settingsPageContent.querySelector('#selected-ollama-model-display'); // REMOVED
+    const contextWindowInput = settingsPageContent.querySelector('#default-llm-context-window-input'); // Added for fetchAndDisplayModelContextWindow
 
     // Ensure the select element exists before proceeding
     if (!modelSelectElement) {
@@ -398,10 +419,11 @@ export async function saveSettings() {
     // Get elements from within the settings page content
     const modelSelectElement = settingsPageContent.querySelector('#model-select');
     const linkSecurityToggleInput = settingsPageContent.querySelector('#llm-link-security-toggle');
+    const contextWindowInput = settingsPageContent.querySelector('#default-llm-context-window-input');
     const saveButton = settingsPageContent.querySelector('#save-settings-btn');
     const settingsErrorElement = settingsPageContent.querySelector('#settings-error');
 
-    if (!modelSelectElement || !linkSecurityToggleInput || !saveButton || !settingsErrorElement) {
+    if (!modelSelectElement || !linkSecurityToggleInput || !contextWindowInput || !saveButton || !settingsErrorElement) {
         console.error("Settings elements not found for saving.");
         // Changed alert to console.error to avoid blocking UI in case of programmatic call
         console.error("An error occurred. Could not save settings. Required elements missing.");
@@ -410,6 +432,7 @@ export async function saveSettings() {
 
     const newSelectedModel = modelSelectElement.value;
     const newLlmLinkSecurity = linkSecurityToggleInput.checked;
+    const newDefaultContextWindow = contextWindowInput.value;
 
     settingsErrorElement.textContent = ""; // Clear previous errors
 
@@ -419,9 +442,16 @@ export async function saveSettings() {
         return;
     }
 
+    if (!newDefaultContextWindow || isNaN(parseInt(newDefaultContextWindow, 10)) || parseInt(newDefaultContextWindow, 10) < 0) {
+        settingsErrorElement.textContent = "Default LLM Context Window must be a non-negative number.";
+        if(contextWindowInput) contextWindowInput.focus();
+        return;
+    }
+
     const settingsToSave = {
         selectedModel: newSelectedModel,
-        llmLinkSecurity: newLlmLinkSecurity.toString()
+        llmLinkSecurity: newLlmLinkSecurity.toString(),
+        default_llm_context_window: parseInt(newDefaultContextWindow, 10).toString() // Send as string
     };
 
     saveButton.disabled = true;
@@ -435,10 +465,15 @@ export async function saveSettings() {
         // assuming the backend confirms or handles potential discrepancies.
         currentSettings.selectedModel = settingsToSave.selectedModel;
         currentSettings.llmLinkSecurity = settingsToSave.llmLinkSecurity;
+        currentSettings.default_llm_context_window = settingsToSave.default_llm_context_window;
+
 
         // Update UI (redundant if page isn't re-rendered, but good practice)
         applyDarkMode(true); // Apply dark mode immediately
         linkSecurityToggleInput.checked = currentSettings.llmLinkSecurity === 'true';
+        if (contextWindowInput) { // Update the input field as well
+            contextWindowInput.value = currentSettings.default_llm_context_window;
+        }
         // Re-render model options to ensure the saved one is selected
         // (though it should already be selected from the user's choice)
         if (modelSelectElement) {

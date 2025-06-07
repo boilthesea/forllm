@@ -19,8 +19,8 @@ def handle_settings():
             return jsonify({'error': 'No settings data provided'}), 400
         try:
             for key, value in data.items():
-                if key in ['selectedModel', 'llmLinkSecurity']: # Removed 'darkMode'
-                    processed_value = value
+                processed_value = None # Initialize processed_value
+                if key in ['selectedModel', 'llmLinkSecurity', 'default_llm_context_window']: # Added default_llm_context_window
                     if key == 'llmLinkSecurity': # Specific handling for llmLinkSecurity
                         if isinstance(value, bool):
                             processed_value = 'true' if value else 'false'
@@ -32,7 +32,20 @@ def handle_settings():
                         if not processed_value:
                              print(f"Warning: Attempted to save empty string for selectedModel.")
                              continue # Skip saving this key if invalid
-                    cursor.execute("INSERT OR REPLACE INTO settings (setting_key, setting_value) VALUES (?, ?)", (key, processed_value))
+                    elif key == 'default_llm_context_window':
+                        try:
+                            # Ensure it's a valid integer, then store as string
+                            int_value = int(value)
+                            processed_value = str(int_value)
+                        except ValueError:
+                            # Handle error or skip if value is not a valid integer
+                            print(f"Warning: Invalid value for default_llm_context_window: {value}. Skipping.")
+                            continue # Skip saving this key if invalid
+                    else: # Catchall for other keys in the list, like selectedModel if not explicitly handled above
+                        processed_value = str(value)
+
+                    if processed_value is not None: # Ensure processed_value was set (e.g. not skipped by continue)
+                        cursor.execute("INSERT OR REPLACE INTO settings (setting_key, setting_value) VALUES (?, ?)", (key, processed_value))
                 else:
                     print(f"Warning: Ignoring unknown setting key during update: {key}")
             db.commit()
@@ -42,6 +55,7 @@ def handle_settings():
             # Removed: if 'darkMode' not in settings: settings['darkMode'] = 'false'
             if 'selectedModel' not in settings: settings['selectedModel'] = DEFAULT_MODEL
             if 'llmLinkSecurity' not in settings: settings['llmLinkSecurity'] = 'true'
+            if 'default_llm_context_window' not in settings: settings['default_llm_context_window'] = '4096' # Default value
             return jsonify(settings)
         except Exception as e:
             db.rollback()
@@ -56,6 +70,8 @@ def handle_settings():
                 settings['selectedModel'] = DEFAULT_MODEL
             if 'llmLinkSecurity' not in settings:
                 settings['llmLinkSecurity'] = 'true'
+            if 'default_llm_context_window' not in settings:
+                settings['default_llm_context_window'] = '4096' # Default value
             return jsonify(settings)
         except Exception as e:
             print(f"Error fetching settings: {e}")
