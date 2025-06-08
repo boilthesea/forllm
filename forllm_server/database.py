@@ -123,6 +123,19 @@ def init_db():
                 print(f"Error adding 'requested_by_user_id' column to llm_requests: {e}")
                 db.rollback()
 
+        # Add 'prompt_token_breakdown' to 'llm_requests' if it doesn't exist
+        cursor.execute("PRAGMA table_info(llm_requests)")
+        columns = [col[1] for col in cursor.fetchall()]
+        if 'prompt_token_breakdown' not in columns:
+            print("Updating llm_requests table: Adding 'prompt_token_breakdown' column...")
+            try:
+                cursor.execute("ALTER TABLE llm_requests ADD COLUMN prompt_token_breakdown TEXT")
+                db.commit()
+                print("'prompt_token_breakdown' column added to llm_requests.")
+            except Exception as e:
+                print(f"Error adding 'prompt_token_breakdown' column to llm_requests: {e}")
+                db.rollback()
+
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS attachments (
                 attachment_id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -375,6 +388,19 @@ def init_db():
             print("'requested_by_user_id' column added to llm_requests (post-initial check).")
         except Exception as e:
             print(f"Error adding 'requested_by_user_id' column to llm_requests (post-initial check): {e}")
+            db.rollback()
+
+    # --- Check and add 'prompt_token_breakdown' to 'llm_requests' if DB already exists ---
+    cursor.execute("PRAGMA table_info(llm_requests)")
+    columns = [col[1] for col in cursor.fetchall()]
+    if 'prompt_token_breakdown' not in columns:
+        print("Updating llm_requests table (post-initial check): Adding 'prompt_token_breakdown' column...")
+        try:
+            cursor.execute("ALTER TABLE llm_requests ADD COLUMN prompt_token_breakdown TEXT")
+            db.commit()
+            print("'prompt_token_breakdown' column added to llm_requests (post-initial check).")
+        except Exception as e:
+            print(f"Error adding 'prompt_token_breakdown' column to llm_requests (post-initial check): {e}")
             db.rollback()
 
     print("Verifying/Creating Persona management tables and defaults...")

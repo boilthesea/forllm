@@ -262,7 +262,7 @@ if (newTopicContentInput) {
         element: newTopicContentInput
     });
     initializeEditorPersonaTagging(newTopicEditor);
-    initializeTokenCountDisplay(newTopicEditor, 'newTopicContent'); // Added token count display
+    initializeTokenBreakdownDisplay(newTopicEditor, 'new-topic');
 }
 
 if (replyContentInput) {
@@ -271,12 +271,12 @@ if (replyContentInput) {
         element: replyContentInput
     });
     initializeEditorPersonaTagging(replyEditor);
-    initializeTokenCountDisplay(replyEditor, 'replyContent'); // Added token count display
+    initializeTokenBreakdownDisplay(replyEditor, 'reply');
 }
 
-// --- Token Counting ---
+// --- Token Breakdown Display ---
 
-// Debounce function
+// Debounce function - (Make sure it's defined, or import if it's global)
 function debounce(func, delay) {
     let timeout;
     return function(...args) {
@@ -286,75 +286,162 @@ function debounce(func, delay) {
     };
 }
 
-// Function to update token count via API
-async function updateTokenCountDisplay(editorInstance, displayElement) {
+// Function to update token breakdown via API
+async function updateTokenBreakdown(editorInstance, editorType) {
     if (!editorInstance) return;
-    const text = editorInstance.value();
-    if (text === null || text.trim() === '') {
-        displayElement.textContent = 'Tokens: ~0';
+
+    const container = document.getElementById(`${editorType}-token-breakdown-container`);
+    if (!container) {
+        console.error(`Token breakdown container not found for ${editorType}`);
         return;
     }
+    container.style.display = 'block'; // Ensure it's visible
+
+    const current_post_text = editorInstance.value();
+
+    // --- Simplification for selected_persona_id ---
+    // Try to get from 'llm-persona-select' if it's relevant, otherwise null.
+    // This element is in `index.html`'s `subforum-personas-bar`.
+    // Its applicability depends on whether this bar is visible/used for the current editor context.
+    let selected_persona_id = null;
+    const personaSelectElement = document.getElementById('llm-persona-select');
+    if (personaSelectElement && personaSelectElement.value) {
+        // Check if the persona selector is relevant for the current editor context
+        // For a new topic, it might be less relevant than for a reply if the bar is tied to existing topic context.
+        // For now, we'll take it if available. This might need refinement.
+        if (editorType === 'reply' || (editorType === 'new-topic' && personaSelectElement.offsetParent !== null)) { // visible check
+             if (personaSelectElement.value !== "0" && personaSelectElement.value !== "") { // "0" or "" often means no selection / default
+                selected_persona_id = parseInt(personaSelectElement.value, 10);
+            }
+        }
+    }
+    // console.log(`Editor type: ${editorType}, Selected Persona ID: ${selected_persona_id}`);
+
+
+    // --- Simplification for attachments_text ---
+    // TODO: Implement proper text extraction from attachments.
+    // For now, sending empty string as per plan.
+    let attachments_text = "";
+    const attachmentInputId = editorType === 'new-topic' ? 'new-topic-attachment-input' : 'reply-attachment-input';
+    const attachmentInput = document.getElementById(attachmentInputId);
+    let combinedAttachmentsText = "";
+
+    if (attachmentInput && attachmentInput.files && attachmentInput.files.length > 0) {
+        const textFilePromises = [];
+        for (const file of attachmentInput.files) {
+            if (file.type === "text/plain") {
+                textFilePromises.push(file.text());
+            } else {
+                // For non-text files, include a placeholder or skip
+                // combinedAttachmentsText += `[Attachment: ${file.name} (Non-text)]\n`;
+                console.log(`Skipping non-text file for token estimation: ${file.name}`);
+            }
+        }
+        try {
+            const fileContents = await Promise.all(textFilePromises);
+            combinedAttachmentsText = fileContents.join("\n\n---\n\n"); // Separator between file contents
+            attachments_text = combinedAttachmentsText;
+        } catch (error) {
+            console.error("Error reading attachment file contents:", error);
+            attachments_text = "[Error reading attachment contents]";
+        }
+    }
+    // console.log(`Attachments text for ${editorType}: ${attachments_text.substring(0,100)}...`);
+
 
     try {
-        const response = await fetch('/api/utils/count_tokens_for_text', {
+        const response = await fetch('/api/prompts/estimate_tokens', {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ text: text }),
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                current_post_text: current_post_text,
+                selected_persona_id: selected_persona_id,
+                attachments_text: attachments_text,
+                // parent_post_id: null // Not used yet
+            }),
         });
 
         if (!response.ok) {
             const errorData = await response.json();
-            console.error('Error fetching token count:', errorData.error || response.statusText);
-            displayElement.textContent = 'Tokens: Error';
+            console.error('Error fetching token breakdown:', errorData.error || response.statusText);
+            // Display a simplified error in the breakdown area
+            document.getElementById(`${editorType}-token-total-estimated`).textContent = 'Error';
+            document.getElementById(`${editorType}-token-model-context-window`).textContent = 'N/A';
             return;
         }
 
         const data = await response.json();
-        displayElement.textContent = `Tokens: ~${data.token_count}`;
+
+        // Update DOM elements
+        document.getElementById(`${editorType}-token-post-content`).textContent = `~${data.post_content_tokens}`;
+        document.getElementById(`${editorType}-token-persona-name`).textContent = data.persona_name || "Default";
+        document.getElementById(`${editorType}-token-persona-prompt`).textContent = `~${data.persona_prompt_tokens}`;
+        document.getElementById(`${editorType}-token-system-prompt`).textContent = `~${data.system_prompt_tokens}`;
+        document.getElementById(`${editorType}-token-attachments`).textContent = `~${data.attachments_tokens}`;
+        document.getElementById(`${editorType}-token-chat-history`).textContent = `~${data.chat_history_tokens}`;
+        document.getElementById(`${editorType}-token-total-estimated`).textContent = `~${data.total_estimated_tokens}`;
+        document.getElementById(`${editorType}-token-model-context-window`).textContent = data.model_context_window || "N/A";
+        document.getElementById(`${editorType}-token-model-name`).textContent = data.model_name || "default";
+
+        // Update visual bar
+        const visualBar = document.getElementById(`${editorType}-token-visual-bar`);
+        let percentage = 0;
+        if (data.model_context_window && data.model_context_window > 0) {
+            percentage = (data.total_estimated_tokens / data.model_context_window) * 100;
+        }
+        percentage = Math.max(0, Math.min(100, percentage)); // Clamp between 0 and 100
+
+        visualBar.style.width = percentage + '%';
+        if (percentage >= 90) {
+            visualBar.style.backgroundColor = '#D32F2F'; // Red
+        } else if (percentage >= 70) {
+            visualBar.style.backgroundColor = '#FBC02D'; // Yellow
+        } else {
+            visualBar.style.backgroundColor = '#4CAF50'; // Green
+        }
+
     } catch (error) {
-        console.error('Failed to send request for token count:', error);
-        displayElement.textContent = 'Tokens: Error';
+        console.error('Failed to send request for token breakdown:', error);
+        document.getElementById(`${editorType}-token-total-estimated`).textContent = 'Error';
+        document.getElementById(`${editorType}-token-model-context-window`).textContent = 'N/A';
     }
 }
 
-// Function to set up token count for an editor instance
-function initializeTokenCountDisplay(editorInstance, editorIdSuffix) {
+// Function to set up token breakdown display for an editor instance
+function initializeTokenBreakdownDisplay(editorInstance, editorType) {
     if (!editorInstance || !editorInstance.codemirror) {
-        console.warn(`Editor instance or CodeMirror not found for ID suffix ${editorIdSuffix}. Token count disabled.`);
+        console.warn(`Editor instance or CodeMirror not found for ${editorType}. Token breakdown display disabled.`);
         return;
     }
 
-    // Create the token count display element
-    let tokenCountElement = document.getElementById(`token-count-${editorIdSuffix}`);
-    if (!tokenCountElement) {
-        tokenCountElement = document.createElement('div');
-        tokenCountElement.id = `token-count-${editorIdSuffix}`;
-        tokenCountElement.className = 'editor-token-count'; // For styling
-        tokenCountElement.textContent = 'Tokens: ~0';
-
-        // Insert the token count display after the editor's container
-        const editorWrapper = editorInstance.element.nextSibling; // EasyMDE typically wraps the textarea, and this gets the .EasyMDEContainer
-        if (editorWrapper && editorWrapper.classList && editorWrapper.classList.contains('EasyMDEContainer')) {
-            editorWrapper.parentNode.insertBefore(tokenCountElement, editorWrapper.nextSibling);
-        } else if (editorInstance.element.parentElement) {
-            // Fallback if structure is slightly different
-            editorInstance.element.parentElement.appendChild(tokenCountElement);
-        } else {
-            console.warn(`Could not find a suitable place to insert token count display for ${editorIdSuffix}.`);
-            return;
-        }
+    const breakdownContainer = document.getElementById(`${editorType}-token-breakdown-container`);
+    if (!breakdownContainer) {
+        console.warn(`Token breakdown container not found for ${editorType}.`);
+        return;
     }
+    breakdownContainer.style.display = 'block'; // Make it visible
 
     // Debounced update function specific to this editor instance
-    const debouncedTokenUpdate = debounce(() => {
-        updateTokenCountDisplay(editorInstance, tokenCountElement);
-    }, 500); // 500ms debounce delay
+    const debouncedTokenBreakdownUpdate = debounce(() => {
+        updateTokenBreakdown(editorInstance, editorType);
+    }, 750); // 750ms debounce delay
 
     // Listen for changes in the editor
-    editorInstance.codemirror.on('change', debouncedTokenUpdate);
+    editorInstance.codemirror.on('change', debouncedTokenBreakdownUpdate);
 
-    // Initial count update
-    updateTokenCountDisplay(editorInstance, tokenCountElement);
+    // Also listen for changes on persona selector and attachment input
+    const personaSelector = document.getElementById('llm-persona-select');
+    if (personaSelector) {
+        personaSelector.addEventListener('change', () => updateTokenBreakdown(editorInstance, editorType));
+    }
+
+    const attachmentInputId = editorType === 'new-topic' ? 'new-topic-attachment-input' : 'reply-attachment-input';
+    const attachmentInput = document.getElementById(attachmentInputId);
+    if (attachmentInput) {
+        attachmentInput.addEventListener('change', () => updateTokenBreakdown(editorInstance, editorType));
+    }
+
+
+    // Initial breakdown update
+    updateTokenBreakdown(editorInstance, editorType);
 }

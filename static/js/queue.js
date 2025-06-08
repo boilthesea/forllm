@@ -49,6 +49,61 @@ export function renderQueueList(queueItems) {
             </div>
         `;
 
+        // --- NEW: Add Prompt Token Breakdown ---
+        if (item.prompt_token_breakdown) {
+            try {
+                const breakdown = JSON.parse(item.prompt_token_breakdown);
+                const breakdownDiv = document.createElement('div');
+                breakdownDiv.className = 'queue-item-token-breakdown';
+                // Initially hidden, will be shown if content is added.
+                // Or, style directly with 'block' if always shown when present.
+                breakdownDiv.style.marginTop = '5px';
+                breakdownDiv.style.padding = '5px';
+                breakdownDiv.style.backgroundColor = '#f0f0f0';
+                breakdownDiv.style.borderRadius = '3px';
+
+                let breakdownHTML = '<p style="margin-bottom: 3px;"><strong>Prompt Token Breakdown:</strong></p><ul>';
+                const keyMapping = {
+                    total_prompt_tokens: "Total Final Prompt Tokens",
+                    persona_prompt_tokens: "Persona Instructions",
+                    user_post_tokens: "User Post",
+                    attachments_token_count: "Attachments",
+                    chat_history_tokens: "Chat History"
+                };
+
+                // Iterate in a specific order if desired, or just over keys
+                if (breakdown.total_prompt_tokens !== undefined) {
+                     breakdownHTML += `<li>${keyMapping.total_prompt_tokens}: ${breakdown.total_prompt_tokens}</li>`;
+                }
+                if (breakdown.persona_prompt_tokens !== undefined) {
+                    breakdownHTML += `<li>${keyMapping.persona_prompt_tokens}: ${breakdown.persona_prompt_tokens}</li>`;
+                }
+                if (breakdown.user_post_tokens !== undefined) {
+                    breakdownHTML += `<li>${keyMapping.user_post_tokens}: ${breakdown.user_post_tokens}</li>`;
+                }
+                if (breakdown.attachments_token_count !== undefined) {
+                    breakdownHTML += `<li>${keyMapping.attachments_token_count}: ${breakdown.attachments_token_count}</li>`;
+                }
+                if (breakdown.chat_history_tokens !== undefined && breakdown.chat_history_tokens > 0) { // Only show if > 0
+                    breakdownHTML += `<li>${keyMapping.chat_history_tokens}: ${breakdown.chat_history_tokens}</li>`;
+                }
+                breakdownHTML += '</ul>';
+
+                breakdownDiv.innerHTML = breakdownHTML;
+                li.appendChild(breakdownDiv); // Append to the list item
+                // No need to set display: block if it's appended and not initially display:none in CSS for this class
+            } catch (e) {
+                console.error(`Error parsing token breakdown for request ${item.request_id}:`, e);
+                const errorDiv = document.createElement('div');
+                errorDiv.className = 'queue-item-token-breakdown-error';
+                errorDiv.textContent = 'Error displaying token breakdown.';
+                errorDiv.style.color = 'red';
+                errorDiv.style.fontSize = '0.9em';
+                li.appendChild(errorDiv);
+            }
+        }
+        // --- END NEW ---
+
         // Add click listener to show full prompt
         li.addEventListener('click', () => showFullPromptModal(item.request_id));
 

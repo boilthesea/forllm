@@ -202,12 +202,40 @@ def process_llm_request(request_details, flask_app): # Added flask_app parameter
         # Log the token count of the actual final prompt string sent to the LLM
         actual_final_prompt_tokens = count_tokens(prompt_content)
         logger.info(f"Request {request_id}: Actual final prompt string token count: {actual_final_prompt_tokens}")
-        
-        # Store the constructed prompt using local cursor
-        cursor.execute("UPDATE llm_requests SET full_prompt_sent = ? WHERE request_id = ?", (prompt_content, request_id))
+
+        # --- Store Token Breakdown ---
+        token_breakdown = {
+            "persona_prompt_tokens": persona_prompt_tokens,
+            "user_post_tokens": user_post_tokens,
+            "attachments_token_count": attachments_token_count,
+            "chat_history_tokens": 0,  # Placeholder for now
+            "total_prompt_tokens": actual_final_prompt_tokens
+        }
+        token_breakdown_json = json.dumps(token_breakdown)
+
+        # Store the constructed prompt and token breakdown using local cursor
+        cursor.execute(
+            "UPDATE llm_requests SET full_prompt_sent = ?, prompt_token_breakdown = ? WHERE request_id = ?",
+            (prompt_content, token_breakdown_json, request_id)
+        )
         db.commit()
-        print(f"Stored full_prompt_sent for request_id {request_id}")
-        print(f"DEBUG: Successfully committed full_prompt_sent for request {request_id}. Value snippet: '{prompt_content[:100]}...'")
+        logger.info(f"Request {request_id}: Stored full_prompt_sent and prompt_token_breakdown. Token breakdown: {token_breakdown_json}")
+        print(f"DEBUG: Successfully committed full_prompt_sent and prompt_token_breakdown for request {request_id}. Prompt snippet: '{prompt_content[:100]}...'")
+
+        # --- Pre-flight Check Logic ---
+        safety_margin_percentage = 0.95  # 95% safety margin
+        max_allowed_tokens = int(effective_context_window * safety_margin_percentage)
+        logger.info(f"Request {request_id}: Pre-flight check: Actual tokens: {actual_final_prompt_tokens}, Max allowed (after {safety_margin_percentage*100}% safety margin): {max_allowed_tokens} (Context: {effective_context_window})")
+
+        if actual_final_prompt_tokens > max_allowed_tokens:
+            error_message_for_db = f"Error: Prompt too long after assembly. Tokens: {actual_final_prompt_tokens}, Max Allowed (after safety margin): {max_allowed_tokens} (Context: {effective_context_window})."
+            logger.error(f"Request {request_id}: {error_message_for_db}")
+            cursor.execute(
+                "UPDATE llm_requests SET status = 'error', error_message = ?, processed_at = CURRENT_TIMESTAMP WHERE request_id = ?",
+                (error_message_for_db, request_id)
+            )
+            db.commit()
+            return # Return early from the function
 
         # --- Try/Except for Ollama connection and processing ---
         try:

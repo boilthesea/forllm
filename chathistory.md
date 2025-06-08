@@ -91,37 +91,51 @@ Here's a phased development plan, incorporating your groundwork steps and then e
 
 ---
 
-* **Sub-Phase 1.4: Comprehensive Token Count Display (Pre-Submission)**
+* **[DONE] Sub-Phase 1.4: Comprehensive Token Count Display (Pre-Submission)**
     *   **Task 1.4.1 (Frontend & Backend): Detailed Token Breakdown UI.**
         *   This expands on Task 1.1.3.
-        *   In `static/js/forum.js` (or `editor.js`):
+        *   In `static/js/editor.js`:
             *   When the user is composing a post/reply:
-                *   Display an area showing estimated token counts for various components that *will* form the prompt. This requires more backend interaction or more JS logic.
-                *   **Implementation:**
-                    *   Create a new backend endpoint: `/api/prompts/estimate_tokens`
-                    *   Frontend sends: `current_post_text`, `selected_persona_id` (if chosen), `parent_post_id` (for future history), any attachment info.
+                *   Display an area showing estimated token counts for various components that *will* form the prompt.
+                *   **Implementation Details:**
+                    *   New backend endpoint: `/api/prompts/estimate_tokens` (in `forllm_server/routes/utility_routes.py`).
+                    *   Frontend sends: `current_post_text`, `selected_persona_id` (if a global persona selector is used, otherwise null/default), `attachments_text` (concatenated content of selected text-based attachments), and `parent_post_id` (unused for now).
                     *   Backend calculates:
                         *   `tokens(current_post_text)`
                         *   `tokens(persona_prompt_for_id)`
-                        *   `tokens(system_prompt)`
-                        *   `tokens(attachments)`
+                        *   `tokens(system_prompt)` (placeholder, currently 0)
+                        *   `tokens(attachments_text)`
                         *   `tokens(chat_history)` (initially 0, placeholder for Phase 2)
                         *   `total_estimated_tokens`
-                    *   Backend returns this breakdown.
-                *   Display:
+                    *   Backend returns this breakdown, including `persona_name`, `model_context_window`, and `model_name`.
+                *   Display in UI (near editor, via `templates/index.html` and `static/js/editor.js`):
                     *   `Post Content: ~A tokens`
-                    *   `Persona Prompt (<Persona Name>): ~B tokens`
+                    *   `Persona Prompt (<Actual Persona Name>): ~B tokens`
                     *   `System Instructions: ~C tokens`
                     *   `Attachments: ~D tokens`
                     *   `Chat History: ~E tokens` (initially 0)
                     *   `--------------------`
                     *   `Total Estimated: ~X tokens / Y available (for <current_model_name>)`
-                    *   A visual bar or color coding (green/yellow/red) if approaching/exceeding `Y`.
+                    *   A visual bar indicating usage against the model's context window, color-coded (green/yellow/red).
     *   **Task 1.4.2 (Backend): "Pre-flight Check" in `llm_processing.py`.**
-        *   Before actually sending to Ollama, the backend should perform its own definitive token count of the *final, assembled prompt* (including any history added in Phase 2).
-        *   If this count (after applying a safety margin, e.g., 90-95% of `model_context_window`) exceeds the limit, the request should ideally not be sent to Ollama. Instead, an error should be logged, and the LLM request in the `llm_requests` table should be marked with an error like "Prompt too long after assembly."
-        *   Add this final count and breakdown to a new Prompt Metadata div below the Full Prompt div in the Queue for completed queue items.
-        *   **Benefit:** Prevents Ollama errors due to excessive length and provides clearer feedback if pruning (from Phase 2) isn't enough.
+        *   Before actually sending to Ollama, the backend performs its own definitive token count of the *final, assembled prompt*.
+        *   If this count (after applying a safety margin, currently hardcoded at 95% of `model_context_window`) exceeds the limit:
+            *   The request is not sent to Ollama.
+            *   An error should be logged, and the LLM request in the `llm_requests` table should be marked with `status='error'` and a detailed `error_message` (e.g., 'Error: Prompt too long after assembly. Tokens: X, Max Allowed (after safety margin): Y (Context: Z)').
+        *   The token breakdown (persona, user post, attachments, total) is stored as a JSON string in the `llm_requests.prompt_token_breakdown` column (new column added in `forllm_server/database.py`) and displayed in the queue UI (`static/js/queue.js`) for relevant items (completed or error).
+        *   **Benefit:** Prevents Ollama errors due to excessive length and provides clearer feedback.
+
+    **Implementation Summary for Sub-Phase 1.4:**
+    This sub-phase focused on providing comprehensive token count information to the user and implementing a pre-flight check to prevent oversized prompts from being sent to the LLM.
+    - **Detailed Token Breakdown UI (Task 1.4.1):**
+        - A new API endpoint `/api/prompts/estimate_tokens` was created in `forllm_server/routes/utility_routes.py`. It accepts current post text, selected persona ID, and concatenated text from attachments. It returns a detailed breakdown of estimated token counts for each component (post content, persona prompt, attachments, system prompt placeholder, chat history placeholder), the total estimated tokens, and the current model's name and context window size.
+        - The frontend editor interface (`static/js/editor.js` and `templates/index.html`) was updated to call this endpoint. As the user types or changes attachments/persona, a detailed breakdown is displayed near the editor, including a visual bar indicating usage against the model's context window.
+    - **Backend Pre-flight Check & Token Storage (Task 1.4.2):**
+        - In `forllm_server/llm_processing.py`, before sending a request to Ollama, the final assembled prompt's token count is calculated.
+        - A `prompt_token_breakdown` JSON string (containing counts for persona, user post, attachments, and total) is now stored in a new `prompt_token_breakdown` column in the `llm_requests` table (migration handled in `forllm_server/database.py`).
+        - If this total count exceeds 95% of the model's effective context window, the request is marked as an error in the database (with a detailed message), and not sent to the LLM.
+        - The `static/js/queue.js` was updated to parse and display this `prompt_token_breakdown` for completed/error items in the queue UI.
+    This provides users with immediate feedback on prompt size and helps prevent unnecessary LLM processing errors.
 
 ---
 ### Phase 2: Chat History Implementation
