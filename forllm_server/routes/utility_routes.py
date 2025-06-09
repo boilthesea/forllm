@@ -99,7 +99,8 @@ def estimate_tokens_route():
 
         # get_model_context_window needs app context.
         # The route handler itself is already in an app context.
-        model_specific_context = get_model_context_window(current_selected_model_name)
+        db = get_db()
+        model_specific_context = get_model_context_window(current_selected_model_name, db)
 
         if model_specific_context is not None:
             effective_context_window_for_model = model_specific_context
