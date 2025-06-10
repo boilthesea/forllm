@@ -326,15 +326,49 @@ async function updateTokenBreakdown(editorInstance, editorType) {
     const attachmentInput = document.getElementById(attachmentInputId);
     let combinedAttachmentsText = "";
 
+    // Define known plain text MIME types
+    const plainTextMimeTypes = [
+        'text/plain', 'text/markdown', 'text/csv', 'application/json', 'application/xml',
+        'text/html', 'text/css', 'text/javascript', 'application/javascript',
+        'application/x-javascript', 'text/x-python', 'application/python',
+        'application/x-python', 'text/x-java-source', 'text/x-csrc', 'text/x-c++src',
+        'application/rtf', 'text/richtext', 'text/yaml', 'application/yaml', 'text/x-yaml',
+        'application/x-yaml', 'text/toml', 'application/toml', 'application/ld+json',
+        'text/calendar', 'text/vcard', 'text/sgml', 'application/sgml', 'text/tab-separated-values',
+        'application/xhtml+xml', 'application/rss+xml', 'application/atom+xml', 'text/x-script.python'
+    ];
+
+    // Define known plain text file extensions
+    const plainTextExtensions = [
+        '.txt', '.md', '.markdown', '.csv', '.json', '.xml', '.html', '.htm', '.css', '.js',
+        '.py', '.pyw', '.java', '.c', '.cpp', '.h', '.hpp', '.rtf', '.yaml', '.yml',
+        '.toml', '.ini', '.cfg', '.conf', '.log', '.text', '.tex', '.tsv', '.jsonld',
+        '.ical', '.ics', '.vcf', '.vcard', '.sgml', '.sgm', '.xhtml', '.xht', '.rss', '.atom',
+        '.sh', '.bash', '.ps1', '.bat', '.cmd'
+    ];
+
     if (attachmentInput && attachmentInput.files && attachmentInput.files.length > 0) {
         const textFilePromises = [];
         for (const file of attachmentInput.files) {
-            if (file.type === "text/plain") {
+            let isTextFile = false;
+            // Check against known MIME types
+            if (plainTextMimeTypes.includes(file.type)) {
+                isTextFile = true;
+            } else if (file.type === "" || file.type === "application/octet-stream") {
+                // If MIME type is generic or empty, check file extension
+                const fileNameLower = file.name.toLowerCase();
+                for (const ext of plainTextExtensions) {
+                    if (fileNameLower.endsWith(ext)) {
+                        isTextFile = true;
+                        break;
+                    }
+                }
+            }
+
+            if (isTextFile) {
                 textFilePromises.push(file.text());
             } else {
-                // For non-text files, include a placeholder or skip
-                // combinedAttachmentsText += `[Attachment: ${file.name} (Non-text)]\n`;
-                console.log(`Skipping non-text file for token estimation: ${file.name}`);
+                console.log(`Skipping file for token estimation (unrecognized type/extension): ${file.name} (type: ${file.type || 'unknown'})`);
             }
         }
         try {
