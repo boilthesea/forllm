@@ -3,6 +3,8 @@
 import { newTopicContentInput, replyContentInput } from './dom.js';
 import { fetchActivePersonas } from './api.js'; // Import API function
 
+let cachedAttachmentsContent = { 'new-topic': { text: '', filesHash: null }, 'reply': { text: '', filesHash: null } };
+
 // --- Persona Tagging Globals ---
 let activePersonasCache = [];
 let personasCacheTimestamp = 0;
@@ -319,68 +321,8 @@ async function updateTokenBreakdown(editorInstance, editorType) {
 
 
     // --- Simplification for attachments_text ---
-    // TODO: Implement proper text extraction from attachments.
-    // For now, sending empty string as per plan.
-    let attachments_text = "";
-    const attachmentInputId = editorType === 'new-topic' ? 'new-topic-attachment-input' : 'reply-attachment-input';
-    const attachmentInput = document.getElementById(attachmentInputId);
-    let combinedAttachmentsText = "";
-
-    // Define known plain text MIME types
-    const plainTextMimeTypes = [
-        'text/plain', 'text/markdown', 'text/csv', 'application/json', 'application/xml',
-        'text/html', 'text/css', 'text/javascript', 'application/javascript',
-        'application/x-javascript', 'text/x-python', 'application/python',
-        'application/x-python', 'text/x-java-source', 'text/x-csrc', 'text/x-c++src',
-        'application/rtf', 'text/richtext', 'text/yaml', 'application/yaml', 'text/x-yaml',
-        'application/x-yaml', 'text/toml', 'application/toml', 'application/ld+json',
-        'text/calendar', 'text/vcard', 'text/sgml', 'application/sgml', 'text/tab-separated-values',
-        'application/xhtml+xml', 'application/rss+xml', 'application/atom+xml', 'text/x-script.python'
-    ];
-
-    // Define known plain text file extensions
-    const plainTextExtensions = [
-        '.txt', '.md', '.markdown', '.csv', '.json', '.xml', '.html', '.htm', '.css', '.js',
-        '.py', '.pyw', '.java', '.c', '.cpp', '.h', '.hpp', '.rtf', '.yaml', '.yml',
-        '.toml', '.ini', '.cfg', '.conf', '.log', '.text', '.tex', '.tsv', '.jsonld',
-        '.ical', '.ics', '.vcf', '.vcard', '.sgml', '.sgm', '.xhtml', '.xht', '.rss', '.atom',
-        '.sh', '.bash', '.ps1', '.bat', '.cmd'
-    ];
-
-    if (attachmentInput && attachmentInput.files && attachmentInput.files.length > 0) {
-        const textFilePromises = [];
-        for (const file of attachmentInput.files) {
-            let isTextFile = false;
-            // Check against known MIME types
-            if (plainTextMimeTypes.includes(file.type)) {
-                isTextFile = true;
-            } else if (file.type === "" || file.type === "application/octet-stream") {
-                // If MIME type is generic or empty, check file extension
-                const fileNameLower = file.name.toLowerCase();
-                for (const ext of plainTextExtensions) {
-                    if (fileNameLower.endsWith(ext)) {
-                        isTextFile = true;
-                        break;
-                    }
-                }
-            }
-
-            if (isTextFile) {
-                textFilePromises.push(file.text());
-            } else {
-                console.log(`Skipping file for token estimation (unrecognized type/extension): ${file.name} (type: ${file.type || 'unknown'})`);
-            }
-        }
-        try {
-            const fileContents = await Promise.all(textFilePromises);
-            combinedAttachmentsText = fileContents.join("\n\n---\n\n"); // Separator between file contents
-            attachments_text = combinedAttachmentsText;
-        } catch (error) {
-            console.error("Error reading attachment file contents:", error);
-            attachments_text = "[Error reading attachment contents]";
-        }
-    }
-    // console.log(`Attachments text for ${editorType}: ${attachments_text.substring(0,100)}...`);
+    const attachments_text = cachedAttachmentsContent[editorType] ? cachedAttachmentsContent[editorType].text : "";
+    // console.log(`Using cached attachments text for ${editorType} in updateTokenBreakdown`);
 
 
     try {
@@ -472,7 +414,68 @@ function initializeTokenBreakdownDisplay(editorInstance, editorType) {
     const attachmentInputId = editorType === 'new-topic' ? 'new-topic-attachment-input' : 'reply-attachment-input';
     const attachmentInput = document.getElementById(attachmentInputId);
     if (attachmentInput) {
-        attachmentInput.addEventListener('change', () => updateTokenBreakdown(editorInstance, editorType));
+        attachmentInput.addEventListener('change', async () => {
+            // console.log(`Attachment change detected for ${editorType}`);
+            const files = attachmentInput.files;
+            let combinedText = "";
+            let filesHash = ""; // Simple hash: concat names and sizes
+
+            if (files && files.length > 0) {
+                const textFilePromises = [];
+                const fileDetailsForHash = [];
+
+                const plainTextMimeTypes = [
+                    'text/plain', 'text/markdown', 'text/csv', 'application/json', 'application/xml',
+                    'text/html', 'text/css', 'text/javascript', 'application/javascript',
+                    'application/x-javascript', 'text/x-python', 'application/python',
+                    'application/x-python', 'text/x-java-source', 'text/x-csrc', 'text/x-c++src',
+                    'application/rtf', 'text/richtext', 'text/yaml', 'application/yaml', 'text/x-yaml',
+                    'application/x-yaml', 'text/toml', 'application/toml', 'application/ld+json',
+                    'text/calendar', 'text/vcard', 'text/sgml', 'application/sgml', 'text/tab-separated-values',
+                    'application/xhtml+xml', 'application/rss+xml', 'application/atom+xml', 'text/x-script.python'
+                ];
+                const plainTextExtensions = [
+                    '.txt', '.md', '.markdown', '.csv', '.json', '.xml', '.html', '.htm', '.css', '.js',
+                    '.py', '.pyw', '.java', '.c', '.cpp', '.h', '.hpp', '.rtf', '.yaml', '.yml',
+                    '.toml', '.ini', '.cfg', '.conf', '.log', '.text', '.tex', '.tsv', '.jsonld',
+                    '.ical', '.ics', '.vcf', '.vcard', '.sgml', '.sgm', '.xhtml', '.xht', '.rss', '.atom',
+                    '.sh', '.bash', '.ps1', '.bat', '.cmd'
+                ];
+
+                for (const file of files) {
+                    fileDetailsForHash.push(`${file.name}_${file.size}`);
+                    let isTextFile = false;
+                    if (plainTextMimeTypes.includes(file.type)) {
+                        isTextFile = true;
+                    } else if (file.type === "" || file.type === "application/octet-stream") {
+                        const fileNameLower = file.name.toLowerCase();
+                        for (const ext of plainTextExtensions) {
+                            if (fileNameLower.endsWith(ext)) {
+                                isTextFile = true;
+                                break;
+                            }
+                        }
+                    }
+
+                    if (isTextFile) {
+                        textFilePromises.push(file.text());
+                    }
+                }
+                try {
+                    const fileContents = await Promise.all(textFilePromises);
+                    combinedText = fileContents.join("\n\n---\n\n");
+                } catch (error) {
+                    console.error("Error reading attachment file contents for caching:", error);
+                    combinedText = "[Error reading attachment contents]";
+                }
+                filesHash = fileDetailsForHash.join('|');
+            }
+
+            cachedAttachmentsContent[editorType] = { text: combinedText, filesHash: filesHash };
+            // console.log(`Cached attachments for ${editorType}:`, cachedAttachmentsContent[editorType]);
+
+            updateTokenBreakdown(editorInstance, editorType);
+        });
     }
 
 
