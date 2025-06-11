@@ -104,3 +104,15 @@
     background-color: var(--active-bg, #e0e0e0); /* Use theme active/selected background */
     color: var(--button-text, #000); /* Ensure text is readable on selection */
 }
+
+/* --- Editor Token Count Display --- */
+.editor-token-count {
+    font-size: 0.8em;
+    color: var(--post-meta-color, #888); /* Use a theme variable if available, else fallback */
+    text-align: right;
+    margin-top: 2px;
+    margin-bottom: 5px; /* Space below the count */
+    padding-right: 5px; /* Align with typical editor padding */
+    /* Ensure it doesn't interfere with editor's resizability or layout */
+    clear: both; /* If editor container is floated or uses flex that might be affected */
+}

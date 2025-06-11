@@ -11,59 +11,64 @@ Here's a phased development plan, incorporating your groundwork steps and then e
 ---
 
 *   **Sub-Phase 1.1: Tokenizer Setup & Basic Integration**
-    *   **Task 1.1.1 (Backend): Install and Configure Tokenizer.**
-        *   In `routes/tokenizer_utils.py`:
-            *   Add `tiktoken` to your project dependencies.
-            *   Implement a function `count_tokens(text: str) -> int` using `tiktoken.get_encoding("cl100k_base").encode(text)`.
-            *   Provide a fallback or clear error if `tiktoken` fails to initialize.
+    *   **[DONE] Task 1.1.1 (Backend): Install and Configure Tokenizer.**
+        *   In `forllm_server/tokenizer_utils.py` (Note: actual path):
+            *   Added `tiktoken` to `requirements.txt`.
+            *   Implemented `count_tokens(text: str) -> int` using `tiktoken.get_encoding("cl100k_base").encode(text)`.
+            *   Includes logging for initialization success or failure, and returns 0 if not initialized.
         *   Benefit: Establishes a consistent way to estimate token counts. `cl100k_base` is a good general-purpose default.
-    *   **Task 1.1.2 (Backend): Initial Token Counting for Core Components.**
-        *   Modify `llm_processing.py` where prompts are constructed (before sending to Ollama):
-            *   Calculate token counts for:
-                *   The system prompt (if you have a global one).
-                *   The selected persona's `prompt_instructions`.
-                *   The user's current post content.
-                *   Content of any attachments (if they are text-based and part of the prompt).
-            *   Initially, just log these counts or use them for internal debugging.
+    *   **[DONE] Task 1.1.2 (Backend): Initial Token Counting for Core Components.**
+        *   Modified `forllm_server/llm_processing.py` where prompts are constructed (before sending to Ollama):
+            *   Calculates and logs token counts for:
+                *   `persona_instructions`
+                *   `original_post['content']` (user's current post content)
+                *   `attachments_string` (concatenated text from attachments)
+                *   The final `prompt_content`
+            *   These counts are logged via Python's `logging` module.
         *   Benefit: Understands the token cost of existing prompt components.
-    *   **Task 1.1.3 (Frontend - Optional Early Feedback): Basic Token Estimator UI.**
-        *   In `static/js/editor.js` or `static/js/forum.js` (where new posts/replies are handled):
+    *   **[DONE] Task 1.1.3 (Frontend - Optional Early Feedback): Basic Token Estimator UI.**
+        *   In `static/js/editor.js`:
             *   As the user types in the EasyMDE editor for a new post/reply:
-                *   On `keyup` or a debounced change event, send the current text to a new backend endpoint (e.g., `/api/utils/count_tokens_for_text`) that uses the `count_tokens` function.
-                *   Display this estimated count near the editor: "Post content: ~X tokens".
-        *   Benefit: Gives the user immediate (though potentially slightly delayed if using backend) feedback on their post's size.
+                *   On a debounced `change` event, sends the current text to a new backend endpoint `/api/utils/count_tokens_for_text` (in `forllm_server/routes/utility_routes.py`) which uses the `count_tokens` function.
+                *   Displays this estimated count (`Tokens: ~X`) near the editor. Added CSS for styling in `static/css/editor.css`.
+        *   Benefit: Gives the user immediate feedback on their post's size.
 
 ---
 
 *   **Sub-Phase 1.2: Model Context Window Discovery (Ollama)**
-    *   **Task 1.2.1 (Backend): Fetch Model Details from Ollama.**
-        *   In `llm_processing.py` or a new `ollama_utils.py`:
-            *   Create a function `get_ollama_model_details(model_name: str) -> dict`.
-                *   This function will make an API call to Ollama's `/api/show` endpoint for the given `model_name`.
-                *   Handle potential errors (model not found, Ollama not reachable).
-        *   **Benefit:** Centralizes Ollama model introspection.
-    *   **Task 1.2.2 (Backend): Parse `num_ctx` from Model Details.**
-        *   In `get_ollama_model_details` or a helper:
-            *   Parse the `parameters` string in the response from `/api/show` to find the `num_ctx` value (or other relevant context length parameters like `max_sequence_length`).
-            *   Return this `num_ctx` value (or `None` if not found).
-        *   **Benefit:** Extracts the crucial context window size.
-    *   **Task 1.2.3 (Backend & Database - Optional Persisting): Cache Model Context Length.**
-        *   In `database.py`:
-            *   Consider adding a new table: `llm_model_metadata (model_name TEXT PRIMARY KEY, context_window INTEGER, last_checked TIMESTAMP)`.
-        *   Modify `llm_processing.py`:
-            *   When `get_ollama_model_details` successfully retrieves `num_ctx`, store/update it in this new table.
-            *   Before calling `/api/show`, check this table first to avoid redundant API calls. Refresh periodically or when explicitly requested.
-        *   **Benefit:** Reduces API calls to Ollama and speeds up context length retrieval.
-    *   **Task 1.2.4 (Frontend & Backend): Display Model Context Length in Settings.**
+    *   **[DONE] Task 1.2.1 (Backend): Fetch Model Details from Ollama.**
+        *   In `forllm_server/ollama_utils.py` (new file):
+            *   Created function `get_ollama_model_details(model_name: str) -> dict`.
+                *   Makes an API call to Ollama's `/api/show`.
+                *   Handles errors.
+        *   Benefit: Centralizes Ollama model introspection.
+    *   **[DONE] Task 1.2.2 (Backend): Parse `num_ctx` from Model Details.**
+        *   In `forllm_server/ollama_utils.py`:
+            *   Created `parse_model_context_window(model_details: dict) -> int | None`.
+            *   Parses the `parameters` string from `/api/show` response (or checks `model_info`) for `num_ctx` or `max_sequence_length`.
+        *   Benefit: Extracts the crucial context window size.
+    *   **[DONE] Task 1.2.3 (Backend & Database): Cache Model Context Length.**
+        *   In `forllm_server/database.py`:
+            *   Added new table: `llm_model_metadata (model_name TEXT PRIMARY KEY, context_window INTEGER, last_checked DATETIME DEFAULT CURRENT_TIMESTAMP)`. Table created in `init_db()`.
+            *   Added helper functions `get_cached_model_context_window` and `cache_model_context_window`.
+        *   In `forllm_server/ollama_utils.py`:
+            *   Implemented `get_model_context_window(model_name: str, db)` which uses the database cache first, then falls back to fetching from Ollama via `get_ollama_model_details` and `parse_model_context_window`, then caches the result.
+        *   Benefit: Reduces API calls to Ollama and speeds up context length retrieval.
+    *   **[DONE] Task 1.2.4 (Frontend & Backend): Display Model Context Length in Settings.**
+        *   In `forllm_server/routes/llm_routes.py`:
+            *   Created new GET endpoint: `/api/llm/models/<path:model_name>/context_window`. Uses `ollama_utils.get_model_context_window`.
         *   In `static/js/settings.js`:
-            *   When displaying the list of available Ollama models, for the currently selected model (or all of them if fetched):
-                *   Call a new backend endpoint (e.g., `/api/llm/models/<model_name>/context_window`) that uses the logic from 1.2.1-1.2.3.
-                *   Display: "Selected Model (<model_name>): Detected Context ~Y tokens".
-        *   **Benefit:** Makes users aware of their chosen model's capabilities.
+            *   Modified `loadOllamaModels` and added `fetchAndDisplayModelContextWindow` and `handleModelSelectionChange`.
+            *   When displaying the list of available Ollama models, or when the selection changes, calls the new backend endpoint.
+            *   Displays: "Selected Model (<model_name>): (Context: ~Y tokens)" or "(Context: Not Available)" in the settings UI (via a new `<span>` in `index.html`).
+        *   Benefit: Makes users aware of their chosen model's capabilities.
+
+    **Implementation Summary for Sub-Phase 1.2:**
+    This sub-phase was completed by introducing a new utility module `forllm_server/ollama_utils.py` which handles direct communication with the Ollama `/api/show` endpoint to fetch model details and parse the context window size (`num_ctx` or `max_sequence_length`). To optimize performance, a caching layer was added using a new SQLite table `llm_model_metadata` (managed in `forllm_server/database.py`), which stores the retrieved context window sizes. A new API endpoint `/api/llm/models/<path:model_name>/context_window` was created in `forllm_server/routes/llm_routes.py` to expose this information. The frontend was updated in `static/js/settings.js` and `templates/index.html` to call this endpoint and display the context window for the selected Ollama model on the settings page, providing users with immediate feedback on model capabilities.
 
 ---
 
-*   **Sub-Phase 1.3: User-Configurable Fallback Context Length**
+*   **[DONE] Sub-Phase 1.3: User-Configurable Fallback Context Length**
     *   **Task 1.3.1 (Backend & Database): Store Fallback Setting.**
         *   In `database.py`, add to your `settings` table: `default_llm_context_window INTEGER`.
         *   Initialize with a sensible default (e.g., 2048 or 4096).
@@ -77,43 +82,60 @@ Here's a phased development plan, incorporating your groundwork steps and then e
             *   Save this to the database.
         *   **Benefit:** Provides a safety net if Ollama doesn't provide context info or if a non-Ollama model is used in the future.
 
+    **Implementation Summary for Sub-Phase 1.3:**
+    This sub-phase was completed by introducing a user-configurable fallback context length.
+    - In `forllm_server/database.py`, the `settings` table now stores a `default_llm_context_window` (defaulting to '4096'). This setting is added during initial DB creation and also when an older database is updated.
+    - The settings API in `forllm_server/routes/settings_routes.py` (`/api/settings`) was updated to allow GET and PUT operations for `default_llm_context_window`, ensuring the value is an integer (stored as a string).
+    - The frontend settings UI in `static/js/settings.js` was enhanced to include an input field for this value under the "General" settings tab. This involved updating `renderSettingsPage()` to create the input, `loadSettings()` to populate it, and `saveSettings()` to persist it, including validation for a non-negative integer.
+    - In `forllm_server/llm_processing.py`, the `process_llm_request` function now determines an `effective_context_window`. It prioritizes the model-specific context window (obtained via `ollama_utils.get_model_context_window`), falls back to the user-configured `default_llm_context_window` from settings if the specific one isn't found, and finally uses a hardcoded value (2048 tokens) if neither is available. The determined `effective_context_window` is logged.
+
 ---
 
-* **Sub-Phase 1.4: Comprehensive Token Count Display (Pre-Submission)**
+* **[DONE] Sub-Phase 1.4: Comprehensive Token Count Display (Pre-Submission)**
     *   **Task 1.4.1 (Frontend & Backend): Detailed Token Breakdown UI.**
         *   This expands on Task 1.1.3.
-        *   In `static/js/forum.js` (or `editor.js`):
+        *   In `static/js/editor.js`:
             *   When the user is composing a post/reply:
-                *   Display an area showing estimated token counts for various components that *will* form the prompt. This requires more backend interaction or more JS logic.
-                *   **Option A (Backend-driven):**
-                    *   Create a new backend endpoint: `/api/prompts/estimate_tokens`
-                    *   Frontend sends: `current_post_text`, `selected_persona_id` (if chosen), `parent_post_id` (for future history), any attachment info.
+                *   Display an area showing estimated token counts for various components that *will* form the prompt.
+                *   **Implementation Details:**
+                    *   New backend endpoint: `/api/prompts/estimate_tokens` (in `forllm_server/routes/utility_routes.py`).
+                    *   Frontend sends: `current_post_text`, `selected_persona_id` (if a global persona selector is used, otherwise null/default), `attachments_text` (concatenated content of selected text-based attachments), and `parent_post_id` (unused for now).
                     *   Backend calculates:
                         *   `tokens(current_post_text)`
                         *   `tokens(persona_prompt_for_id)`
-                        *   `tokens(system_prompt)`
-                        *   `tokens(attachments)`
+                        *   `tokens(system_prompt)` (placeholder, currently 0)
+                        *   `tokens(attachments_text)`
                         *   `tokens(chat_history)` (initially 0, placeholder for Phase 2)
                         *   `total_estimated_tokens`
-                    *   Backend returns this breakdown.
-                *   **Option B (Frontend-driven estimation with backend helper for persona):**
-                    *   Frontend counts `current_post_text` (rough JS estimate or via `/api/utils/count_tokens_for_text`).
-                    *   Frontend fetches selected persona prompt (or its token count) via API if not already loaded.
-                    *   Frontend has a pre-defined system prompt token count (if static) or fetches it.
-                *   Display:
+                    *   Backend returns this breakdown, including `persona_name`, `model_context_window`, and `model_name`.
+                *   Display in UI (near editor, via `templates/index.html` and `static/js/editor.js`):
                     *   `Post Content: ~A tokens`
-                    *   `Persona Prompt (<Persona Name>): ~B tokens`
+                    *   `Persona Prompt (<Actual Persona Name>): ~B tokens`
                     *   `System Instructions: ~C tokens`
                     *   `Attachments: ~D tokens`
                     *   `Chat History: ~E tokens` (initially 0)
                     *   `--------------------`
                     *   `Total Estimated: ~X tokens / Y available (for <current_model_name>)`
-                    *   A visual bar or color coding (green/yellow/red) if approaching/exceeding `Y`.
-        *   **Benefit:** Empowers users to manage their prompt size effectively *before* submitting, reducing errors and frustration. Option A is more accurate but chattier. Option B is faster but might be less precise for persona/system prompts unless their exact text is pulled to the FE.
+                    *   A visual bar indicating usage against the model's context window, color-coded (green/yellow/red).
     *   **Task 1.4.2 (Backend): "Pre-flight Check" in `llm_processing.py`.**
-        *   Before actually sending to Ollama, the backend should perform its own definitive token count of the *final, assembled prompt* (including any history added in Phase 2).
-        *   If this count (after applying a safety margin, e.g., 90-95% of `model_context_window`) exceeds the limit, the request should ideally not be sent to Ollama. Instead, an error should be logged, and the LLM request in the `llm_requests` table should be marked with an error like "Prompt too long after assembly."
-        *   **Benefit:** Prevents Ollama errors due to excessive length and provides clearer feedback if pruning (from Phase 2) isn't enough.
+        *   Before actually sending to Ollama, the backend performs its own definitive token count of the *final, assembled prompt*.
+        *   If this count (after applying a safety margin, currently hardcoded at 95% of `model_context_window`) exceeds the limit:
+            *   The request is not sent to Ollama.
+            *   An error should be logged, and the LLM request in the `llm_requests` table should be marked with `status='error'` and a detailed `error_message` (e.g., 'Error: Prompt too long after assembly. Tokens: X, Max Allowed (after safety margin): Y (Context: Z)').
+        *   The token breakdown (persona, user post, attachments, total) is stored as a JSON string in the `llm_requests.prompt_token_breakdown` column (new column added in `forllm_server/database.py`) and displayed in the queue UI (`static/js/queue.js`) for relevant items (completed or error).
+        *   **Benefit:** Prevents Ollama errors due to excessive length and provides clearer feedback.
+
+    **Implementation Summary for Sub-Phase 1.4:**
+    This sub-phase focused on providing comprehensive token count information to the user and implementing a pre-flight check to prevent oversized prompts from being sent to the LLM.
+    - **Detailed Token Breakdown UI (Task 1.4.1):**
+        - A new API endpoint `/api/prompts/estimate_tokens` was created in `forllm_server/routes/utility_routes.py`. It accepts current post text, selected persona ID, and concatenated text from attachments. It returns a detailed breakdown of estimated token counts for each component (post content, persona prompt, attachments, system prompt placeholder, chat history placeholder), the total estimated tokens, and the current model's name and context window size.
+        - The frontend editor interface (`static/js/editor.js` and `templates/index.html`) was updated to call this endpoint. As the user types or changes attachments/persona, a detailed breakdown is displayed near the editor, including a visual bar indicating usage against the model's context window.
+    - **Backend Pre-flight Check & Token Storage (Task 1.4.2):**
+        - In `forllm_server/llm_processing.py`, before sending a request to Ollama, the final assembled prompt's token count is calculated.
+        - A `prompt_token_breakdown` JSON string (containing counts for persona, user post, attachments, and total) is now stored in a new `prompt_token_breakdown` column in the `llm_requests` table (migration handled in `forllm_server/database.py`).
+        - If this total count exceeds 95% of the model's effective context window, the request is marked as an error in the database (with a detailed message), and not sent to the LLM.
+        - The `static/js/queue.js` was updated to parse and display this `prompt_token_breakdown` for completed/error items in the queue UI.
+    This provides users with immediate feedback on prompt size and helps prevent unnecessary LLM processing errors.
 
 ---
 ### Phase 2: Chat History Implementation
@@ -132,9 +154,9 @@ Here's a phased development plan, incorporating your groundwork steps and then e
             *   Create `format_linear_history(posts: List[Post]) -> str`.
             *   Formats the list of posts into a string, e.g.:
                 ```
-                User (<username>/Anonymous): <post_content>
+                User: <post_content>
                 LLM (<persona_name>/<model_name>): <llm_response_content>
-                User (<username>/Anonymous): <reply_content>
+                User: <reply_content>
                 ...
                 ```
             *   Clearly label user vs. LLM/persona contributions.

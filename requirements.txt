@@ -3,3 +3,4 @@ requests>=2.20
 markdown-it-py>=3.0.0
 Pygments>=2.10.0 # For syntax highlighting
 beautifulsoup4>=4.10.0
+tiktoken

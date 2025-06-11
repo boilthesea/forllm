@@ -11,7 +11,8 @@ import { applyDarkMode, showSection, lastVisibleSectionId } from './ui.js'; // N
 // --- State Variables ---
 export let currentSettings = { // Store loaded settings
     selectedModel: null,
-    llmLinkSecurity: 'true' // Added default
+    llmLinkSecurity: 'true', // Added default
+    default_llm_context_window: '4096' // Initial default
 };
 
 // --- DEBUG: Global click logger ---
@@ -60,10 +61,18 @@ export function renderSettingsPage() {
         <select id="model-select">
             <option value="">Loading models...</option>
         </select>
+        <p style="margin-top: 5px;" id="model-info-display">
+           <span id="selected-model-context-window-display" style="font-size: 0.9em; color: #aaa;"></span>
+        </p>
     </div>
     <div class="setting-item">
         <label for="llm-link-security-toggle">LLM Link Security:</label>
         <input type="checkbox" id="llm-link-security-toggle">
+    </div>
+    <div class="setting-item">
+        <label for="default-llm-context-window-input">Default LLM Context Window (tokens):</label>
+        <input type="number" id="default-llm-context-window-input" class="number-input" min="0" placeholder="e.g., 4096">
+        <p style="font-size: 0.8em; color: #888; margin-top: 3px;">Used if model-specific context window detection fails.</p>
     </div>
     <button id="save-settings-btn">Save Settings</button>
     <p id="settings-error" class="error-message"></p>
@@ -160,6 +169,11 @@ export function renderSettingsPage() {
                 if (linkSecurityToggleInput) {
                     linkSecurityToggleInput.checked = currentSettings.llmLinkSecurity === 'true';
                 }
+
+                const contextWindowInput = container.querySelector('#default-llm-context-window-input');
+                if (contextWindowInput) {
+                    contextWindowInput.value = currentSettings.default_llm_context_window;
+                }
                 
                 const saveButton = container.querySelector('#save-settings-btn');
                 if (saveButton) {
@@ -213,17 +227,26 @@ export async function loadSettings() {
         const settings = await apiRequest('/api/settings');
         currentSettings = {
             selectedModel: settings.selectedModel || null,
-            llmLinkSecurity: settings.llmLinkSecurity === 'true' ? 'true' : 'false' // Default to true if missing
+            llmLinkSecurity: settings.llmLinkSecurity === 'true' ? 'true' : 'false', // Default to true if missing
+            default_llm_context_window: settings.default_llm_context_window || '4096' // Load or default
         };
          if (settings.llmLinkSecurity === undefined) {
              currentSettings.llmLinkSecurity = 'true'; // Explicitly default if undefined
         }
+         if (settings.default_llm_context_window === undefined) {
+            currentSettings.default_llm_context_window = '4096'; // Explicitly default if undefined
+        }
         applyDarkMode(true); // Apply dark mode immediately
 
         // Update UI elements if they exist (they might be created later by renderSettingsPage)
+        // These direct updates here are less critical if renderIntoContainer correctly sets values based on currentSettings
         const linkSecurityToggleInput = settingsPageContent.querySelector('#llm-link-security-toggle');
         if (linkSecurityToggleInput) {
              linkSecurityToggleInput.checked = currentSettings.llmLinkSecurity === 'true';
+        }
+        const contextWindowInput = settingsPageContent.querySelector('#default-llm-context-window-input');
+        if (contextWindowInput) {
+            contextWindowInput.value = currentSettings.default_llm_context_window;
         }
 
         // Trigger model loading (it will handle populating the select later)
@@ -241,12 +264,18 @@ export async function loadSettings() {
 export async function loadOllamaModels() {
     const modelSelectElement = settingsPageContent.querySelector('#model-select');
     const settingsErrorElement = settingsPageContent.querySelector('#settings-error');
+    // const selectedOllamaModelDisplay = settingsPageContent.querySelector('#selected-ollama-model-display'); // REMOVED
+    const contextWindowInput = settingsPageContent.querySelector('#default-llm-context-window-input'); // Added for fetchAndDisplayModelContextWindow
 
     // Ensure the select element exists before proceeding
     if (!modelSelectElement) {
          console.warn("Model select element not found yet in settings page.");
          return;
     }
+    // if (!selectedOllamaModelDisplay) { // REMOVED
+    //     console.warn("Selected Ollama model display element not found."); // REMOVED
+    // } // REMOVED
+
 
     // Set loading state
     modelSelectElement.innerHTML = '<option value="">Loading models...</option>';
@@ -254,29 +283,134 @@ export async function loadOllamaModels() {
     if(settingsErrorElement) settingsErrorElement.textContent = ""; // Clear previous errors
 
     try {
-        const modelsResult = await apiRequest('/api/ollama/models');
+        const modelsResult = await apiRequest('/api/ollama/models', 'GET', null, false, true); // Added silentError = true
         let models = [];
-        if (Array.isArray(modelsResult)) {
+        let defaultModelFromBackend = modelsResult && modelsResult.models && modelsResult.models.length > 0 ? modelsResult.models[0] : null;
+
+        if (Array.isArray(modelsResult)) { // Direct array of model names
             models = modelsResult;
-        } else if (modelsResult && Array.isArray(modelsResult.models)) {
-            // Handle case where backend returns default list due to connection issue
+            defaultModelFromBackend = models.length > 0 ? models[0] : null;
+        } else if (modelsResult && Array.isArray(modelsResult.models)) { // Object with models array and possibly error
             models = modelsResult.models;
-            console.warn("Ollama connection issue reported by backend, using default model list:", modelsResult.error);
-             if(settingsErrorElement) settingsErrorElement.textContent = "Warning: Ollama connection issue. Displaying default models.";
+            if (modelsResult.error) {
+                console.warn("Ollama connection issue reported by backend, using default model list:", modelsResult.error);
+                if(settingsErrorElement) settingsErrorElement.textContent = "Warning: Ollama connection issue. Displaying default models.";
+            }
         } else {
-             // Handle unexpected format or error from backend
              console.error("Unexpected format or error fetching Ollama models:", modelsResult);
-             models = currentSettings.selectedModel ? [currentSettings.selectedModel] : []; // Use current if available, else empty
+             models = currentSettings.selectedModel ? [currentSettings.selectedModel] : [];
              if(settingsErrorElement) settingsErrorElement.textContent = "Error fetching models. Using current selection if available.";
         }
-        renderModelOptions(modelSelectElement, models, currentSettings.selectedModel); // Populate the select
+
+        // Determine the model to select: current setting, or first from list, or null
+        let modelToSelect = currentSettings.selectedModel || defaultModelFromBackend;
+        if (models.length === 0 && !currentSettings.selectedModel) {
+            modelToSelect = null; // No models, no selection
+        } else if (models.length > 0 && !models.includes(modelToSelect) && !currentSettings.selectedModel) {
+            // If currentSettings.selectedModel was null, and modelToSelect (first from backend) isn't in the (possibly filtered) list
+            modelToSelect = models[0]; // Fallback to the first model in the processed list
+        }
+
+
+        renderModelOptions(modelSelectElement, models, modelToSelect);
+
+        // if (selectedOllamaModelDisplay) { // REMOVED
+        //     selectedOllamaModelDisplay.textContent = modelToSelect || 'None'; // REMOVED
+        // } // REMOVED
+        currentSettings.selectedModel = modelToSelect; // Update current setting state
+
+        if (modelToSelect && modelToSelect !== 'None') {
+            await fetchAndDisplayModelContextWindow(modelToSelect, false); // Explicitly false
+        } else {
+            const contextDisplay = settingsPageContent.querySelector('#selected-model-context-window-display');
+            if (contextDisplay) contextDisplay.textContent = '';
+        }
+
+        // Add/Update event listener for changes
+        modelSelectElement.removeEventListener('change', handleModelSelectionChange); // Remove previous if any
+        modelSelectElement.addEventListener('change', handleModelSelectionChange);
+
     } catch (error) {
         console.error("Error fetching Ollama models:", error);
-        // Handle fetch error
-        renderModelOptions(modelSelectElement, currentSettings.selectedModel ? [currentSettings.selectedModel] : [], currentSettings.selectedModel); // Use current if available
+        renderModelOptions(modelSelectElement, currentSettings.selectedModel ? [currentSettings.selectedModel] : [], currentSettings.selectedModel);
         if(settingsErrorElement) settingsErrorElement.textContent = `Could not fetch models: ${error.message}`;
+        // if (selectedOllamaModelDisplay) { // REMOVED
+        //     selectedOllamaModelDisplay.textContent = currentSettings.selectedModel || 'Error'; // REMOVED
+        // } // REMOVED
+         // Attempt to show context for a previously selected model if list fails to load
+        if (currentSettings.selectedModel) {
+            await fetchAndDisplayModelContextWindow(currentSettings.selectedModel, false); // Explicitly false
+        }
     } finally {
-         if (modelSelectElement) modelSelectElement.disabled = false; // Re-enable select even on error
+         if (modelSelectElement) modelSelectElement.disabled = false;
+    }
+}
+
+async function handleModelSelectionChange(event) {
+    const selectedModel = event.target.value;
+    // const selectedOllamaModelDisplay = settingsPageContent.querySelector('#selected-ollama-model-display'); // REMOVED
+    // if (selectedOllamaModelDisplay) { // REMOVED
+    //     selectedOllamaModelDisplay.textContent = selectedModel; // REMOVED
+    // } // REMOVED
+    currentSettings.selectedModel = selectedModel;
+    // updateSetting('selected_model', selectedModel); // If you have a function to save to backend immediately
+    await fetchAndDisplayModelContextWindow(selectedModel, false); // Explicitly false
+}
+
+// New function to fetch and display context window
+async function fetchAndDisplayModelContextWindow(modelName, isForcedRefresh = false) {
+    const displayElement = settingsPageContent.querySelector('#selected-model-context-window-display');
+    if (!displayElement) {
+        console.error("Context window display element not found");
+        return;
+    }
+
+    // 5. If !modelName || modelName === 'None', set textContent to '' and no refresh icon.
+    if (!modelName || modelName === 'None') {
+        displayElement.textContent = '';
+        return;
+    }
+
+    displayElement.innerHTML = ''; // Clear previous content, including any refresh icon
+    displayElement.textContent = ' (Context: Loading...)'; // Temporary text
+
+    const showErrorState = () => {
+        displayElement.innerHTML = ''; // Clear loading text
+        displayElement.textContent = 'context limit unavailable '; // 3. Set text content
+
+        const refreshSpan = document.createElement('span'); // 3. Create span
+        refreshSpan.textContent = '🔄'; // 3. Set textContent
+        refreshSpan.style.cursor = 'pointer'; // 3. Style cursor
+        refreshSpan.style.marginLeft = '5px'; // 3. Style margin
+        refreshSpan.title = 'Refresh context window'; // 3. Add title (aria-label is also good)
+        refreshSpan.setAttribute('aria-label', 'Refresh context window');
+
+        refreshSpan.addEventListener('click', (event) => { // 3. Attach event listener
+            event.preventDefault(); // 3. Prevent default
+            fetchAndDisplayModelContextWindow(modelName, true); // 3. Call self, with force refresh
+        });
+        displayElement.appendChild(refreshSpan); // 3. Append span
+    };
+
+    try {
+        let apiUrl = `/api/llm/models/${encodeURIComponent(modelName)}/context_window`;
+        if (isForcedRefresh) {
+            apiUrl += '?refresh=true';
+        }
+        const data = await apiRequest(apiUrl, 'GET', null, false, true); // Added silentError = true
+
+        // 2. API call successful and data.context_window is available
+        if (data && data.context_window !== undefined && data.context_window !== null) {
+            displayElement.textContent = ` (Context: ${data.context_window} tokens)`;
+        } else {
+            // API call was successful but context_window is null/undefined (e.g. API returned 404, which apiRequest might turn into a resolved promise with specific data structure)
+            // Or data object itself is not as expected.
+            console.warn(`Context window data not available for ${modelName}, or API response structure unexpected. Data:`, data);
+            showErrorState(); // 3. Call error/unavailable state handler
+        }
+    } catch (error) { // API call failed (e.g. network error, 5xx, or apiRequest threw an error)
+        console.error(`Exception fetching context window for ${modelName}:`, error);
+        showErrorState(); // 3. Call error/unavailable state handler
     }
 }
 
@@ -285,10 +419,11 @@ export async function saveSettings() {
     // Get elements from within the settings page content
     const modelSelectElement = settingsPageContent.querySelector('#model-select');
     const linkSecurityToggleInput = settingsPageContent.querySelector('#llm-link-security-toggle');
+    const contextWindowInput = settingsPageContent.querySelector('#default-llm-context-window-input');
     const saveButton = settingsPageContent.querySelector('#save-settings-btn');
     const settingsErrorElement = settingsPageContent.querySelector('#settings-error');
 
-    if (!modelSelectElement || !linkSecurityToggleInput || !saveButton || !settingsErrorElement) {
+    if (!modelSelectElement || !linkSecurityToggleInput || !contextWindowInput || !saveButton || !settingsErrorElement) {
         console.error("Settings elements not found for saving.");
         // Changed alert to console.error to avoid blocking UI in case of programmatic call
         console.error("An error occurred. Could not save settings. Required elements missing.");
@@ -297,6 +432,7 @@ export async function saveSettings() {
 
     const newSelectedModel = modelSelectElement.value;
     const newLlmLinkSecurity = linkSecurityToggleInput.checked;
+    const newDefaultContextWindow = contextWindowInput.value;
 
     settingsErrorElement.textContent = ""; // Clear previous errors
 
@@ -306,9 +442,16 @@ export async function saveSettings() {
         return;
     }
 
+    if (!newDefaultContextWindow || isNaN(parseInt(newDefaultContextWindow, 10)) || parseInt(newDefaultContextWindow, 10) < 0) {
+        settingsErrorElement.textContent = "Default LLM Context Window must be a non-negative number.";
+        if(contextWindowInput) contextWindowInput.focus();
+        return;
+    }
+
     const settingsToSave = {
         selectedModel: newSelectedModel,
-        llmLinkSecurity: newLlmLinkSecurity.toString()
+        llmLinkSecurity: newLlmLinkSecurity.toString(),
+        default_llm_context_window: parseInt(newDefaultContextWindow, 10).toString() // Send as string
     };
 
     saveButton.disabled = true;
@@ -316,16 +459,21 @@ export async function saveSettings() {
 
     try {
         // Use PUT request to update settings
-        const updatedSettings = await apiRequest('/api/settings', 'PUT', settingsToSave);
+        const updatedSettings = await apiRequest('/api/settings', 'PUT', settingsToSave, false, true); // Added silentError = true
 
         // Update local state immediately based on what was sent,
         // assuming the backend confirms or handles potential discrepancies.
         currentSettings.selectedModel = settingsToSave.selectedModel;
         currentSettings.llmLinkSecurity = settingsToSave.llmLinkSecurity;
+        currentSettings.default_llm_context_window = settingsToSave.default_llm_context_window;
+
 
         // Update UI (redundant if page isn't re-rendered, but good practice)
         applyDarkMode(true); // Apply dark mode immediately
         linkSecurityToggleInput.checked = currentSettings.llmLinkSecurity === 'true';
+        if (contextWindowInput) { // Update the input field as well
+            contextWindowInput.value = currentSettings.default_llm_context_window;
+        }
         // Re-render model options to ensure the saved one is selected
         // (though it should already be selected from the user's choice)
         if (modelSelectElement) {

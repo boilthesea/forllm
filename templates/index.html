@@ -71,6 +71,9 @@
         <select id="model-select">
             <option value="">Loading models...</option>
         </select>
+        <p style="margin-top: 5px;">Currently Selected: <strong id="selected-ollama-model-display">None</strong>
+           <span id="selected-model-context-window-display" style="font-size: 0.9em; color: #aaa;"></span>
+        </p>
     </div>
     <div class="setting-item">
         <label for="llm-link-security-toggle">LLM Link Security:</label>
@@ -169,6 +172,20 @@
                 <h4>Create New Topic</h4>
                 <input type="text" id="new-topic-title" placeholder="Topic Title">
                 <textarea id="new-topic-content" placeholder="Your initial post content..."></textarea>
+                <!-- Token Breakdown Display for New Topic -->
+                <div id="new-topic-token-breakdown-container" style="margin-top: 10px; padding: 10px; border: 1px solid #ccc; display: none;">
+                    <h4>Estimated Prompt Tokens:</h4>
+                    <p>Post Content: <span id="new-topic-token-post-content">~0</span> tokens</p>
+                    <p>Persona Prompt (<span id="new-topic-token-persona-name">Default</span>): <span id="new-topic-token-persona-prompt">~0</span> tokens</p>
+                    <p>System Instructions: <span id="new-topic-token-system-prompt">~0</span> tokens</p>
+                    <p>Attachments: <span id="new-topic-token-attachments">~0</span> tokens</p>
+                    <p>Chat History: <span id="new-topic-token-chat-history">~0</span> tokens</p>
+                    <hr>
+                    <p><strong>Total Estimated: <span id="new-topic-token-total-estimated">~0</span> / <span id="new-topic-token-model-context-window">N/A</span> tokens (for <span id="new-topic-token-model-name">model</span>)</strong></p>
+                    <div id="new-topic-token-visual-bar-container" style="background-color: #eee; height: 20px; border-radius: 5px; margin-top: 5px;">
+                        <div id="new-topic-token-visual-bar" style="width: 0%; height: 100%; background-color: #4CAF50; border-radius: 5px; transition: width 0.3s ease, background-color 0.3s ease;"></div>
+                    </div>
+                </div>
                 <!-- File attachment input for new topics -->
                 <label for="new-topic-attachment-input" class="form-label">Attachments (plain text only):</label>
                 <input type="file" id="new-topic-attachment-input" multiple class="file-input mb-2">
@@ -194,6 +211,20 @@
              <div id="reply-form-container" style="display:none;">
                  <h4>Reply to Post <span id="reply-to-post-id"></span></h4>
                  <textarea id="reply-content" placeholder="Your reply..."></textarea>
+                 <!-- Token Breakdown Display for Reply -->
+                <div id="reply-token-breakdown-container" style="margin-top: 10px; padding: 10px; border: 1px solid #ccc; display: none;">
+                    <h4>Estimated Prompt Tokens:</h4>
+                    <p>Post Content: <span id="reply-token-post-content">~0</span> tokens</p>
+                    <p>Persona Prompt (<span id="reply-token-persona-name">Default</span>): <span id="reply-token-persona-prompt">~0</span> tokens</p>
+                    <p>System Instructions: <span id="reply-token-system-prompt">~0</span> tokens</p>
+                    <p>Attachments: <span id="reply-token-attachments">~0</span> tokens</p>
+                    <p>Chat History: <span id="reply-token-chat-history">~0</span> tokens</p>
+                    <hr>
+                    <p><strong>Total Estimated: <span id="reply-token-total-estimated">~0</span> / <span id="reply-token-model-context-window">N/A</span> tokens (for <span id="reply-token-model-name">model</span>)</strong></p>
+                    <div id="reply-token-visual-bar-container" style="background-color: #eee; height: 20px; border-radius: 5px; margin-top: 5px;">
+                        <div id="reply-token-visual-bar" style="width: 0%; height: 100%; background-color: #4CAF50; border-radius: 5px; transition: width 0.3s ease, background-color 0.3s ease;"></div>
+                    </div>
+                </div>
                  <!-- File attachment input for replies -->
                  <label for="reply-attachment-input" class="form-label">Attachments (plain text only):</label>
                  <input type="file" id="reply-attachment-input" multiple class="file-input mb-2">

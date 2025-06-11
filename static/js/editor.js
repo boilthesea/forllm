@@ -3,6 +3,8 @@
 import { newTopicContentInput, replyContentInput } from './dom.js';
 import { fetchActivePersonas } from './api.js'; // Import API function
 
+let cachedAttachmentsContent = { 'new-topic': { text: '', filesHash: null }, 'reply': { text: '', filesHash: null } };
+
 // --- Persona Tagging Globals ---
 let activePersonasCache = [];
 let personasCacheTimestamp = 0;
@@ -262,6 +264,7 @@ if (newTopicContentInput) {
         element: newTopicContentInput
     });
     initializeEditorPersonaTagging(newTopicEditor);
+    initializeTokenBreakdownDisplay(newTopicEditor, 'new-topic');
 }
 
 if (replyContentInput) {
@@ -270,4 +273,212 @@ if (replyContentInput) {
         element: replyContentInput
     });
     initializeEditorPersonaTagging(replyEditor);
+    initializeTokenBreakdownDisplay(replyEditor, 'reply');
+}
+
+// --- Token Breakdown Display ---
+
+// Debounce function - (Make sure it's defined, or import if it's global)
+function debounce(func, delay) {
+    let timeout;
+    return function(...args) {
+        const context = this;
+        clearTimeout(timeout);
+        timeout = setTimeout(() => func.apply(context, args), delay);
+    };
+}
+
+// Function to update token breakdown via API
+async function updateTokenBreakdown(editorInstance, editorType) {
+    if (!editorInstance) return;
+
+    const container = document.getElementById(`${editorType}-token-breakdown-container`);
+    if (!container) {
+        console.error(`Token breakdown container not found for ${editorType}`);
+        return;
+    }
+    container.style.display = 'block'; // Ensure it's visible
+
+    const current_post_text = editorInstance.value();
+
+    // --- Simplification for selected_persona_id ---
+    // Try to get from 'llm-persona-select' if it's relevant, otherwise null.
+    // This element is in `index.html`'s `subforum-personas-bar`.
+    // Its applicability depends on whether this bar is visible/used for the current editor context.
+    let selected_persona_id = null;
+    const personaSelectElement = document.getElementById('llm-persona-select');
+    if (personaSelectElement && personaSelectElement.value) {
+        // Check if the persona selector is relevant for the current editor context
+        // For a new topic, it might be less relevant than for a reply if the bar is tied to existing topic context.
+        // For now, we'll take it if available. This might need refinement.
+        if (editorType === 'reply' || (editorType === 'new-topic' && personaSelectElement.offsetParent !== null)) { // visible check
+             if (personaSelectElement.value !== "0" && personaSelectElement.value !== "") { // "0" or "" often means no selection / default
+                selected_persona_id = parseInt(personaSelectElement.value, 10);
+            }
+        }
+    }
+    // console.log(`Editor type: ${editorType}, Selected Persona ID: ${selected_persona_id}`);
+
+
+    // --- Simplification for attachments_text ---
+    const attachments_text = cachedAttachmentsContent[editorType] ? cachedAttachmentsContent[editorType].text : "";
+    // console.log(`Using cached attachments text for ${editorType} in updateTokenBreakdown`);
+
+
+    try {
+        const response = await fetch('/api/prompts/estimate_tokens', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                current_post_text: current_post_text,
+                selected_persona_id: selected_persona_id,
+                attachments_text: attachments_text,
+                // parent_post_id: null // Not used yet
+            }),
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json();
+            console.error('Error fetching token breakdown:', errorData.error || response.statusText);
+            // Display a simplified error in the breakdown area
+            document.getElementById(`${editorType}-token-total-estimated`).textContent = 'Error';
+            document.getElementById(`${editorType}-token-model-context-window`).textContent = 'N/A';
+            return;
+        }
+
+        const data = await response.json();
+
+        // Update DOM elements
+        document.getElementById(`${editorType}-token-post-content`).textContent = `~${data.post_content_tokens}`;
+        document.getElementById(`${editorType}-token-persona-name`).textContent = data.persona_name || "Default";
+        document.getElementById(`${editorType}-token-persona-prompt`).textContent = `~${data.persona_prompt_tokens}`;
+        document.getElementById(`${editorType}-token-system-prompt`).textContent = `~${data.system_prompt_tokens}`;
+        document.getElementById(`${editorType}-token-attachments`).textContent = `~${data.attachments_tokens}`;
+        document.getElementById(`${editorType}-token-chat-history`).textContent = `~${data.chat_history_tokens}`;
+        document.getElementById(`${editorType}-token-total-estimated`).textContent = `~${data.total_estimated_tokens}`;
+        document.getElementById(`${editorType}-token-model-context-window`).textContent = data.model_context_window || "N/A";
+        document.getElementById(`${editorType}-token-model-name`).textContent = data.model_name || "default";
+
+        // Update visual bar
+        const visualBar = document.getElementById(`${editorType}-token-visual-bar`);
+        let percentage = 0;
+        if (data.model_context_window && data.model_context_window > 0) {
+            percentage = (data.total_estimated_tokens / data.model_context_window) * 100;
+        }
+        percentage = Math.max(0, Math.min(100, percentage)); // Clamp between 0 and 100
+
+        visualBar.style.width = percentage + '%';
+        if (percentage >= 90) {
+            visualBar.style.backgroundColor = '#D32F2F'; // Red
+        } else if (percentage >= 70) {
+            visualBar.style.backgroundColor = '#FBC02D'; // Yellow
+        } else {
+            visualBar.style.backgroundColor = '#4CAF50'; // Green
+        }
+
+    } catch (error) {
+        console.error('Failed to send request for token breakdown:', error);
+        document.getElementById(`${editorType}-token-total-estimated`).textContent = 'Error';
+        document.getElementById(`${editorType}-token-model-context-window`).textContent = 'N/A';
+    }
+}
+
+// Function to set up token breakdown display for an editor instance
+function initializeTokenBreakdownDisplay(editorInstance, editorType) {
+    if (!editorInstance || !editorInstance.codemirror) {
+        console.warn(`Editor instance or CodeMirror not found for ${editorType}. Token breakdown display disabled.`);
+        return;
+    }
+
+    const breakdownContainer = document.getElementById(`${editorType}-token-breakdown-container`);
+    if (!breakdownContainer) {
+        console.warn(`Token breakdown container not found for ${editorType}.`);
+        return;
+    }
+    breakdownContainer.style.display = 'block'; // Make it visible
+
+    // Debounced update function specific to this editor instance
+    const debouncedTokenBreakdownUpdate = debounce(() => {
+        updateTokenBreakdown(editorInstance, editorType);
+    }, 750); // 750ms debounce delay
+
+    // Listen for changes in the editor
+    editorInstance.codemirror.on('change', debouncedTokenBreakdownUpdate);
+
+    // Also listen for changes on persona selector and attachment input
+    const personaSelector = document.getElementById('llm-persona-select');
+    if (personaSelector) {
+        personaSelector.addEventListener('change', () => updateTokenBreakdown(editorInstance, editorType));
+    }
+
+    const attachmentInputId = editorType === 'new-topic' ? 'new-topic-attachment-input' : 'reply-attachment-input';
+    const attachmentInput = document.getElementById(attachmentInputId);
+    if (attachmentInput) {
+        attachmentInput.addEventListener('change', async () => {
+            // console.log(`Attachment change detected for ${editorType}`);
+            const files = attachmentInput.files;
+            let combinedText = "";
+            let filesHash = ""; // Simple hash: concat names and sizes
+
+            if (files && files.length > 0) {
+                const textFilePromises = [];
+                const fileDetailsForHash = [];
+
+                const plainTextMimeTypes = [
+                    'text/plain', 'text/markdown', 'text/csv', 'application/json', 'application/xml',
+                    'text/html', 'text/css', 'text/javascript', 'application/javascript',
+                    'application/x-javascript', 'text/x-python', 'application/python',
+                    'application/x-python', 'text/x-java-source', 'text/x-csrc', 'text/x-c++src',
+                    'application/rtf', 'text/richtext', 'text/yaml', 'application/yaml', 'text/x-yaml',
+                    'application/x-yaml', 'text/toml', 'application/toml', 'application/ld+json',
+                    'text/calendar', 'text/vcard', 'text/sgml', 'application/sgml', 'text/tab-separated-values',
+                    'application/xhtml+xml', 'application/rss+xml', 'application/atom+xml', 'text/x-script.python'
+                ];
+                const plainTextExtensions = [
+                    '.txt', '.md', '.markdown', '.csv', '.json', '.xml', '.html', '.htm', '.css', '.js',
+                    '.py', '.pyw', '.java', '.c', '.cpp', '.h', '.hpp', '.rtf', '.yaml', '.yml',
+                    '.toml', '.ini', '.cfg', '.conf', '.log', '.text', '.tex', '.tsv', '.jsonld',
+                    '.ical', '.ics', '.vcf', '.vcard', '.sgml', '.sgm', '.xhtml', '.xht', '.rss', '.atom',
+                    '.sh', '.bash', '.ps1', '.bat', '.cmd'
+                ];
+
+                for (const file of files) {
+                    fileDetailsForHash.push(`${file.name}_${file.size}`);
+                    let isTextFile = false;
+                    if (plainTextMimeTypes.includes(file.type)) {
+                        isTextFile = true;
+                    } else if (file.type === "" || file.type === "application/octet-stream") {
+                        const fileNameLower = file.name.toLowerCase();
+                        for (const ext of plainTextExtensions) {
+                            if (fileNameLower.endsWith(ext)) {
+                                isTextFile = true;
+                                break;
+                            }
+                        }
+                    }
+
+                    if (isTextFile) {
+                        textFilePromises.push(file.text());
+                    }
+                }
+                try {
+                    const fileContents = await Promise.all(textFilePromises);
+                    combinedText = fileContents.join("\n\n---\n\n");
+                } catch (error) {
+                    console.error("Error reading attachment file contents for caching:", error);
+                    combinedText = "[Error reading attachment contents]";
+                }
+                filesHash = fileDetailsForHash.join('|');
+            }
+
+            cachedAttachmentsContent[editorType] = { text: combinedText, filesHash: filesHash };
+            // console.log(`Cached attachments for ${editorType}:`, cachedAttachmentsContent[editorType]);
+
+            updateTokenBreakdown(editorInstance, editorType);
+        });
+    }
+
+
+    // Initial breakdown update
+    updateTokenBreakdown(editorInstance, editorType);
 }

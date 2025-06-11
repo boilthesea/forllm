@@ -1,6 +1,7 @@
 import sqlite3
 import datetime
-from flask import g
+import logging # ADDED
+from flask import g, current_app # Added current_app for logger access
 from .config import DATABASE, CURRENT_USER_ID, CURRENT_USERNAME, DEFAULT_MODEL
 
 def get_db():
@@ -122,6 +123,19 @@ def init_db():
                 print(f"Error adding 'requested_by_user_id' column to llm_requests: {e}")
                 db.rollback()
 
+        # Add 'prompt_token_breakdown' to 'llm_requests' if it doesn't exist
+        cursor.execute("PRAGMA table_info(llm_requests)")
+        columns = [col[1] for col in cursor.fetchall()]
+        if 'prompt_token_breakdown' not in columns:
+            print("Updating llm_requests table: Adding 'prompt_token_breakdown' column...")
+            try:
+                cursor.execute("ALTER TABLE llm_requests ADD COLUMN prompt_token_breakdown TEXT")
+                db.commit()
+                print("'prompt_token_breakdown' column added to llm_requests.")
+            except Exception as e:
+                print(f"Error adding 'prompt_token_breakdown' column to llm_requests: {e}")
+                db.rollback()
+
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS attachments (
                 attachment_id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -180,6 +194,7 @@ def init_db():
         # Removed: cursor.execute("INSERT OR IGNORE INTO settings (setting_key, setting_value) VALUES (?, ?)", ('darkMode', 'false'))
         cursor.execute("INSERT OR IGNORE INTO settings (setting_key, setting_value) VALUES (?, ?)", ('selectedModel', DEFAULT_MODEL))
         cursor.execute("INSERT OR IGNORE INTO settings (setting_key, setting_value) VALUES (?, ?)", ('llmLinkSecurity', 'true')) # Added default
+        cursor.execute("INSERT OR IGNORE INTO settings (setting_key, setting_value) VALUES (?, ?)", ('default_llm_context_window', '4096')) # Added default
         print("Database schema verified/created.")
         db.commit() # Commit after initial schema creation/verification
     else:
@@ -333,7 +348,8 @@ def init_db():
         default_settings_to_check = {
             # Removed: 'darkMode': 'false',
             'selectedModel': DEFAULT_MODEL,
-            'llmLinkSecurity': 'true'
+            'llmLinkSecurity': 'true',
+            'default_llm_context_window': '4096' # Added this line
             # globalDefaultPersonaId is handled below
         }
         for key, default_value in default_settings_to_check.items():
@@ -372,6 +388,19 @@ def init_db():
             print("'requested_by_user_id' column added to llm_requests (post-initial check).")
         except Exception as e:
             print(f"Error adding 'requested_by_user_id' column to llm_requests (post-initial check): {e}")
+            db.rollback()
+
+    # --- Check and add 'prompt_token_breakdown' to 'llm_requests' if DB already exists ---
+    cursor.execute("PRAGMA table_info(llm_requests)")
+    columns = [col[1] for col in cursor.fetchall()]
+    if 'prompt_token_breakdown' not in columns:
+        print("Updating llm_requests table (post-initial check): Adding 'prompt_token_breakdown' column...")
+        try:
+            cursor.execute("ALTER TABLE llm_requests ADD COLUMN prompt_token_breakdown TEXT")
+            db.commit()
+            print("'prompt_token_breakdown' column added to llm_requests (post-initial check).")
+        except Exception as e:
+            print(f"Error adding 'prompt_token_breakdown' column to llm_requests (post-initial check): {e}")
             db.rollback()
 
     print("Verifying/Creating Persona management tables and defaults...")
@@ -473,7 +502,92 @@ def init_db():
         # db.rollback() # Only if part of a transaction that should be reverted entirely
 
     print("Database initialization complete.")
+
+    # --- Create llm_model_metadata table (NEW) ---
+    # This section is outside the initial if/else, so it runs every time to ensure table existence.
+    print("Verifying/Creating llm_model_metadata table...")
+    try:
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS llm_model_metadata (
+                model_name TEXT PRIMARY KEY,
+                context_window INTEGER,
+                last_checked DATETIME DEFAULT CURRENT_TIMESTAMP
+            );
+        """)
+        db.commit()
+        print("llm_model_metadata table verified/created.")
+    except sqlite3.Error as e:
+        print(f"Error creating/verifying llm_model_metadata table: {e}")
+        # No rollback needed here usually for CREATE IF NOT EXISTS, but good practice if part of larger transaction block
+        # db.rollback()
+
     db.close()
+
+# --- LLM Model Metadata Cache Logic ---
+
+def get_cached_model_context_window(db, model_name: str) -> int | None:
+    """
+    Retrieves the cached context window size for a given model.
+    Args:
+        db: Database connection object.
+        model_name: The name of the model.
+    Returns:
+        A tuple (bool, int | None) indicating (found_in_cache, value).
+        Value is the context window size (int) or None if explicitly cached as not found/error.
+    """
+    logger = current_app.logger if current_app and hasattr(current_app, 'logger') else logging.getLogger(__name__)
+    try:
+        cursor = db.execute("SELECT context_window FROM llm_model_metadata WHERE model_name = ?", (model_name,))
+        row = cursor.fetchone()
+        if row:  # A row was found, meaning it's in the cache
+            # The stored context_window can itself be NULL if we cached a "not found" state
+            logger.info(f"Cache hit for {model_name}. Raw DB Value: {row['context_window']}")
+            # Ensure conversion to int if it's not None, otherwise pass None as is.
+            # This was previously handled by `if row and row[0] is not None: return int(row[0])`
+            # Now, we return the raw value (which can be int or None) from the DB.
+            db_value = row['context_window']
+            # It's assumed the database stores INTEGER NULL, which sqlite3.Row correctly maps to Python's None.
+            # If it's a non-None value, it should already be an int due to column type,
+            # but explicit conversion here is safer if schema affinity is weird.
+            # However, direct return is fine if schema is `context_window INTEGER`.
+            return True, db_value # db_value can be int or None
+        else:  # No row found, cache miss
+            logger.info(f"Cache miss for {model_name}.")
+            return False, None
+    except sqlite3.Error as e:
+        logger.error(f"Database error in get_cached_model_context_window for {model_name}: {e}")
+        return False, None
+    # ValueError should not occur here if db stores int/None correctly.
+    # If it did, it would be from trying to int(None) or int("non-int-string"),
+    # but we are now returning the direct DB value.
+
+
+def cache_model_context_window(db, model_name: str, context_window: int | None):
+    """
+    Caches the context window size for a given model.
+    The context_window can be None to indicate it's not found or an error occurred.
+    Updates the last_checked timestamp automatically.
+    Args:
+        db: Database connection object.
+        model_name: The name of the model.
+        context_window: The context window size (int) or None to cache a "not found" state.
+    """
+    logger = current_app.logger if current_app and hasattr(current_app, 'logger') else logging.getLogger(__name__)
+    if model_name is None: # context_window being None is now allowed
+        logger.warning(f"Attempted to cache with None model_name.")
+        return
+    try:
+        db.execute("""
+            INSERT INTO llm_model_metadata (model_name, context_window, last_checked)
+            VALUES (?, ?, CURRENT_TIMESTAMP)
+            ON CONFLICT(model_name) DO UPDATE SET
+                context_window = excluded.context_window,
+                last_checked = CURRENT_TIMESTAMP;
+        """, (model_name, context_window)) # context_window can be None here, SQLite handles it
+        db.commit()
+        logger.info(f"Cached context window for {model_name}: {context_window if context_window is not None else 'Not Found (None)'}")
+    except sqlite3.Error as e:
+        logger.error(f"Database error in cache_model_context_window for {model_name}: {e}")
 
 # ------------------- PERSONA MANAGEMENT LOGIC -------------------
 

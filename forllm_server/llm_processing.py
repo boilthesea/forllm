@@ -6,11 +6,17 @@ import os # Added os
 from flask import current_app # Added current_app
 from requests.exceptions import ConnectionError, RequestException
 from datetime import datetime
+import logging # Added logging
+from forllm_server.tokenizer_utils import count_tokens # Added count_tokens import
+
+# Configure logging
+logger = logging.getLogger(__name__)
 
 # Removed sys.path manipulation and direct 'from forllm import app' import
 
 from .config import DATABASE, OLLAMA_GENERATE_URL, DEFAULT_MODEL, CURRENT_USER_ID, UPLOAD_FOLDER # UPLOAD_FOLDER might not be needed if current_app.config is used
 from .database import get_persona
+from .ollama_utils import get_model_context_window # Added import
 
 def process_llm_request(request_details, flask_app): # Added flask_app parameter
     """Handles the actual LLM interaction for a given request."""
@@ -48,6 +54,36 @@ def process_llm_request(request_details, flask_app): # Added flask_app parameter
                 print(f"No model in request or global setting, using hardcoded DEFAULT_MODEL: '{model_to_use}' for request {request_id}.")
         
         model = model_to_use # Use 'model' variable hereafter as it's used later in the function.
+
+        # --- Determine Effective Context Window ---
+        effective_context_window = None
+        model_specific_context = None
+
+        logger.info(f"Request {request_id}: Attempting to fetch context window for model: {model} using ollama_utils...")
+        with flask_app.app_context(): # Ensure app context for get_model_context_window
+            # get_model_context_window from ollama_utils uses get_db() which relies on app context
+            model_specific_context = get_model_context_window(model)
+
+        if model_specific_context is not None:
+            effective_context_window = model_specific_context
+            logger.info(f"Request {request_id}: Using model-specific context window for {model}: {effective_context_window} tokens.")
+        else:
+            logger.warning(f"Request {request_id}: Could not retrieve model-specific context window for {model}. Attempting fallback from settings.")
+            # Fetch from settings table using the local cursor from process_llm_request's db connection
+            cursor.execute("SELECT setting_value FROM settings WHERE setting_key = 'default_llm_context_window'")
+            fallback_setting = cursor.fetchone()
+            if fallback_setting and fallback_setting['setting_value']:
+                try:
+                    effective_context_window = int(fallback_setting['setting_value'])
+                    logger.info(f"Request {request_id}: Using fallback default LLM context window from settings: {effective_context_window} tokens.")
+                except ValueError:
+                    logger.error(f"Request {request_id}: Could not parse default_llm_context_window value '{fallback_setting['setting_value']}' as integer. Using hardcoded fallback.")
+                    effective_context_window = 2048 # Hardcoded ultimate fallback
+            else:
+                logger.warning(f"Request {request_id}: default_llm_context_window not found in settings or value is null. Using hardcoded fallback.")
+                effective_context_window = 2048 # Hardcoded ultimate fallback
+
+        logger.info(f"Request {request_id}: Final effective context window for model {model} is {effective_context_window} tokens.")
 
         # Persona ID handling (parsing)
         persona_id_str = request_details.get('persona')
@@ -148,12 +184,58 @@ def process_llm_request(request_details, flask_app): # Added flask_app parameter
         # Attachments first, then persona instructions, then user's post
         prompt_content = f"{attachments_string}{persona_instructions}\n\nUser wrote: {original_post['content']}\n\nRespond to this post."
         print(f"Final prompt_content for request {request_id} (first 200 chars): {prompt_content[:200]}...")
-        
-        # Store the constructed prompt using local cursor
-        cursor.execute("UPDATE llm_requests SET full_prompt_sent = ? WHERE request_id = ?", (prompt_content, request_id))
+
+        # Token counting and logging
+        # Assuming no separate system prompt, persona_instructions acts as the main system/persona guidance
+        persona_prompt_tokens = count_tokens(persona_instructions)
+        logger.info(f"Request {request_id}: Persona instructions token count: {persona_prompt_tokens}")
+
+        user_post_content = original_post['content']
+        user_post_tokens = count_tokens(user_post_content)
+        logger.info(f"Request {request_id}: User post content token count: {user_post_tokens}")
+
+        attachments_token_count = 0
+        if attachments_string: # Check if there's any text from attachments
+            attachments_token_count = count_tokens(attachments_string)
+            logger.info(f"Request {request_id}: Attachments text token count: {attachments_token_count}")
+
+        # Log the token count of the actual final prompt string sent to the LLM
+        actual_final_prompt_tokens = count_tokens(prompt_content)
+        logger.info(f"Request {request_id}: Actual final prompt string token count: {actual_final_prompt_tokens}")
+
+        # --- Store Token Breakdown ---
+        token_breakdown = {
+            "persona_prompt_tokens": persona_prompt_tokens,
+            "user_post_tokens": user_post_tokens,
+            "attachments_token_count": attachments_token_count,
+            "chat_history_tokens": 0,  # Placeholder for now
+            "total_prompt_tokens": actual_final_prompt_tokens
+        }
+        token_breakdown_json = json.dumps(token_breakdown)
+
+        # Store the constructed prompt and token breakdown using local cursor
+        cursor.execute(
+            "UPDATE llm_requests SET full_prompt_sent = ?, prompt_token_breakdown = ? WHERE request_id = ?",
+            (prompt_content, token_breakdown_json, request_id)
+        )
         db.commit()
-        print(f"Stored full_prompt_sent for request_id {request_id}")
-        print(f"DEBUG: Successfully committed full_prompt_sent for request {request_id}. Value snippet: '{prompt_content[:100]}...'")
+        logger.info(f"Request {request_id}: Stored full_prompt_sent and prompt_token_breakdown. Token breakdown: {token_breakdown_json}")
+        print(f"DEBUG: Successfully committed full_prompt_sent and prompt_token_breakdown for request {request_id}. Prompt snippet: '{prompt_content[:100]}...'")
+
+        # --- Pre-flight Check Logic ---
+        safety_margin_percentage = 0.95  # 95% safety margin
+        max_allowed_tokens = int(effective_context_window * safety_margin_percentage)
+        logger.info(f"Request {request_id}: Pre-flight check: Actual tokens: {actual_final_prompt_tokens}, Max allowed (after {safety_margin_percentage*100}% safety margin): {max_allowed_tokens} (Context: {effective_context_window})")
+
+        if actual_final_prompt_tokens > max_allowed_tokens:
+            error_message_for_db = f"Error: Prompt too long after assembly. Tokens: {actual_final_prompt_tokens}, Max Allowed (after safety margin): {max_allowed_tokens} (Context: {effective_context_window})."
+            logger.error(f"Request {request_id}: {error_message_for_db}")
+            cursor.execute(
+                "UPDATE llm_requests SET status = 'error', error_message = ?, processed_at = CURRENT_TIMESTAMP WHERE request_id = ?",
+                (error_message_for_db, request_id)
+            )
+            db.commit()
+            return # Return early from the function
 
         # --- Try/Except for Ollama connection and processing ---
         try:
