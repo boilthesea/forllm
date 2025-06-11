@@ -613,6 +613,34 @@ def create_persona(name, prompt_instructions, created_by_user):
             db.rollback()
         return None
 
+# ------------------- POST ANCESTOR LOGIC -------------------
+
+def get_post_ancestors(post_id, db_connection):
+    """
+    Fetches a post and all its ancestors up to the topic root.
+    Returns the posts in chronological order (oldest first).
+    """
+    posts = []
+    current_post_id = post_id
+    while current_post_id:
+        cursor = db_connection.execute(
+            """
+            SELECT post_id, topic_id, user_id, parent_post_id, content,
+                   created_at, is_llm_response, llm_model_id AS llm_model_name, llm_persona_id
+            FROM posts
+            WHERE post_id = ?
+            """,
+            (current_post_id,),
+        )
+        post = cursor.fetchone()
+        if post:
+            posts.append(dict(post))
+            current_post_id = post["parent_post_id"]
+        else:
+            # Post not found, break the loop
+            break
+    return posts[::-1]  # Reverse to get chronological order
+
 # ------------------- USER ACTIVITY LOGIC -------------------
 
 def update_user_activity(user_id, item_type, item_id):

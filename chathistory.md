@@ -145,37 +145,26 @@ Here's a phased development plan, incorporating your groundwork steps and then e
 ---
 
 *   **Sub-Phase 2.1: Basic Linear Chat History (Primary Thread Only)**
-    *   **Task 2.1.1 (Backend): Fetch Ancestral Post Chain.**
-        *   In `llm_processing.py` or `database.py`:
-            *   Create `get_post_ancestors(post_id, db_connection) -> List[Post]`. This function recursively fetches parent posts until the topic root is reached. Returns them in chronological order (oldest first).
+    *   **[DONE] Task 2.1.1 (Backend): Fetch Ancestral Post Chain.**
+        *   Implemented `get_post_ancestors(post_id, db_connection)` in `forllm_server/database.py`. This function recursively fetches parent posts from the given `post_id` up to the topic root, returning them in chronological order (oldest first). All specified fields from the `posts` table are included.
         *   **Benefit:** Forms the basis of the direct conversation.
-    *   **Task 2.1.2 (Backend): Assemble Linear Chat History String.**
-        *   In `llm_processing.py`:
-            *   Create `format_linear_history(posts: List[Post]) -> str`.
-            *   Formats the list of posts into a string, e.g.:
-                ```
-                User: <post_content>
-                LLM (<persona_name>/<model_name>): <llm_response_content>
-                User: <reply_content>
-                ...
-                ```
-            *   Clearly label user vs. LLM/persona contributions.
+    *   **[DONE] Task 2.1.2 (Backend): Assemble Linear Chat History String.**
+        *   Implemented `format_linear_history(posts: list, db_connection)` in `forllm_server/llm_processing.py`. This function formats the list of posts (from `get_post_ancestors`) into a string, clearly labeling user posts vs. LLM/persona contributions (e.g., "User: <content>" or "LLM (<persona_name>/<llm_model_name>): <content>"). It fetches persona names using `llm_persona_id`.
         *   **Benefit:** Creates a standard representation of the conversation.
-    *   **Task 2.1.3 (Backend): Integrate Linear History into Prompt Assembly.**
-        *   Modify the main prompt construction logic in `llm_processing.py`:
-            *   Fetch ancestors for the `post_id_to_respond_to`.
-            *   Format this history.
-            *   Include it in the prompt string sent to the LLM, typically between the system/persona prompt and the current user's latest message.
+    *   **[DONE] Task 2.1.3 (Backend): Integrate Linear History into Prompt Assembly.**
+        *   Modified `process_llm_request` in `forllm_server/llm_processing.py`. Before finalizing the prompt, it now calls `get_post_ancestors` and `format_linear_history` to build the chat history string. This history is prepended to the `prompt_content` (after attachments and persona instructions, but before the current user's post). Token counts in `prompt_token_breakdown` are updated to include `chat_history_tokens`.
         *   **Benefit:** Provides the LLM with direct conversational context.
-    *   **Task 2.1.4 (Backend): Basic Pruning for Linear History.**
-        *   Before sending to Ollama, after assembling the full prompt (system + persona + linear history + current post):
-            *   Calculate total tokens using `count_tokens`.
-            *   Get the `model_context_window` (with safety margin).
-            *   If `total_tokens > allowed_tokens`:
-                *   Iteratively remove the oldest turns (a user post + its LLM reply if it's a pair, or just the oldest single post) from the `formatted_linear_history` string/list.
-                *   Recalculate `total_tokens`. Repeat until it fits.
-                *   **Crucial:** Always keep the system/persona prompt and the *current user's post* that the LLM is responding to.
+    *   **[DONE] Task 2.1.4 (Backend): Basic Pruning for Linear History.**
+        *   Enhanced `process_llm_request` in `forllm_server/llm_processing.py`. After the full prompt is assembled, if its token count exceeds the allowed limit (context window * 0.95), a loop iteratively removes the oldest turns (lines) from the `chat_history_string` part of the prompt. The persona instructions, attachments, and current user's post are never removed. This pruning attempts to make the prompt fit before the final pre-flight check. Token counts are updated post-pruning.
         *   **Benefit:** Ensures the prompt fits, prioritizing the most recent parts of the direct conversation.
+
+    **Implementation Summary for Sub-Phase 2.1:**
+    This sub-phase successfully implemented a basic linear chat history mechanism.
+    1.  `get_post_ancestors` was created in `database.py` to fetch the direct chain of posts leading to the current one.
+    2.  `format_linear_history` was added to `llm_processing.py` to convert this chain into a clearly labeled "User:" / "LLM (persona/model):" string format.
+    3.  The main prompt assembly logic in `process_llm_request` now incorporates this formatted linear history, placing it after persona instructions and before the current user's post.
+    4.  A basic pruning strategy was also added to `process_llm_request`: if the fully assembled prompt (including history) exceeds 95% of the model's context window, the oldest turns from the chat history are iteratively removed until the prompt fits or all history is removed. Attachments, persona, and the current user's post are preserved.
+    Token counts for chat history are now included in the `prompt_token_breakdown` stored in the database. This provides a foundational context for LLM replies based on the immediate preceding conversation.
 
 ---
 

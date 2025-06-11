@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 # Removed sys.path manipulation and direct 'from forllm import app' import
 
 from .config import DATABASE, OLLAMA_GENERATE_URL, DEFAULT_MODEL, CURRENT_USER_ID, UPLOAD_FOLDER # UPLOAD_FOLDER might not be needed if current_app.config is used
-from .database import get_persona
+from .database import get_persona, get_post_ancestors
 from .ollama_utils import get_model_context_window # Added import
 
 def process_llm_request(request_details, flask_app): # Added flask_app parameter
@@ -180,13 +180,30 @@ def process_llm_request(request_details, flask_app): # Added flask_app parameter
         if attachments_string:
             attachments_string += "\n\n" # Add trailing newlines if there were attachments
 
+        # --- Fetch and format chat history ---
+        chat_history_string = ""
+        chat_history_tokens = 0
+        if post_id: # post_id is the post_id_to_respond_to
+            ancestors = get_post_ancestors(post_id, db) # Use existing db connection
+            if ancestors:
+                chat_history_string = format_linear_history(ancestors, db) # Use existing db connection
+                if chat_history_string:
+                    chat_history_tokens = count_tokens(chat_history_string)
+                    logger.info(f"Request {request_id}: Chat history token count: {chat_history_tokens}")
+                    chat_history_string += "\n\n" # Add spacing after history
+
         # --- Construct final prompt ---
-        # Attachments first, then persona instructions, then user's post
-        prompt_content = f"{attachments_string}{persona_instructions}\n\nUser wrote: {original_post['content']}\n\nRespond to this post."
+        # Order: Attachments, Persona Instructions, Chat History, Current Post
+        prompt_content = (
+            f"{attachments_string}"
+            f"{persona_instructions}\n\n"
+            f"{chat_history_string}" # Already has trailing newlines if not empty
+            f"User wrote: {original_post['content']}\n\n"
+            f"Respond to this post."
+        )
         print(f"Final prompt_content for request {request_id} (first 200 chars): {prompt_content[:200]}...")
 
         # Token counting and logging
-        # Assuming no separate system prompt, persona_instructions acts as the main system/persona guidance
         persona_prompt_tokens = count_tokens(persona_instructions)
         logger.info(f"Request {request_id}: Persona instructions token count: {persona_prompt_tokens}")
 
@@ -195,37 +212,81 @@ def process_llm_request(request_details, flask_app): # Added flask_app parameter
         logger.info(f"Request {request_id}: User post content token count: {user_post_tokens}")
 
         attachments_token_count = 0
-        if attachments_string: # Check if there's any text from attachments
-            attachments_token_count = count_tokens(attachments_string)
+        if attachments_string:
+            attachments_token_count = count_tokens(attachments_string.strip()) # Strip to avoid counting trailing newlines if only attachments_string is present
             logger.info(f"Request {request_id}: Attachments text token count: {attachments_token_count}")
 
-        # Log the token count of the actual final prompt string sent to the LLM
+        # Recalculate actual_final_prompt_tokens with all components
         actual_final_prompt_tokens = count_tokens(prompt_content)
-        logger.info(f"Request {request_id}: Actual final prompt string token count: {actual_final_prompt_tokens}")
+        logger.info(f"Request {request_id}: Initial actual final prompt string token count (all parts): {actual_final_prompt_tokens}")
 
-        # --- Store Token Breakdown ---
+        # --- Pruning Logic for Chat History ---
+        safety_margin_percentage = 0.95 # Define here for use in pruning and pre-flight
+        max_allowed_tokens = int(effective_context_window * safety_margin_percentage)
+
+        if actual_final_prompt_tokens > max_allowed_tokens and chat_history_string.strip():
+            logger.info(f"Request {request_id}: Prompt ({actual_final_prompt_tokens} tokens) exceeds max allowed ({max_allowed_tokens}). Attempting to prune chat history.")
+
+            # chat_history_string currently includes trailing "\n\n" if it's not empty.
+            # For pruning, we want to work with the raw lines.
+            current_chat_history_content = chat_history_string.strip() # Remove trailing \n\n
+            history_lines = current_chat_history_content.split('\n')
+
+            # Define the parts of the prompt that are fixed
+            fixed_prompt_prefix = f"{attachments_string}{persona_instructions}\n\n"
+            # The 'User wrote: ' part is from original_post['content']
+            fixed_prompt_suffix = f"User wrote: {original_post['content']}\n\nRespond to this post."
+
+            while actual_final_prompt_tokens > max_allowed_tokens and history_lines:
+                logger.info(f"Request {request_id}: Pruning: Current total tokens: {actual_final_prompt_tokens}. History lines: {len(history_lines)}")
+                history_lines.pop(0) # Remove the oldest turn (first line)
+
+                if not history_lines:
+                    current_chat_history_content = ""
+                    chat_history_string = "" # No history left, so no trailing newlines needed
+                else:
+                    current_chat_history_content = "\n".join(history_lines)
+                    chat_history_string = current_chat_history_content + "\n\n" # Add back spacing if history remains
+
+                prompt_content = (
+                    f"{fixed_prompt_prefix}"
+                    f"{chat_history_string}" # This now uses the pruned history
+                    f"{fixed_prompt_suffix}"
+                )
+                actual_final_prompt_tokens = count_tokens(prompt_content)
+                logger.info(f"Request {request_id}: Pruning: New total tokens: {actual_final_prompt_tokens}. History lines remaining: {len(history_lines)}")
+
+            # Update chat_history_tokens after pruning
+            chat_history_tokens = count_tokens(current_chat_history_content) # Count tokens of the history part only
+            logger.info(f"Request {request_id}: After pruning, final chat history token count: {chat_history_tokens}")
+            if actual_final_prompt_tokens > max_allowed_tokens:
+                logger.warning(f"Request {request_id}: Prompt still too long ({actual_final_prompt_tokens} tokens) after removing all chat history. Max allowed: {max_allowed_tokens}.")
+            else:
+                logger.info(f"Request {request_id}: Pruning successful. Final prompt tokens: {actual_final_prompt_tokens}.")
+
+        # --- Store Token Breakdown (potentially updated after pruning) ---
         token_breakdown = {
             "persona_prompt_tokens": persona_prompt_tokens,
             "user_post_tokens": user_post_tokens,
             "attachments_token_count": attachments_token_count,
-            "chat_history_tokens": 0,  # Placeholder for now
-            "total_prompt_tokens": actual_final_prompt_tokens
+            "chat_history_tokens": chat_history_tokens, # Updated if pruned
+            "total_prompt_tokens": actual_final_prompt_tokens # Updated if pruned
         }
         token_breakdown_json = json.dumps(token_breakdown)
 
-        # Store the constructed prompt and token breakdown using local cursor
+        # Store the constructed prompt (potentially pruned) and token breakdown
         cursor.execute(
             "UPDATE llm_requests SET full_prompt_sent = ?, prompt_token_breakdown = ? WHERE request_id = ?",
             (prompt_content, token_breakdown_json, request_id)
         )
         db.commit()
-        logger.info(f"Request {request_id}: Stored full_prompt_sent and prompt_token_breakdown. Token breakdown: {token_breakdown_json}")
-        print(f"DEBUG: Successfully committed full_prompt_sent and prompt_token_breakdown for request {request_id}. Prompt snippet: '{prompt_content[:100]}...'")
+        logger.info(f"Request {request_id}: Stored final (potentially pruned) prompt and token breakdown. Token breakdown: {token_breakdown_json}")
+        # print statement for DEBUG might be too verbose if prompt is huge, consider prompt_content[:100]
+        print(f"DEBUG: Successfully committed final prompt for request {request_id}. Pruned prompt snippet: '{prompt_content[:100]}...'")
 
-        # --- Pre-flight Check Logic ---
-        safety_margin_percentage = 0.95  # 95% safety margin
-        max_allowed_tokens = int(effective_context_window * safety_margin_percentage)
-        logger.info(f"Request {request_id}: Pre-flight check: Actual tokens: {actual_final_prompt_tokens}, Max allowed (after {safety_margin_percentage*100}% safety margin): {max_allowed_tokens} (Context: {effective_context_window})")
+        # --- Pre-flight Check Logic (runs on potentially pruned prompt) ---
+        # max_allowed_tokens is already defined above
+        logger.info(f"Request {request_id}: Pre-flight check (on potentially pruned prompt): Actual tokens: {actual_final_prompt_tokens}, Max allowed (after {safety_margin_percentage*100}% safety margin): {max_allowed_tokens} (Context: {effective_context_window})")
 
         if actual_final_prompt_tokens > max_allowed_tokens:
             error_message_for_db = f"Error: Prompt too long after assembly. Tokens: {actual_final_prompt_tokens}, Max Allowed (after safety margin): {max_allowed_tokens} (Context: {effective_context_window})."
@@ -396,3 +457,48 @@ def _dummy_llm_processor(request_id, post_id, model, persona_id, prompt_content,
     finally:
         if dummy_db:
             dummy_db.close()
+
+
+def format_linear_history(posts: list, db_connection) -> str:
+    """
+    Formats a list of posts (e.g., from get_post_ancestors) into a linear string representation.
+
+    Args:
+        posts: A list of post dictionaries. Each post dictionary should have keys like
+               'is_llm_response', 'content', 'llm_persona_id', 'llm_model_name'.
+        db_connection: An active sqlite3 database connection.
+
+    Returns:
+        A string representing the formatted chat history.
+    """
+    history_str_parts = []
+    for post in posts:
+        if post.get('is_llm_response'):
+            persona_name = "Unknown Persona"
+            llm_persona_id = post.get('llm_persona_id')
+            if llm_persona_id:
+                # Fetch persona name using the provided db_connection
+                # Assuming get_persona is adapted or a new function is created
+                # that can use an existing connection.
+                # For now, let's assume get_persona can be called if db_connection
+                # is the one used by get_db() or if get_persona is modified.
+                # This is a simplification for now.
+                # A proper solution might involve get_persona(id, cursor=db_connection.cursor())
+                # or passing g.db if in Flask context.
+                # Direct use of db_connection with get_persona which uses g.db might conflict.
+                # Let's make a direct query for simplicity here, assuming db_connection is usable.
+
+                # Simpler approach: Direct query if get_persona is problematic with external db_connection
+                cursor = db_connection.cursor()
+                cursor.execute("SELECT name FROM personas WHERE persona_id = ?", (llm_persona_id,))
+                persona_row = cursor.fetchone()
+                if persona_row and persona_row['name']:
+                    persona_name = persona_row['name']
+                # No explicit close for cursor from passed connection
+
+            model_name = post.get('llm_model_name', 'Unknown Model')
+            history_str_parts.append(f"LLM ({persona_name}/{model_name}): {post.get('content', '')}")
+        else:
+            history_str_parts.append(f"User: {post.get('content', '')}")
+
+    return "\n".join(history_str_parts)

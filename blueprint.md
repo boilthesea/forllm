@@ -56,12 +56,21 @@ graph TD
 
 *   **`forllm_server/`** (Core Server Logic Package):
     *   **`config.py`**: Manages all static configuration values and constants for the application (database paths, API URLs, default settings, etc.).
-    *   **`database.py`**: Handles all aspects of database interaction: provides connection objects (`get_db`), manages connection teardown (`close_db`), and contains the initial database schema creation and migration logic (`init_db`). Also includes logic for persona CRUD, versioning, assignment, and fallback. Contains helper functions for the user activity feature, model metadata caching, and manages the `default_llm_context_window` setting. Manages the `llm_requests.prompt_token_breakdown` column.
+    *   **`database.py`**: Handles all aspects of database interaction: provides connection objects (`get_db`), manages connection teardown (`close_db`), and contains the initial database schema creation and migration logic (`init_db`). Also includes logic for persona CRUD, versioning, assignment, and fallback. Contains helper functions for the user activity feature, model metadata caching, `get_post_ancestors` for fetching conversation threads, and manages the `default_llm_context_window` setting. Manages the `llm_requests.prompt_token_breakdown` column.
     *   **`markdown_config.py`**: Configures and provides the `MarkdownIt` instance used for rendering Markdown content to HTML, including custom Pygments syntax highlighting.
     *   **`tokenizer_utils.py`**: Implements token counting functionality using the `tiktoken` library. Provides a `count_tokens` function to estimate the number of tokens in a given text string.
     *   **`ollama_utils.py`**: (NEW) Contains utility functions for interacting directly with the Ollama API, such as fetching detailed model information (including context window size) and parsing it.
     *   **`llm_queue.py`**: Manages the in-memory queue for LLM requests (`llm_request_queue`) and contains the main loop for the background LLM processing thread (`llm_worker`), which polls both the in-memory and database queues.
-    *   **`llm_processing.py`**: Contains the core logic for interacting with the LLM service (currently Ollama), including prompt construction, API call execution (`process_llm_request`), streaming response handling, and error management for LLM communication. Includes logic to determine and fetch the appropriate persona prompt instructions for an LLM request based on user override, subforum default, global default, or built-in fallback. Logs token counts of prompt components. Implements fallback logic to determine effective LLM context window (model-specific, user-defined fallback, or hardcoded default). Performs a pre-flight check to ensure prompt token count is within limits before sending to LLM. Stores a detailed token breakdown of the prompt in `llm_requests.prompt_token_breakdown`.
+    *   **`llm_processing.py`**: Contains the core logic for interacting with the LLM service (currently Ollama). This includes:
+        *   Prompt construction (`process_llm_request`): Assembling all prompt components (attachments, persona instructions, chat history, current post).
+        *   Chat history management: Calling `get_post_ancestors` (from `database.py`) and `format_linear_history` (own module) to build the conversational context.
+        *   History pruning: Iteratively removing older parts of the chat history if the total prompt exceeds token limits.
+        *   API call execution, streaming response handling, and error management for LLM communication.
+        *   Persona prompt fetching logic (override, subforum default, global default, fallback).
+        *   Token counting for all components and logging.
+        *   Effective LLM context window determination.
+        *   Pre-flight checks for prompt length before sending to LLM.
+        *   Storing a detailed token breakdown (including `chat_history_tokens`) in `llm_requests.prompt_token_breakdown`.
     *   **`scheduler.py`**: Implements the logic to determine if the LLM processor should be active based on defined schedules (`is_processing_time`), and provides utility functions to get current status and next schedule information.
     *   **`routes/main_routes.py`**: Defines Flask Blueprint for main application routes, including serving the `index.html` and static assets.
     *   **`routes/utility_routes.py`**: Defines Flask Blueprint for utility API endpoints.
@@ -123,7 +132,7 @@ graph TD
         *   `posts`: User-generated content and LLM responses, forming threaded discussions.
             *   `tagged_personas_in_content` (TEXT, storing a JSON array of persona IDs from @mentions in content).
         *   `llm_requests`: Queue for LLM processing, tracking `status`, `model`, `persona`, `request_type` (e.g., 'respond_to_post', 'generate_persona'), `request_params` (JSON string containing details for the request type), and `prompt_token_breakdown`.
-            *   `prompt_token_breakdown TEXT`: (NEW) JSON string storing a breakdown of token counts for different parts of the prompt (e.g., persona, user post, attachments, total).
+            *   `prompt_token_breakdown TEXT`: JSON string storing a breakdown of token counts for different parts of the prompt (e.g., persona, user post, attachments, chat_history_tokens, total).
         *   `llm_model_metadata`: (NEW) Caches metadata about LLM models, primarily their context window size.
             *   `model_name` (TEXT PRIMARY KEY): The unique name of the model.
             *   `context_window` (INTEGER): The discovered context window size in tokens.
@@ -209,13 +218,18 @@ graph TD
 *   **Explicit Model/Persona Selection:** [WIP]
     *   Modify the "Request LLM Response" UI to allow selecting from configured LLM backends and saved/default personas. (Model selection from settings is implemented, but not persona selection at request time).
     *   Store selected model/persona in the `llm_requests` table. (Model is stored, persona is default).
-*   **Basic Prompt Management:** [TODO]
-    *   **Tokenizer Integration:**
+    *   **Basic Prompt Management:** [PARTIALLY IMPLEMENTED]
+        *   **Tokenizer Integration:** [DONE]
         *   Implemented `tiktoken`-based tokenizer (`cl100k_base`) for accurate token counting.
         *   Backend function `count_tokens(text)` available in `forllm_server.tokenizer_utils`.
-        *   LLM processing logs token counts for prompt components (persona, user post, attachments).
-        *   Frontend UI in the post/reply editor displays an estimated token count for the current text, updated dynamically via `/api/utils/count_tokens_for_text`.
-    * Chat history construction for replies.
+            *   LLM processing logs token counts for prompt components (persona, user post, attachments, chat history).
+            *   Frontend UI in the post/reply editor displays an estimated token count for the current text, updated dynamically via `/api/utils/count_tokens_for_text` (though detailed breakdown via `/api/prompts/estimate_tokens` is richer).
+        *   **Chat history construction for replies:** [PARTIALLY IMPLEMENTED - Linear History Only]
+            *   Implemented linear chat history fetching (`get_post_ancestors` in `database.py`).
+            *   Implemented formatting of linear history (`format_linear_history` in `llm_processing.py`).
+            *   Integrated linear history into prompt assembly in `llm_processing.py`.
+            *   Added basic pruning of oldest history turns if total prompt exceeds token limits.
+            *   Token breakdown now includes `chat_history_tokens`.
 *   **Basic File Attachment:** [DONE]
 *   **Improved Error Handling & Status:** [WIP]
     *   More detailed status updates for queued requests (e.g., "queued", "processing", "error: connection failed", "error: inference failed"). (DB has status, but UI for queue page is basic). [DONE]
