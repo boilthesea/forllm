@@ -154,9 +154,9 @@ Here's a phased development plan, incorporating your groundwork steps and then e
             *   Create `format_linear_history(posts: List[Post]) -> str`.
             *   Formats the list of posts into a string, e.g.:
                 ```
-                User (<username>/Anonymous): <post_content>
+                User: <post_content>
                 LLM (<persona_name>/<model_name>): <llm_response_content>
-                User (<username>/Anonymous): <reply_content>
+                User: <reply_content>
                 ...
                 ```
             *   Clearly label user vs. LLM/persona contributions.
