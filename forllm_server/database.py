@@ -349,7 +349,11 @@ def init_db():
             # Removed: 'darkMode': 'false',
             'selectedModel': DEFAULT_MODEL,
             'llmLinkSecurity': 'true',
-            'default_llm_context_window': '4096' # Added this line
+            'default_llm_context_window': '4096', # Added this line
+            # Chat History Settings - New
+            'ch_max_ambient_posts': '5',
+            'ch_max_posts_per_sibling_branch': '2',
+            'ch_primary_history_budget_ratio': '0.7'
             # globalDefaultPersonaId is handled below
         }
         for key, default_value in default_settings_to_check.items():

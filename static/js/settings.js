@@ -11,8 +11,12 @@ import { applyDarkMode, showSection, lastVisibleSectionId } from './ui.js'; // N
 // --- State Variables ---
 export let currentSettings = { // Store loaded settings
     selectedModel: null,
-    llmLinkSecurity: 'true', // Added default
-    default_llm_context_window: '4096' // Initial default
+    llmLinkSecurity: 'true',
+    default_llm_context_window: '4096',
+    // Add new chat history settings with their string defaults
+    ch_max_ambient_posts: '5',
+    ch_max_posts_per_sibling_branch: '2',
+    ch_primary_history_budget_ratio: '0.7'
 };
 
 // --- DEBUG: Global click logger ---
@@ -174,6 +178,20 @@ export function renderSettingsPage() {
                 if (contextWindowInput) {
                     contextWindowInput.value = currentSettings.default_llm_context_window;
                 }
+
+                // Populate new chat history settings fields
+                const maxAmbientPostsInput = container.querySelector('#ch-max-ambient-posts');
+                if (maxAmbientPostsInput) {
+                    maxAmbientPostsInput.value = currentSettings.ch_max_ambient_posts || '5';
+                }
+                const maxPostsPerSiblingInput = container.querySelector('#ch-max-posts-per-sibling-branch');
+                if (maxPostsPerSiblingInput) {
+                    maxPostsPerSiblingInput.value = currentSettings.ch_max_posts_per_sibling_branch || '2';
+                }
+                const primaryRatioInput = container.querySelector('#ch-primary-history-budget-ratio');
+                if (primaryRatioInput) {
+                    primaryRatioInput.value = currentSettings.ch_primary_history_budget_ratio || '0.7';
+                }
                 
                 const saveButton = container.querySelector('#save-settings-btn');
                 if (saveButton) {
@@ -227,37 +245,40 @@ export async function loadSettings() {
         const settings = await apiRequest('/api/settings');
         currentSettings = {
             selectedModel: settings.selectedModel || null,
-            llmLinkSecurity: settings.llmLinkSecurity === 'true' ? 'true' : 'false', // Default to true if missing
-            default_llm_context_window: settings.default_llm_context_window || '4096' // Load or default
+            llmLinkSecurity: settings.llmLinkSecurity === 'true' ? 'true' : 'false',
+            default_llm_context_window: settings.default_llm_context_window || '4096',
+            // Load new chat history settings, using defaults if missing from backend response
+            ch_max_ambient_posts: settings.ch_max_ambient_posts || '5',
+            ch_max_posts_per_sibling_branch: settings.ch_max_posts_per_sibling_branch || '2',
+            ch_primary_history_budget_ratio: settings.ch_primary_history_budget_ratio || '0.7'
         };
-         if (settings.llmLinkSecurity === undefined) {
-             currentSettings.llmLinkSecurity = 'true'; // Explicitly default if undefined
-        }
-         if (settings.default_llm_context_window === undefined) {
-            currentSettings.default_llm_context_window = '4096'; // Explicitly default if undefined
-        }
+        // Ensure boolean-like strings are strictly 'true' or 'false'
+        if (currentSettings.llmLinkSecurity === undefined) currentSettings.llmLinkSecurity = 'true';
+
         applyDarkMode(true); // Apply dark mode immediately
 
         // Update UI elements if they exist (they might be created later by renderSettingsPage)
-        // These direct updates here are less critical if renderIntoContainer correctly sets values based on currentSettings
+        // This part is somewhat redundant if renderSettingsPage correctly populates fields
+        // based on currentSettings during its execution.
         const linkSecurityToggleInput = settingsPageContent.querySelector('#llm-link-security-toggle');
-        if (linkSecurityToggleInput) {
-             linkSecurityToggleInput.checked = currentSettings.llmLinkSecurity === 'true';
-        }
-        const contextWindowInput = settingsPageContent.querySelector('#default-llm-context-window-input');
-        if (contextWindowInput) {
-            contextWindowInput.value = currentSettings.default_llm_context_window;
-        }
+        if (linkSecurityToggleInput) linkSecurityToggleInput.checked = currentSettings.llmLinkSecurity === 'true';
 
-        // Trigger model loading (it will handle populating the select later)
-        // loadOllamaModels() will be called by renderSettingsPage when the elements are ready
+        const contextWindowInput = settingsPageContent.querySelector('#default-llm-context-window-input');
+        if (contextWindowInput) contextWindowInput.value = currentSettings.default_llm_context_window;
+
+        const maxAmbientPostsInput = settingsPageContent.querySelector('#ch-max-ambient-posts');
+        if (maxAmbientPostsInput) maxAmbientPostsInput.value = currentSettings.ch_max_ambient_posts;
+
+        const maxPostsPerSiblingInput = settingsPageContent.querySelector('#ch-max-posts-per-sibling-branch');
+        if (maxPostsPerSiblingInput) maxPostsPerSiblingInput.value = currentSettings.ch_max_posts_per_sibling_branch;
+
+        const primaryRatioInput = settingsPageContent.querySelector('#ch-primary-history-budget-ratio');
+        if (primaryRatioInput) primaryRatioInput.value = currentSettings.ch_primary_history_budget_ratio;
+
     } catch (error) {
         console.error("Error loading settings:", error);
-        // Apply default settings on error
-        currentSettings = { selectedModel: null, llmLinkSecurity: 'true' };
-        applyDarkMode(true); // Apply dark mode immediately
-        // Still try to load models even if settings load failed
-        // loadOllamaModels() will be called by renderSettingsPage
+        // Apply default settings on error (currentSettings already holds defaults from its definition)
+        applyDarkMode(true);
     }
 }
 
@@ -420,12 +441,18 @@ export async function saveSettings() {
     const modelSelectElement = settingsPageContent.querySelector('#model-select');
     const linkSecurityToggleInput = settingsPageContent.querySelector('#llm-link-security-toggle');
     const contextWindowInput = settingsPageContent.querySelector('#default-llm-context-window-input');
+    // New chat history inputs
+    const chMaxAmbientPostsInput = settingsPageContent.querySelector('#ch-max-ambient-posts');
+    const chMaxPostsPerSiblingBranchInput = settingsPageContent.querySelector('#ch-max-posts-per-sibling-branch');
+    const chPrimaryHistoryBudgetRatioInput = settingsPageContent.querySelector('#ch-primary-history-budget-ratio');
+
     const saveButton = settingsPageContent.querySelector('#save-settings-btn');
     const settingsErrorElement = settingsPageContent.querySelector('#settings-error');
 
-    if (!modelSelectElement || !linkSecurityToggleInput || !contextWindowInput || !saveButton || !settingsErrorElement) {
+    if (!modelSelectElement || !linkSecurityToggleInput || !contextWindowInput ||
+        !chMaxAmbientPostsInput || !chMaxPostsPerSiblingBranchInput || !chPrimaryHistoryBudgetRatioInput ||
+        !saveButton || !settingsErrorElement) {
         console.error("Settings elements not found for saving.");
-        // Changed alert to console.error to avoid blocking UI in case of programmatic call
         console.error("An error occurred. Could not save settings. Required elements missing.");
         return;
     }
@@ -433,25 +460,48 @@ export async function saveSettings() {
     const newSelectedModel = modelSelectElement.value;
     const newLlmLinkSecurity = linkSecurityToggleInput.checked;
     const newDefaultContextWindow = contextWindowInput.value;
+    // Get values from new fields
+    const chMaxAmbientPosts = chMaxAmbientPostsInput.value;
+    const chMaxPostsPerSiblingBranch = chMaxPostsPerSiblingBranchInput.value;
+    const chPrimaryHistoryBudgetRatio = chPrimaryHistoryBudgetRatioInput.value;
 
     settingsErrorElement.textContent = ""; // Clear previous errors
 
+    // Basic Client-side Validations (Backend will also validate)
     if (!newSelectedModel) {
         settingsErrorElement.textContent = "Please select a model.";
         modelSelectElement.focus();
         return;
     }
-
     if (!newDefaultContextWindow || isNaN(parseInt(newDefaultContextWindow, 10)) || parseInt(newDefaultContextWindow, 10) < 0) {
         settingsErrorElement.textContent = "Default LLM Context Window must be a non-negative number.";
-        if(contextWindowInput) contextWindowInput.focus();
+        contextWindowInput.focus();
+        return;
+    }
+    if (isNaN(parseInt(chMaxAmbientPosts, 10)) || parseInt(chMaxAmbientPosts, 10) < 0) {
+        settingsErrorElement.textContent = "Max Ambient Posts must be a non-negative number.";
+        chMaxAmbientPostsInput.focus();
+        return;
+    }
+    if (isNaN(parseInt(chMaxPostsPerSiblingBranch, 10)) || parseInt(chMaxPostsPerSiblingBranch, 10) < 0) {
+        settingsErrorElement.textContent = "Max Posts Per Sibling Branch must be a non-negative number.";
+        chMaxPostsPerSiblingBranchInput.focus();
+        return;
+    }
+    if (isNaN(parseFloat(chPrimaryHistoryBudgetRatio)) || parseFloat(chPrimaryHistoryBudgetRatio) < 0.0 || parseFloat(chPrimaryHistoryBudgetRatio) > 1.0) {
+        settingsErrorElement.textContent = "Primary History Budget Ratio must be between 0.0 and 1.0.";
+        chPrimaryHistoryBudgetRatioInput.focus();
         return;
     }
 
     const settingsToSave = {
         selectedModel: newSelectedModel,
         llmLinkSecurity: newLlmLinkSecurity.toString(),
-        default_llm_context_window: parseInt(newDefaultContextWindow, 10).toString() // Send as string
+        default_llm_context_window: parseInt(newDefaultContextWindow, 10).toString(),
+        // Add new settings to payload
+        ch_max_ambient_posts: chMaxAmbientPosts,
+        ch_max_posts_per_sibling_branch: chMaxPostsPerSiblingBranch,
+        ch_primary_history_budget_ratio: chPrimaryHistoryBudgetRatio
     };
 
     saveButton.disabled = true;
@@ -466,14 +516,20 @@ export async function saveSettings() {
         currentSettings.selectedModel = settingsToSave.selectedModel;
         currentSettings.llmLinkSecurity = settingsToSave.llmLinkSecurity;
         currentSettings.default_llm_context_window = settingsToSave.default_llm_context_window;
+        // Update local state for new settings
+        currentSettings.ch_max_ambient_posts = settingsToSave.ch_max_ambient_posts;
+        currentSettings.ch_max_posts_per_sibling_branch = settingsToSave.ch_max_posts_per_sibling_branch;
+        currentSettings.ch_primary_history_budget_ratio = settingsToSave.ch_primary_history_budget_ratio;
 
-
-        // Update UI (redundant if page isn't re-rendered, but good practice)
-        applyDarkMode(true); // Apply dark mode immediately
+        // Update UI (redundant if page isn't re-rendered, but good practice for consistency)
+        applyDarkMode(true);
         linkSecurityToggleInput.checked = currentSettings.llmLinkSecurity === 'true';
-        if (contextWindowInput) { // Update the input field as well
-            contextWindowInput.value = currentSettings.default_llm_context_window;
-        }
+        if (contextWindowInput) contextWindowInput.value = currentSettings.default_llm_context_window;
+        // Update new fields in UI
+        if (chMaxAmbientPostsInput) chMaxAmbientPostsInput.value = currentSettings.ch_max_ambient_posts;
+        if (chMaxPostsPerSiblingBranchInput) chMaxPostsPerSiblingBranchInput.value = currentSettings.ch_max_posts_per_sibling_branch;
+        if (chPrimaryHistoryBudgetRatioInput) chPrimaryHistoryBudgetRatioInput.value = currentSettings.ch_primary_history_budget_ratio;
+
         // Re-render model options to ensure the saved one is selected
         // (though it should already be selected from the user's choice)
         if (modelSelectElement) {

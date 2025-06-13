@@ -300,41 +300,46 @@ async function updateTokenBreakdown(editorInstance, editorType) {
     container.style.display = 'block'; // Ensure it's visible
 
     const current_post_text = editorInstance.value();
-
-    // --- Simplification for selected_persona_id ---
-    // Try to get from 'llm-persona-select' if it's relevant, otherwise null.
-    // This element is in `index.html`'s `subforum-personas-bar`.
-    // Its applicability depends on whether this bar is visible/used for the current editor context.
     let selected_persona_id = null;
     const personaSelectElement = document.getElementById('llm-persona-select');
-    if (personaSelectElement && personaSelectElement.value) {
-        // Check if the persona selector is relevant for the current editor context
-        // For a new topic, it might be less relevant than for a reply if the bar is tied to existing topic context.
-        // For now, we'll take it if available. This might need refinement.
-        if (editorType === 'reply' || (editorType === 'new-topic' && personaSelectElement.offsetParent !== null)) { // visible check
-             if (personaSelectElement.value !== "0" && personaSelectElement.value !== "") { // "0" or "" often means no selection / default
-                selected_persona_id = parseInt(personaSelectElement.value, 10);
-            }
+    if (personaSelectElement && personaSelectElement.value && personaSelectElement.value !== "0" && personaSelectElement.value !== "") {
+        // Basic check: is the persona selector visible and has a valid selection?
+        // More complex logic might be needed if the selector's relevance depends heavily on editorType/context.
+        if (personaSelectElement.offsetParent !== null) {
+            selected_persona_id = parseInt(personaSelectElement.value, 10);
         }
     }
-    // console.log(`Editor type: ${editorType}, Selected Persona ID: ${selected_persona_id}`);
 
-
-    // --- Simplification for attachments_text ---
     const attachments_text = cachedAttachmentsContent[editorType] ? cachedAttachmentsContent[editorType].text : "";
-    // console.log(`Using cached attachments text for ${editorType} in updateTokenBreakdown`);
 
+    // Determine parent_post_id based on editorType
+    let parent_post_id = null;
+    if (editorType === 'reply') {
+        const parentPostIdElement = document.getElementById('reply-parent-post-id'); // Assumed ID
+        if (parentPostIdElement && parentPostIdElement.value) {
+            parent_post_id = parseInt(parentPostIdElement.value, 10);
+            if (isNaN(parent_post_id)) parent_post_id = null; // Ensure it's null if parsing fails
+        }
+    }
+    // For 'new-topic', parent_post_id remains null, which is correct.
+
+    // For logging/debugging in backend if needed
+    const client_request_id = `${editorType}-${Date.now()}`;
 
     try {
+        const requestBody = {
+            current_post_text: current_post_text,
+            selected_persona_id: selected_persona_id,
+            attachments_text: attachments_text,
+            parent_post_id: parent_post_id,
+            request_id: client_request_id
+        };
+        // console.log("Token estimation request body:", requestBody);
+
         const response = await fetch('/api/prompts/estimate_tokens', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                current_post_text: current_post_text,
-                selected_persona_id: selected_persona_id,
-                attachments_text: attachments_text,
-                // parent_post_id: null // Not used yet
-            }),
+            body: JSON.stringify(requestBody),
         });
 
         if (!response.ok) {
@@ -349,12 +354,37 @@ async function updateTokenBreakdown(editorInstance, editorType) {
         const data = await response.json();
 
         // Update DOM elements
+        // These are the raw value of the current text in editor, and persona prompt string
         document.getElementById(`${editorType}-token-post-content`).textContent = `~${data.post_content_tokens}`;
         document.getElementById(`${editorType}-token-persona-name`).textContent = data.persona_name || "Default";
         document.getElementById(`${editorType}-token-persona-prompt`).textContent = `~${data.persona_prompt_tokens}`;
-        document.getElementById(`${editorType}-token-system-prompt`).textContent = `~${data.system_prompt_tokens}`;
+
+        // Attachments tokens as calculated by backend (based on text sent by client)
         document.getElementById(`${editorType}-token-attachments`).textContent = `~${data.attachments_tokens}`;
+
+        // Chat History: Use the combined field from backend which sums primary, ambient, and their headers.
         document.getElementById(`${editorType}-token-chat-history`).textContent = `~${data.chat_history_tokens}`;
+
+        // System prompt is currently 0 from backend, persona prompt covers it.
+        // If there's a dedicated display for system_prompt_tokens and it's always 0, it can be hidden or explicitly shown as 0.
+        const systemPromptEl = document.getElementById(`${editorType}-token-system-prompt`);
+        if (systemPromptEl) systemPromptEl.textContent = `~${data.system_prompt_tokens}`; // Will show ~0
+
+        // Display individual components if elements exist (optional, for detailed view)
+        // Example: if you add <span id="[editorType]-token-primary-history"></span> in HTML
+        const primaryHistEl = document.getElementById(`${editorType}-token-primary-history`);
+        if (primaryHistEl) primaryHistEl.textContent = `~${data.primary_chat_history_tokens}`;
+
+        const ambientHistEl = document.getElementById(`${editorType}-token-ambient-history`);
+        if (ambientHistEl) ambientHistEl.textContent = `~${data.ambient_chat_history_tokens}`;
+
+        const headersEl = document.getElementById(`${editorType}-token-headers`);
+        if (headersEl) headersEl.textContent = `~${data.headers_tokens}`;
+
+        const finalInstructionEl = document.getElementById(`${editorType}-token-final-instruction`);
+        if (finalInstructionEl) finalInstructionEl.textContent = `~${data.final_instruction_tokens}`;
+
+        // Totals and Model Info
         document.getElementById(`${editorType}-token-total-estimated`).textContent = `~${data.total_estimated_tokens}`;
         document.getElementById(`${editorType}-token-model-context-window`).textContent = data.model_context_window || "N/A";
         document.getElementById(`${editorType}-token-model-name`).textContent = data.model_name || "default";
