@@ -15,8 +15,44 @@ logger = logging.getLogger(__name__)
 # Removed sys.path manipulation and direct 'from forllm import app' import
 
 from .config import DATABASE, OLLAMA_GENERATE_URL, DEFAULT_MODEL, CURRENT_USER_ID, UPLOAD_FOLDER # UPLOAD_FOLDER might not be needed if current_app.config is used
-from .database import get_persona, get_post_ancestors
+from .database import get_persona, get_post_ancestors, get_sibling_branch_roots, get_recent_posts_from_branch # Added new imports
 from .ollama_utils import get_model_context_window # Added import
+
+# Constants for branch-aware history
+MAX_POSTS_PER_SIBLING_BRANCH = 2
+MAX_TOTAL_AMBIENT_POSTS = 5
+PRIMARY_HISTORY_BUDGET_RATIO = 0.7 # 70% for primary thread, 30% for ambient
+AMBIENT_HISTORY_HEADER = "--- Other Recent Discussions ---"
+PRIMARY_HISTORY_HEADER = "--- Current Conversation Thread ---"
+FINAL_INSTRUCTION = "Respond to this post."
+
+
+def _prune_history_string(history_string: str, max_tokens: int, logger_prefix: str, request_id: int) -> str:
+    """Prunes a history string to fit within a token budget by removing oldest entries."""
+    history_content_stripped = history_string.strip()
+    if not history_content_stripped or count_tokens(history_content_stripped) <= max_tokens:
+        return history_content_stripped # Return stripped version
+
+    logger.info(f"{logger_prefix} Request {request_id}: History ({count_tokens(history_content_stripped)} tokens) exceeds budget ({max_tokens}). Pruning.")
+
+    lines = history_content_stripped.split('\n')
+    current_content = history_content_stripped
+
+    while count_tokens(current_content) > max_tokens and lines:
+        lines.pop(0)  # Remove the oldest line (first in the list)
+        current_content = "\n".join(lines)
+
+    final_tokens = count_tokens(current_content)
+    if final_tokens > max_tokens:
+        # This case implies that even a single line might be over budget, or all lines were removed and it's still an issue (e.g. max_tokens = 0)
+        logger.warning(f"{logger_prefix} Request {request_id}: After removing lines, content ({final_tokens} tokens) might still be over budget ({max_tokens}), or became empty. Returning best effort.")
+        if not lines: # All lines were removed, and it's still over (or max_tokens is very small)
+             return "" # Return empty string if all lines removed and still not fitting (e.g. max_tokens=0)
+
+
+    logger.info(f"{logger_prefix} Request {request_id}: After pruning, history token count: {final_tokens}. Budget: {max_tokens}.")
+    return current_content
+
 
 def process_llm_request(request_details, flask_app): # Added flask_app parameter
     """Handles the actual LLM interaction for a given request."""
@@ -180,97 +216,205 @@ def process_llm_request(request_details, flask_app): # Added flask_app parameter
         if attachments_string:
             attachments_string += "\n\n" # Add trailing newlines if there were attachments
 
-        # --- Fetch and format chat history ---
-        chat_history_string = ""
-        chat_history_tokens = 0
+        # --- Fetch Primary and Sibling Thread Posts ---
+        ancestors = []
+        primary_thread_post_ids = []
+        topic_id = None
+
         if post_id: # post_id is the post_id_to_respond_to
             ancestors = get_post_ancestors(post_id, db) # Use existing db connection
             if ancestors:
-                chat_history_string = format_linear_history(ancestors, db) # Use existing db connection
-                if chat_history_string:
-                    chat_history_tokens = count_tokens(chat_history_string)
-                    logger.info(f"Request {request_id}: Chat history token count: {chat_history_tokens}")
-                    chat_history_string += "\n\n" # Add spacing after history
+                primary_thread_post_ids = [p['post_id'] for p in ancestors]
+                if original_post: # original_post was fetched earlier
+                    # Attempt to get topic_id from original_post (which is the post being responded to)
+                    # This requires original_post to have topic_id, which it should if fetched from posts table.
+                    # We need to ensure original_post is fetched in a way that gives topic_id.
+                    # Let's re-fetch original_post to include topic_id, or get it from ancestors.
+                    if ancestors: # If ancestors were fetched, the first one is the root of the current post_id's chain.
+                                  # Or the last one, depending on order. get_post_ancestors returns them chronologically.
+                                  # The current post (post_id) is the last in 'ancestors' if it includes itself,
+                                  # or original_post is the direct child.
+                                  # For this logic, we need topic_id of the post_id we are responding to.
+                        cursor.execute("SELECT topic_id FROM posts WHERE post_id = ?", (post_id,))
+                        current_post_topic_info = cursor.fetchone()
+                        if current_post_topic_info:
+                            topic_id = current_post_topic_info['topic_id']
+                        else: # Fallback, should not happen if post_id is valid
+                            logger.error(f"Request {request_id}: Could not fetch topic_id for current post {post_id}.")
+                            # Handle error or set topic_id to None if critical
+                else: # Should not happen if original_post was fetched successfully
+                    logger.error(f"Request {request_id}: original_post is None, cannot determine topic_id reliably for ambient history.")
+
+
+        ambient_posts = []
+        if topic_id and primary_thread_post_ids: # Ensure we have a topic and primary thread to find siblings for
+            logger.info(f"Request {request_id}: Fetching sibling branch roots for topic_id {topic_id}, excluding {len(primary_thread_post_ids)} primary thread posts.")
+            sibling_branch_roots = get_sibling_branch_roots(topic_id, primary_thread_post_ids, db)
+            logger.info(f"Request {request_id}: Found {len(sibling_branch_roots)} sibling branch root(s).")
+
+            all_candidate_ambient_posts = []
+            for root in sibling_branch_roots:
+                logger.info(f"Request {request_id}: Fetching recent posts from sibling branch starting with root_id {root['post_id']}.")
+                recent_from_branch = get_recent_posts_from_branch(root['post_id'], db, max_posts=MAX_POSTS_PER_SIBLING_BRANCH)
+                all_candidate_ambient_posts.extend(recent_from_branch)
+                logger.info(f"Request {request_id}: Fetched {len(recent_from_branch)} posts from branch {root['post_id']}. Total candidates: {len(all_candidate_ambient_posts)}.")
+
+            # Sort all collected ambient posts by creation date (most recent first for truncation)
+            all_candidate_ambient_posts.sort(key=lambda x: x['created_at'], reverse=True)
+
+            # Limit to max_total_ambient_posts
+            ambient_posts = all_candidate_ambient_posts[:MAX_TOTAL_AMBIENT_POSTS]
+            # Reverse again to have them in chronological order (oldest first) for the prompt
+            ambient_posts.reverse()
+            logger.info(f"Request {request_id}: Selected {len(ambient_posts)} ambient posts after sorting and truncation (max_total_ambient_posts: {MAX_TOTAL_AMBIENT_POSTS}).")
+
+        # --- Format History Strings ---
+        # Ambient History
+        formatted_ambient_history_string = ""
+        if ambient_posts:
+            ambient_history_parts = [AMBIENT_HISTORY_HEADER]
+            for post in ambient_posts:
+                author_prefix = "User"
+                if post.get('is_llm_response'):
+                    persona_name = "LLMAssistant" # Default if no persona
+                    if post.get('llm_persona_id'):
+                        # Fetch persona name (simplified, ideally use a helper or ensure get_persona takes connection)
+                        p_cursor = db.cursor()
+                        p_cursor.execute("SELECT name FROM personas WHERE persona_id = ?", (post['llm_persona_id'],))
+                        p_row = p_cursor.fetchone()
+                        if p_row: persona_name = p_row['name']
+                    author_prefix = f"LLM ({persona_name})"
+                ambient_history_parts.append(f"[From other thread by {author_prefix}]: {post.get('content', '')}")
+            formatted_ambient_history_string = "\n".join(ambient_history_parts) + "\n\n" # Add spacing
+
+        # Primary History
+        formatted_primary_history_string = ""
+        if ancestors: # ancestors are already fetched
+            primary_history_content = format_linear_history(ancestors, db)
+            if primary_history_content:
+                formatted_primary_history_string = f"{PRIMARY_HISTORY_HEADER}\n{primary_history_content}\n\n"
+
+        # --- Token Counting and Pruning ---
+        safety_margin_percentage = 0.95
+        max_allowed_tokens = int(effective_context_window * safety_margin_percentage)
+
+        persona_prompt_tokens = count_tokens(persona_instructions)
+        user_post_tokens = count_tokens(original_post['content'])
+        attachments_token_count = count_tokens(attachments_string.strip())
+
+        # --- Token Counting and Pruning ---
+        safety_margin_percentage = 0.95
+        max_allowed_tokens = int(effective_context_window * safety_margin_percentage)
+
+        persona_prompt_tokens = count_tokens(persona_instructions)
+        # IMPORTANT: The "User wrote: " prefix is added during final prompt assembly.
+        # For fixed token calculation, use the raw content and the fixed instruction.
+        user_post_content_for_count = original_post['content']
+        user_post_tokens = count_tokens(user_post_content_for_count) # Token for user's actual message
+        attachments_token_count = count_tokens(attachments_string.strip())
+
+        # Calculate tokens for elements that are fixed and always present around the history
+        # This includes persona, the user's current post, attachments, and the final instruction.
+        # Headers are handled separately as their inclusion depends on whether history content exists.
+        fixed_elements_tokens = count_tokens(
+            f"{attachments_string}" # attachments_string has its own trailing \n\n if not empty
+            f"{persona_instructions}\n\n"
+            f"User wrote: {user_post_content_for_count}\n\n" # Add "User wrote: " prefix here for accurate fixed count
+            f"{FINAL_INSTRUCTION}"
+        )
+        logger.info(f"Request {request_id}: Fixed elements (attachments, persona, User wrote: + user_post, final instruction) token count: {fixed_elements_tokens}")
+
+        available_tokens_for_history_sections = max_allowed_tokens - fixed_elements_tokens
+        if available_tokens_for_history_sections < 0:
+            available_tokens_for_history_sections = 0
+            logger.warning(f"Request {request_id}: Negative available_tokens_for_history_sections. Max allowed tokens might be too small or fixed elements too large.")
+        logger.info(f"Request {request_id}: Max allowed: {max_allowed_tokens}, Fixed elements: {fixed_elements_tokens}, Available for all history sections (incl headers): {available_tokens_for_history_sections}")
+
+        # --- Primary History Pruning ---
+        raw_primary_content = ""
+        if ancestors: # ancestors are already fetched
+            raw_primary_content = format_linear_history(ancestors, db) # This is just the content, no header
+
+        primary_header_tokens = 0
+        if raw_primary_content: # Only add header if there's content to show
+            primary_header_tokens = count_tokens(f"{PRIMARY_HISTORY_HEADER}\n\n")
+
+        primary_content_budget = int(available_tokens_for_history_sections * PRIMARY_HISTORY_BUDGET_RATIO) - primary_header_tokens
+        if primary_content_budget < 0: primary_content_budget = 0
+
+        pruned_primary_content = _prune_history_string(raw_primary_content, primary_content_budget, "[PrimaryPrune]", request_id)
+        final_primary_history_tokens = count_tokens(pruned_primary_content) # Tokens of content only
+
+        formatted_primary_history_string_final = ""
+        if pruned_primary_content:
+            formatted_primary_history_string_final = f"{PRIMARY_HISTORY_HEADER}\n{pruned_primary_content}\n\n"
+            final_primary_history_tokens += primary_header_tokens # Add header tokens to total if content exists
+        logger.info(f"Request {request_id}: Primary content budget: {primary_content_budget}. Actual primary content tokens: {count_tokens(pruned_primary_content)}. With header: {final_primary_history_tokens}")
+
+        # --- Ambient History Pruning ---
+        tokens_used_by_primary_history_section = 0
+        if pruned_primary_content: # If there's primary content, account for its tokens (content + header)
+            tokens_used_by_primary_history_section = final_primary_history_tokens
+
+        raw_ambient_content = ""
+        if ambient_posts: # ambient_posts were fetched and processed earlier
+            ambient_history_parts = [] # No header here yet
+            for post in ambient_posts: # ambient_posts is already sorted chronologically
+                author_prefix = "User"
+                if post.get('is_llm_response'):
+                    persona_name = "LLMAssistant"
+                    if post.get('llm_persona_id'):
+                        p_cursor = db.cursor()
+                        p_cursor.execute("SELECT name FROM personas WHERE persona_id = ?", (post['llm_persona_id'],))
+                        p_row = p_cursor.fetchone()
+                        if p_row: persona_name = p_row['name']
+                    author_prefix = f"LLM ({persona_name})"
+                ambient_history_parts.append(f"[From other thread by {author_prefix}]: {post.get('content', '')}")
+            raw_ambient_content = "\n".join(ambient_history_parts)
+
+        ambient_header_tokens = 0
+        if raw_ambient_content: # Only add header if there's content
+            ambient_header_tokens = count_tokens(f"{AMBIENT_HISTORY_HEADER}\n\n")
+
+        ambient_content_budget = available_tokens_for_history_sections - tokens_used_by_primary_history_section - ambient_header_tokens
+        if ambient_content_budget < 0: ambient_content_budget = 0
+
+        pruned_ambient_content = _prune_history_string(raw_ambient_content, ambient_content_budget, "[AmbientPrune]", request_id)
+        final_ambient_history_tokens = count_tokens(pruned_ambient_content) # Tokens of content only
+
+        formatted_ambient_history_string_final = ""
+        if pruned_ambient_content:
+            formatted_ambient_history_string_final = f"{AMBIENT_HISTORY_HEADER}\n{pruned_ambient_content}\n\n"
+            final_ambient_history_tokens += ambient_header_tokens # Add header tokens to total if content exists
+        logger.info(f"Request {request_id}: Ambient content budget: {ambient_content_budget}. Actual ambient content tokens: {count_tokens(pruned_ambient_content)}. With header: {final_ambient_history_tokens}")
 
         # --- Construct final prompt ---
-        # Order: Attachments, Persona Instructions, Chat History, Current Post
         prompt_content = (
             f"{attachments_string}"
             f"{persona_instructions}\n\n"
-            f"{chat_history_string}" # Already has trailing newlines if not empty
-            f"User wrote: {original_post['content']}\n\n"
-            f"Respond to this post."
+            f"{formatted_ambient_history_string_final}" # Already has header and trailing \n\n if not empty
+            f"{formatted_primary_history_string_final}" # Already has header and trailing \n\n if not empty
+            f"User wrote: {user_post_content_for_count}\n\n" # Use the same content as counted
+            f"{FINAL_INSTRUCTION}"
         )
-        print(f"Final prompt_content for request {request_id} (first 200 chars): {prompt_content[:200]}...")
-
-        # Token counting and logging
-        persona_prompt_tokens = count_tokens(persona_instructions)
-        logger.info(f"Request {request_id}: Persona instructions token count: {persona_prompt_tokens}")
-
-        user_post_content = original_post['content']
-        user_post_tokens = count_tokens(user_post_content)
-        logger.info(f"Request {request_id}: User post content token count: {user_post_tokens}")
-
-        attachments_token_count = 0
-        if attachments_string:
-            attachments_token_count = count_tokens(attachments_string.strip()) # Strip to avoid counting trailing newlines if only attachments_string is present
-            logger.info(f"Request {request_id}: Attachments text token count: {attachments_token_count}")
-
-        # Recalculate actual_final_prompt_tokens with all components
         actual_final_prompt_tokens = count_tokens(prompt_content)
-        logger.info(f"Request {request_id}: Initial actual final prompt string token count (all parts): {actual_final_prompt_tokens}")
+        logger.info(f"Request {request_id}: Final prompt constructed. Total tokens: {actual_final_prompt_tokens}. (First 200 chars: {prompt_content[:200]}...)")
 
-        # --- Pruning Logic for Chat History ---
-        safety_margin_percentage = 0.95 # Define here for use in pruning and pre-flight
-        max_allowed_tokens = int(effective_context_window * safety_margin_percentage)
+        # --- Store Token Breakdown ---
+        # Recalculate headers_tokens based on what was actually included
+        headers_token_count_final = 0
+        if pruned_primary_content: headers_token_count_final += primary_header_tokens
+        if pruned_ambient_content: headers_token_count_final += ambient_header_tokens
 
-        if actual_final_prompt_tokens > max_allowed_tokens and chat_history_string.strip():
-            logger.info(f"Request {request_id}: Prompt ({actual_final_prompt_tokens} tokens) exceeds max allowed ({max_allowed_tokens}). Attempting to prune chat history.")
-
-            # chat_history_string currently includes trailing "\n\n" if it's not empty.
-            # For pruning, we want to work with the raw lines.
-            current_chat_history_content = chat_history_string.strip() # Remove trailing \n\n
-            history_lines = current_chat_history_content.split('\n')
-
-            # Define the parts of the prompt that are fixed
-            fixed_prompt_prefix = f"{attachments_string}{persona_instructions}\n\n"
-            # The 'User wrote: ' part is from original_post['content']
-            fixed_prompt_suffix = f"User wrote: {original_post['content']}\n\nRespond to this post."
-
-            while actual_final_prompt_tokens > max_allowed_tokens and history_lines:
-                logger.info(f"Request {request_id}: Pruning: Current total tokens: {actual_final_prompt_tokens}. History lines: {len(history_lines)}")
-                history_lines.pop(0) # Remove the oldest turn (first line)
-
-                if not history_lines:
-                    current_chat_history_content = ""
-                    chat_history_string = "" # No history left, so no trailing newlines needed
-                else:
-                    current_chat_history_content = "\n".join(history_lines)
-                    chat_history_string = current_chat_history_content + "\n\n" # Add back spacing if history remains
-
-                prompt_content = (
-                    f"{fixed_prompt_prefix}"
-                    f"{chat_history_string}" # This now uses the pruned history
-                    f"{fixed_prompt_suffix}"
-                )
-                actual_final_prompt_tokens = count_tokens(prompt_content)
-                logger.info(f"Request {request_id}: Pruning: New total tokens: {actual_final_prompt_tokens}. History lines remaining: {len(history_lines)}")
-
-            # Update chat_history_tokens after pruning
-            chat_history_tokens = count_tokens(current_chat_history_content) # Count tokens of the history part only
-            logger.info(f"Request {request_id}: After pruning, final chat history token count: {chat_history_tokens}")
-            if actual_final_prompt_tokens > max_allowed_tokens:
-                logger.warning(f"Request {request_id}: Prompt still too long ({actual_final_prompt_tokens} tokens) after removing all chat history. Max allowed: {max_allowed_tokens}.")
-            else:
-                logger.info(f"Request {request_id}: Pruning successful. Final prompt tokens: {actual_final_prompt_tokens}.")
-
-        # --- Store Token Breakdown (potentially updated after pruning) ---
         token_breakdown = {
             "persona_prompt_tokens": persona_prompt_tokens,
-            "user_post_tokens": user_post_tokens,
+            "user_post_tokens": user_post_tokens, # This is for user_post_content_for_count
             "attachments_token_count": attachments_token_count,
-            "chat_history_tokens": chat_history_tokens, # Updated if pruned
-            "total_prompt_tokens": actual_final_prompt_tokens # Updated if pruned
+            "primary_chat_history_tokens": count_tokens(pruned_primary_content), # Content only
+            "ambient_chat_history_tokens": count_tokens(pruned_ambient_content), # Content only
+            "headers_tokens": headers_token_count_final,
+            "final_instruction_tokens": count_tokens(FINAL_INSTRUCTION),
+            "total_prompt_tokens": actual_final_prompt_tokens
         }
         token_breakdown_json = json.dumps(token_breakdown)
 
