@@ -62,7 +62,7 @@ def process_llm_request(request_details, flask_app): # Added flask_app parameter
         logger.info(f"Request {request_id}: Attempting to fetch context window for model: {model} using ollama_utils...")
         with flask_app.app_context(): # Ensure app context for get_model_context_window
             # get_model_context_window from ollama_utils uses get_db() which relies on app context
-            model_specific_context = get_model_context_window(model)
+            model_specific_context = get_model_context_window(model, db)
 
         if model_specific_context is not None:
             effective_context_window = model_specific_context
