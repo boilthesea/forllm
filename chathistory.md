@@ -168,59 +168,73 @@ Here's a phased development plan, incorporating your groundwork steps and then e
 
 ---
 
-*   **Sub-Phase 2.2: Advanced Branch-Aware Chat History (Primary + Ambient)**
+*   **[DONE] Sub-Phase 2.2: Advanced Branch-Aware Chat History (Primary + Ambient)**
     *   **Task 2.2.1 (Backend): Identify Primary and Sibling Threads.**
-        *   In `llm_processing.py` or `database.py`:
-            *   `get_primary_thread_posts(target_post_id, db)`: Returns the list of posts from `target_post_id` up to the topic root (already done in 2.1.1).
-            *   `get_sibling_branch_summary_posts(topic_id, primary_thread_post_ids, db, max_posts_per_sibling_branch=2, max_total_sibling_posts=5) -> List[Post]`:
-                *   Find all direct children of the `topic_id` (these are roots of main branches).
-                *   Exclude the branch that the `primary_thread_post_ids` belong to.
-                *   For each remaining sibling branch, fetch its `max_posts_per_sibling_branch` most recent posts.
-                *   Limit the total number of returned sibling posts to `max_total_sibling_posts`, prioritizing overall recency if truncation is needed across branches.
-        *   **Benefit:** Isolates the main conversation and gathers relevant context from parallel discussions.
+        *   **Summary:**
+            *   `get_primary_thread_posts`: This is effectively handled by `get_post_ancestors(target_post_id, db)` from Sub-Phase 2.1.1, which retrieves the direct chain of posts leading to the current post being responded to.
+            *   `get_sibling_branch_roots(topic_id, primary_thread_post_ids, db)`: Implemented in `forllm_server/database.py`. This function fetches all root posts (those with `parent_post_id IS NULL`) within a given `topic_id`, then filters out any post whose `post_id` is present in the `primary_thread_post_ids` list. This identifies the starting points of all other discussion branches in the same topic.
+            *   `get_recent_posts_from_branch(branch_root_id, db, max_posts=N)`: Implemented in `forllm_server/database.py`. For a given `branch_root_id` (a `post_id` that is the start of a sibling branch), this function uses a recursive CTE to find all descendant posts and returns the `N` most recent ones in chronological order.
+            *   **Usage in `llm_processing.py`**: The `process_llm_request` function uses these to build ambient context. After fetching the primary thread (`ancestors`), it extracts their IDs. It then calls `get_sibling_branch_roots` to find other branch starting points. For each root, `get_recent_posts_from_branch` is called (with `max_posts_per_sibling_branch` e.g., 2). All collected posts from these sibling branches are pooled, sorted by their creation date (most recent first), and then truncated to a global maximum (e.g., `MAX_TOTAL_AMBIENT_POSTS` like 5). These selected posts are then reversed to be chronological for the prompt.
+        *   **Benefit:** Isolates the main conversation and gathers relevant, recent context from parallel discussions.
     *   **Task 2.2.2 (Backend): Structured Prompt Assembly with Prioritization.**
-        *   Refine prompt construction in `llm_processing.py`:
-            *   **Order of Inclusion & Token Budgeting:**
-                1.  System Prompt (e.g., "You are a helpful AI...")
-                2.  Persona Instructions (e.g., "You are Albert Einstein...")
-                3.  *Placeholder for Ambient Introduction (e.g., "--- Other Recent Discussions ---")*
-                4.  *Placeholder for Ambient Content*
-                5.  Main Conversation Introduction (e.g., "--- Current Conversation Thread ---")
-                6.  Primary Conversation Thread (chronological, leading up to current user's post, excluding current post itself).
-                7.  Current User's Post (the one the LLM is replying to).
-                8.  Assistant's Turn Start (e.g., "Assistant: ")
+        *   **Summary:**
+            *   **Order of Inclusion & Token Budgeting:** The prompt construction in `llm_processing.py` now follows this approximate order:
+                1.  `attachments_string` (if any, with its own formatting and newlines)
+                2.  `persona_instructions` (followed by `\n\n`)
+                3.  `AMBIENT_HISTORY_HEADER` (e.g., "--- Other Recent Discussions ---", if ambient posts exist, followed by `\n\n`)
+                4.  Formatted Ambient Posts (each post prefixed like `[From other thread by User/LLM (PersonaName)]: content`, joined by `\n`, followed by `\n\n` if the section exists)
+                5.  `PRIMARY_HISTORY_HEADER` (e.g., "--- Current Conversation Thread ---", if primary history posts exist, followed by `\n\n`)
+                6.  Formatted Primary Conversation Thread (from `format_linear_history`, followed by `\n\n` if the section exists)
+                7.  `User wrote: ` + `original_post['content']` (followed by `\n\n`)
+                8.  `FINAL_INSTRUCTION` (e.g., "Respond to this post.")
             *   **Token Allocation and Pruning Strategy:**
-                *   Calculate `available_tokens = (model_context_window * safety_margin) - tokens(fixed_elements_like_system_persona_current_post_headers)`.
-                *   **Step 1: Fit Primary Thread.**
-                    *   Attempt to fit the full primary thread (from 2.2.1).
-                    *   If too long, prune its oldest messages (as in 2.1.4) until it fits within `available_tokens`.
-                    *   Update `available_tokens` by subtracting `tokens(fitted_primary_thread)`.
-                *   **Step 2: Fit Ambient Threads (if space).**
-                    *   If `available_tokens > 0`:
-                        *   Fetch sibling/ambient posts using `get_sibling_branch_summary_posts`.
-                        *   Format them (e.g., each post prefixed by `[From thread by UserX/PersonaY]: content`).
-                        *   **Option A (Simple Recency):** Take the N most recent ambient posts that fit in the remaining `available_tokens`. Prune oldest ambient posts if the whole set doesn't fit.
-                        *   **Option B (Fair Allocation - More Complex):**
-                            *   Mentally divide `available_tokens` among a few (e.g., 2-3) most active/recent sibling branches.
-                            *   For each allocated slot, fill with the most recent posts from that specific branch.
-                            *   This is harder to implement fairly and dynamically. Start with Option A.
-                        *   **Option C (Summarization - Very Advanced, Future):** Use another LLM call to summarize long ambient threads. (Out of scope for now).
-                    *   Insert the fitted ambient content into its placeholder.
+                *   A helper function `_prune_history_string(history_content, budget, logger_prefix, request_id)` was implemented to remove the oldest lines from a given string of history content until it fits the `budget`.
+                *   `fixed_elements_tokens` are calculated first (attachments, persona, user's current post with "User wrote: " prefix, final instruction).
+                *   `available_tokens_for_history_sections` is `max_allowed_tokens - fixed_elements_tokens`.
+                *   **Primary Thread:**
+                    *   The budget for primary history *content* is `(available_tokens_for_history_sections * PRIMARY_HISTORY_BUDGET_RATIO) - tokens(PRIMARY_HISTORY_HEADER + "\n\n")`.
+                    *   The raw primary history content (from `format_linear_history`) is pruned against this budget using `_prune_history_string`.
+                    *   The final token count for the primary section includes header tokens if content remains.
+                *   **Ambient Threads:**
+                    *   The budget for ambient history *content* is the remaining `available_tokens_for_history_sections` after accounting for the actual tokens used by the (potentially pruned) primary history section (including its header), minus tokens for the `AMBIENT_HISTORY_HEADER`.
+                    *   The raw ambient posts content (formatted and joined) is pruned against this budget.
+                    *   The final token count for the ambient section includes header tokens if content remains.
+            *   The token breakdown stored in the `llm_requests` table was updated. `chat_history_tokens` was renamed to `primary_chat_history_tokens` (stores token count of pruned primary content, excluding header). A new `ambient_chat_history_tokens` key was added (for pruned ambient content, excluding header). A `headers_tokens` key stores the sum of tokens for headers that were actually included. `total_prompt_tokens` reflects all parts.
         *   **Benefit:** Creates a highly contextual prompt that prioritizes the direct conversation while allowing awareness of parallel discussions, all within token limits. Clear structuring helps the LLM differentiate.
+
+    **Implementation Summary for Sub-Phase 2.2:**
+    Sub-Phase 2.2 significantly enhanced chat history by introducing branch awareness.
+    - **Database Functions:** Two new functions were added to `forllm_server/database.py`:
+        - `get_sibling_branch_roots(topic_id, primary_thread_post_ids, db)`: Identifies starting posts of other discussion branches within the same topic.
+        - `get_recent_posts_from_branch(branch_root_id, db, max_posts)`: Fetches a specified number of recent posts from a given branch.
+    - **LLM Processing (`llm_processing.py`):**
+        - **Ambient Context:** The `process_llm_request` function now uses the new database functions to gather "ambient" posts from sibling branches. It limits posts per branch (via `MAX_POSTS_PER_SIBLING_BRANCH`) and total ambient posts (via `MAX_TOTAL_AMBIENT_POSTS`), prioritizing overall recency.
+        - **Prompt Structure:** The prompt was restructured to include distinct sections for ambient history (under "--- Other Recent Discussions ---") and primary history (under "--- Current Conversation Thread ---"), in addition to attachments, persona, the current user's post, and a final instruction.
+        - **Token Budgeting & Pruning:** A more sophisticated pruning strategy was implemented:
+            - Fixed elements (attachments, persona, user post, final instruction) have their tokens calculated first.
+            - The remaining `available_tokens_for_history_sections` are then allocated.
+            - Primary history content is pruned against a dedicated budget (e.g., 70% of available history tokens, defined by `PRIMARY_HISTORY_BUDGET_RATIO`), minus its header cost.
+            - Ambient history content is pruned against the remaining budget, minus its header cost.
+            - A helper `_prune_history_string` was created for this.
+        - **Token Breakdown:** The `prompt_token_breakdown` in the `llm_requests` table was updated to store `primary_chat_history_tokens` (content only), `ambient_chat_history_tokens` (content only), and `headers_tokens`.
+    This allows the LLM to have a more holistic understanding of the ongoing discussion by including relevant context from parallel threads while carefully managing token limits.
 
 ---
 
 *   **Sub-Phase 2.3: UI/UX and Configuration for Chat History**
     *   **Task 2.3.1 (Frontend): Update Token Breakdown Display.**
         *   The UI from Task 1.4.1 should now show an estimated count for "Chat History: ~E tokens", reflecting the history that *would be constructed* based on the current post's context. This requires the backend endpoint (`/api/prompts/estimate_tokens`) to simulate the history building and pruning logic.
+        *   **Note:** The backend estimation logic for `/api/prompts/estimate_tokens` will need significant updates to accurately mirror the new complex history building (primary + ambient fetching, formatting, and multi-stage pruning) now implemented in `process_llm_request`. This is a non-trivial change for the estimator.
         *   **Benefit:** User sees impact of history on token count.
     *   **Task 2.3.2 (Backend/Settings - Optional): Configuration for History Depth/Style.**
         *   Consider adding application settings for:
-            *   `max_ambient_posts_to_include`: User can tune how much "other discussion" is included.
-            *   `prefer_primary_thread_depth_over_ambient`: A boolean, if true, prioritize fitting more of the primary thread even if it means less/no ambient context.
+            *   `max_ambient_posts_to_include`: User can tune how much "other discussion" is included. (Currently handled by `MAX_TOTAL_AMBIENT_POSTS` constant in `llm_processing.py`).
+            *   `max_posts_per_sibling_branch`: (Currently `MAX_POSTS_PER_SIBLING_BRANCH` constant).
+            *   `prefer_primary_thread_depth_over_ambient`: A boolean, if true, prioritize fitting more of the primary thread even if it means less/no ambient context. (Currently handled by `PRIMARY_HISTORY_BUDGET_RATIO` constant).
+        *   These constants could be made configurable via the settings UI and database in the future.
         *   **Benefit:** Gives users some control over the trade-off between direct conversation depth and ambient awareness.
     *   **Task 2.3.3 (Documentation/Help): Explain History Mechanism.**
-        *   Provide simple documentation explaining to users how chat history is constructed and pruned, so they understand why an LLM might sometimes seem to "forget" very old parts of a long branched discussion.
+        *   Provide simple documentation explaining to users how chat history is constructed (primary and ambient) and pruned, so they understand why an LLM might sometimes seem to "forget" very old parts of a long branched discussion.
         *   **Benefit:** Manages user expectations.
 
 ---
