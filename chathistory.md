@@ -227,11 +227,11 @@ Here's a phased development plan, incorporating your groundwork steps and then e
         *   **Note:** The backend estimation logic for `/api/prompts/estimate_tokens` will need significant updates to accurately mirror the new complex history building (primary + ambient fetching, formatting, and multi-stage pruning) now implemented in `process_llm_request`. This is a non-trivial change for the estimator.
         *   **Benefit:** User sees impact of history on token count.
     *   **Task 2.3.2 (Backend/Settings - Optional): Configuration for History Depth/Style.**
-        *   Consider adding application settings for:
+        *   Add application settings for:
             *   `max_ambient_posts_to_include`: User can tune how much "other discussion" is included. (Currently handled by `MAX_TOTAL_AMBIENT_POSTS` constant in `llm_processing.py`).
             *   `max_posts_per_sibling_branch`: (Currently `MAX_POSTS_PER_SIBLING_BRANCH` constant).
             *   `prefer_primary_thread_depth_over_ambient`: A boolean, if true, prioritize fitting more of the primary thread even if it means less/no ambient context. (Currently handled by `PRIMARY_HISTORY_BUDGET_RATIO` constant).
-        *   These constants could be made configurable via the settings UI and database in the future.
+        *   Make these user configurable in the database and via the settings UI under the LLM tab in a chat history section and place a tooltip in the UI where a user can get a brief explanation of what the setting does.
         *   **Benefit:** Gives users some control over the trade-off between direct conversation depth and ambient awareness.
     *   **Task 2.3.3 (Documentation/Help): Explain History Mechanism.**
         *   Provide simple documentation explaining to users how chat history is constructed (primary and ambient) and pruned, so they understand why an LLM might sometimes seem to "forget" very old parts of a long branched discussion.
