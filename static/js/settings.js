@@ -81,7 +81,26 @@ export function renderSettingsPage() {
     <button id="save-settings-btn">Save Settings</button>
     <p id="settings-error" class="error-message"></p>
 </div>
-<div id="settings-llm-section" class="settings-tab-section" style="display:none"></div>
+<div id="settings-llm-section" class="settings-tab-section" style="display:none">
+    <div class="settings-subsection">
+        <h4>Chat History Configuration</h4>
+        <div class="setting-item">
+            <label for="ch-max-ambient-posts">Max Ambient Posts:</label>
+            <input type="number" id="ch-max-ambient-posts" name="ch_max_ambient_posts" min="0">
+            <span class="tooltip-icon" title="Maximum number of recent posts from other discussion branches to include as ambient history. Set to 0 to disable ambient history. (Default: 5)">?</span>
+        </div>
+        <div class="setting-item">
+            <label for="ch-max-posts-per-sibling-branch">Max Posts Per Sibling Branch:</label>
+            <input type="number" id="ch-max-posts-per-sibling-branch" name="ch_max_posts_per_sibling_branch" min="0">
+            <span class="tooltip-icon" title="Maximum number of recent posts to include from each individual sibling branch for ambient history. (Default: 2)">?</span>
+        </div>
+        <div class="setting-item">
+            <label for="ch-primary-history-budget-ratio">Primary History Budget Ratio:</label>
+            <input type="number" step="0.05" min="0" max="1" id="ch-primary-history-budget-ratio" name="ch_primary_history_budget_ratio">
+            <span class="tooltip-icon" title="Proportion (0.0 to 1.0) of available history tokens to allocate to the primary conversation thread. The rest is for ambient history. E.g., 0.7 means 70% for primary. (Default: 0.7)">?</span>
+        </div>
+    </div>
+</div>
 <div id="settings-schedule-section" class="settings-tab-section" style="display:none"></div>
 <div id="settings-personas-section" class="settings-tab-section" style="display:none">
     <h2>Personas</h2>
