@@ -767,19 +767,3 @@ def _dummy_llm_processor(request_id, post_id, model, persona_id, prompt_content,
     finally:
         if dummy_db:
             dummy_db.close()
-
-
-def format_linear_history(posts: list, db_connection) -> str:
-    """
-    Formats a list of posts (e.g., from get_post_ancestors) into a linear string representation.
-
-    Args:
-        posts: A list of post dictionaries. Each post dictionary should have keys like
-               'is_llm_response', 'content', 'llm_persona_id', 'llm_model_name'.
-        db_connection: An active sqlite3 database connection.
-
-    Returns:
-        A string representing the formatted chat history.
-    """
-    history_str_parts = []
-# format_linear_history was moved to the top of the file.
