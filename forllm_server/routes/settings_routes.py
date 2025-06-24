@@ -13,49 +13,75 @@ settings_bp = Blueprint('settings', __name__, url_prefix='/api')
 def handle_settings():
     db = get_db()
     cursor = db.cursor()
+
+    # Define known setting keys and their default values for GET requests
+    # These are also used to validate keys for PUT requests.
+    # Default values match those in database.py and llm_processing.py fallbacks.
+    known_settings_with_defaults = {
+        'selectedModel': DEFAULT_MODEL,
+        'llmLinkSecurity': 'true',
+        'default_llm_context_window': '4096',
+        'ch_max_ambient_posts': '5',
+        'ch_max_posts_per_sibling_branch': '2',
+        'ch_primary_history_budget_ratio': '0.7'
+    }
+
     if request.method == 'PUT':
         data = request.get_json()
         if not data:
             return jsonify({'error': 'No settings data provided'}), 400
         try:
             for key, value in data.items():
-                processed_value = None # Initialize processed_value
-                if key in ['selectedModel', 'llmLinkSecurity', 'default_llm_context_window']: # Added default_llm_context_window
-                    if key == 'llmLinkSecurity': # Specific handling for llmLinkSecurity
-                        if isinstance(value, bool):
-                            processed_value = 'true' if value else 'false'
-                        else:
-                            bool_val = str(value).strip().lower() in ['true', '1', 'yes', 'on']
-                            processed_value = 'true' if bool_val else 'false'
-                    elif key == 'selectedModel':
-                        processed_value = str(value).strip()
-                        if not processed_value:
-                             print(f"Warning: Attempted to save empty string for selectedModel.")
-                             continue # Skip saving this key if invalid
-                    elif key == 'default_llm_context_window':
-                        try:
-                            # Ensure it's a valid integer, then store as string
-                            int_value = int(value)
-                            processed_value = str(int_value)
-                        except ValueError:
-                            # Handle error or skip if value is not a valid integer
-                            print(f"Warning: Invalid value for default_llm_context_window: {value}. Skipping.")
-                            continue # Skip saving this key if invalid
-                    else: # Catchall for other keys in the list, like selectedModel if not explicitly handled above
-                        processed_value = str(value)
-
-                    if processed_value is not None: # Ensure processed_value was set (e.g. not skipped by continue)
-                        cursor.execute("INSERT OR REPLACE INTO settings (setting_key, setting_value) VALUES (?, ?)", (key, processed_value))
-                else:
+                processed_value = None
+                if key not in known_settings_with_defaults:
                     print(f"Warning: Ignoring unknown setting key during update: {key}")
+                    continue
+
+                if key == 'llmLinkSecurity':
+                    processed_value = 'true' if str(value).strip().lower() in ['true', '1', 'yes', 'on'] else 'false'
+                elif key == 'selectedModel':
+                    processed_value = str(value).strip()
+                    if not processed_value:
+                        print(f"Warning: Attempted to save empty string for selectedModel. Skipping.")
+                        continue
+                elif key == 'default_llm_context_window' or key == 'ch_max_ambient_posts' or key == 'ch_max_posts_per_sibling_branch':
+                    try:
+                        int_value = int(value)
+                        if key.startswith('ch_') and int_value < 0:
+                            print(f"Warning: Invalid negative value for {key}: {int_value}. Skipping.")
+                            continue
+                        processed_value = str(int_value)
+                    except ValueError:
+                        print(f"Warning: Invalid integer value for {key}: {value}. Skipping.")
+                        continue
+                elif key == 'ch_primary_history_budget_ratio':
+                    try:
+                        float_value = float(value)
+                        if not (0.0 <= float_value <= 1.0):
+                            print(f"Warning: Value for {key} ({float_value}) out of range [0.0, 1.0]. Skipping.")
+                            continue
+                        processed_value = str(float_value)
+                    except ValueError:
+                        print(f"Warning: Invalid float value for {key}: {value}. Skipping.")
+                        continue
+                else: # Should not be reached if all known_settings are handled above
+                    print(f"Warning: Unhandled known setting key: {key}. This is a bug.")
+                    continue
+
+                if processed_value is not None:
+                    cursor.execute("INSERT OR REPLACE INTO settings (setting_key, setting_value) VALUES (?, ?)", (key, processed_value))
+
             db.commit()
+
+            # Fetch all settings again to return the current state
             cursor.execute("SELECT setting_key, setting_value FROM settings")
             settings = {row['setting_key']: row['setting_value'] for row in cursor.fetchall()}
-            # Ensure defaults are applied if any known setting is somehow missing after update
-            # Removed: if 'darkMode' not in settings: settings['darkMode'] = 'false'
-            if 'selectedModel' not in settings: settings['selectedModel'] = DEFAULT_MODEL
-            if 'llmLinkSecurity' not in settings: settings['llmLinkSecurity'] = 'true'
-            if 'default_llm_context_window' not in settings: settings['default_llm_context_window'] = '4096' # Default value
+
+            # Ensure all known settings have a value in the response, applying defaults if somehow missing
+            for s_key, s_default in known_settings_with_defaults.items():
+                if s_key not in settings:
+                    settings[s_key] = s_default
+
             return jsonify(settings)
         except Exception as e:
             db.rollback()
@@ -65,13 +91,12 @@ def handle_settings():
         try:
             cursor.execute("SELECT setting_key, setting_value FROM settings")
             settings = {row['setting_key']: row['setting_value'] for row in cursor.fetchall()}
-            # Removed: if 'darkMode' not in settings: settings['darkMode'] = 'false'
-            if 'selectedModel' not in settings:
-                settings['selectedModel'] = DEFAULT_MODEL
-            if 'llmLinkSecurity' not in settings:
-                settings['llmLinkSecurity'] = 'true'
-            if 'default_llm_context_window' not in settings:
-                settings['default_llm_context_window'] = '4096' # Default value
+            # Ensure all known settings have a value, applying defaults if missing
+            # This is important if the DB was somehow cleared or a new setting was added
+            # and not yet saved by a PUT.
+            for s_key, s_default in known_settings_with_defaults.items():
+                if s_key not in settings:
+                    settings[s_key] = s_default
             return jsonify(settings)
         except Exception as e:
             print(f"Error fetching settings: {e}")

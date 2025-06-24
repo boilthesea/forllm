@@ -349,7 +349,11 @@ def init_db():
             # Removed: 'darkMode': 'false',
             'selectedModel': DEFAULT_MODEL,
             'llmLinkSecurity': 'true',
-            'default_llm_context_window': '4096' # Added this line
+            'default_llm_context_window': '4096', # Added this line
+            # Chat History Settings - New
+            'ch_max_ambient_posts': '5',
+            'ch_max_posts_per_sibling_branch': '2',
+            'ch_primary_history_budget_ratio': '0.7'
             # globalDefaultPersonaId is handled below
         }
         for key, default_value in default_settings_to_check.items():
@@ -612,6 +616,114 @@ def create_persona(name, prompt_instructions, created_by_user):
         if db:
             db.rollback()
         return None
+
+# ------------------- POST ANCESTOR LOGIC -------------------
+
+def get_post_ancestors(post_id, db_connection):
+    """
+    Fetches a post and all its ancestors up to the topic root.
+    Returns the posts in chronological order (oldest first).
+    """
+    posts = []
+    current_post_id = post_id
+    while current_post_id:
+        cursor = db_connection.execute(
+            """
+            SELECT post_id, topic_id, user_id, parent_post_id, content,
+                   created_at, is_llm_response, llm_model_id AS llm_model_name, llm_persona_id
+            FROM posts
+            WHERE post_id = ?
+            """,
+            (current_post_id,),
+        )
+        post = cursor.fetchone()
+        if post:
+            posts.append(dict(post))
+            current_post_id = post["parent_post_id"]
+        else:
+            # Post not found, break the loop
+            break
+    return posts[::-1]  # Reverse to get chronological order
+
+# ------------------- BRANCH/THREADING LOGIC -------------------
+
+def get_sibling_branch_roots(topic_id: int, primary_thread_post_ids: list[int], db_connection) -> list[dict]:
+    """
+    Fetches all root posts in a topic that are not part of the primary thread.
+    These represent the starting points of sibling discussion branches.
+    """
+    try:
+        # Create a placeholder string for the IN clause
+        placeholders = ','.join('?' for _ in primary_thread_post_ids)
+
+        # Base query to get all root posts in the topic
+        query = f"""
+            SELECT post_id, topic_id, user_id, parent_post_id, content,
+                   created_at, is_llm_response, llm_model_id AS llm_model_name, llm_persona_id
+            FROM posts
+            WHERE topic_id = ? AND parent_post_id IS NULL
+        """
+
+        params = [topic_id]
+
+        # If there are primary thread posts, filter them out
+        if primary_thread_post_ids:
+            query += f" AND post_id NOT IN ({placeholders})"
+            params.extend(primary_thread_post_ids)
+
+        cursor = db_connection.execute(query, tuple(params))
+        sibling_roots = [dict(row) for row in cursor.fetchall()]
+        return sibling_roots
+    except sqlite3.Error as e:
+        # Log the error or handle it as appropriate for the application
+        # For now, print it and return an empty list
+        print(f"Database error in get_sibling_branch_roots: {e}")
+        # Consider logging this error with current_app.logger if in Flask context
+        # current_app.logger.error(f"Database error in get_sibling_branch_roots: {e}")
+        return []
+
+def get_recent_posts_from_branch(branch_root_id: int, db_connection, max_posts: int = 2) -> list[dict]:
+    """
+    Fetches the most recent posts from a specific discussion branch.
+    A branch is defined by the branch_root_id and all its descendant posts.
+    """
+    try:
+        # This query uses a Recursive Common Table Expression (CTE) to find all descendants
+        # of the branch_root_id, then selects the most recent 'max_posts' from that set.
+        query = """
+            WITH RECURSIVE branch_posts AS (
+                -- Anchor member: the root post of the branch
+                SELECT post_id, topic_id, user_id, parent_post_id, content,
+                       created_at, is_llm_response, llm_model_id, llm_persona_id, 0 as depth
+                FROM posts
+                WHERE post_id = :branch_root_id
+
+                UNION ALL
+
+                -- Recursive member: posts that are children of posts already in branch_posts
+                SELECT p.post_id, p.topic_id, p.user_id, p.parent_post_id, p.content,
+                       p.created_at, p.is_llm_response, p.llm_model_id, p.llm_persona_id, bp.depth + 1
+                FROM posts p
+                JOIN branch_posts bp ON p.parent_post_id = bp.post_id
+            )
+            -- Select the required fields and rename llm_model_id for consistency
+            SELECT post_id, topic_id, user_id, parent_post_id, content,
+                   created_at, is_llm_response, llm_model_id AS llm_model_name, llm_persona_id
+            FROM branch_posts
+            ORDER BY created_at DESC -- Get the most recent first
+            LIMIT :max_posts;
+        """
+
+        cursor = db_connection.execute(query, {"branch_root_id": branch_root_id, "max_posts": max_posts})
+        # Fetchall will give them in descending order of created_at (most recent first)
+        recent_posts_desc = [dict(row) for row in cursor.fetchall()]
+        # Reverse to get chronological order (oldest first) as per function spec
+        return recent_posts_desc[::-1]
+
+    except sqlite3.Error as e:
+        print(f"Database error in get_recent_posts_from_branch: {e}")
+        # current_app.logger.error(f"Database error in get_recent_posts_from_branch: {e}")
+        return []
 
 # ------------------- USER ACTIVITY LOGIC -------------------
 
