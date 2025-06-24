@@ -58,11 +58,12 @@ export function renderQueueList(queueItems) {
                 // Initially hidden, will be shown if content is added.
                 // Or, style directly with 'block' if always shown when present.
                 breakdownDiv.style.marginTop = '5px';
-                breakdownDiv.style.padding = '5px';
-                breakdownDiv.style.backgroundColor = '#f0f0f0';
-                breakdownDiv.style.borderRadius = '3px';
+                breakdownDiv.style.padding = '8px'; // Increased padding
+                breakdownDiv.style.backgroundColor = '#2c3e50'; // Darker background, fits dark theme
+                breakdownDiv.style.borderRadius = '4px'; // Slightly more rounded
+                breakdownDiv.style.color = '#ecf0f1'; // Light text color for all content within
 
-                let breakdownHTML = '<p style="margin-bottom: 3px;"><strong>Prompt Token Breakdown:</strong></p><ul>';
+                let breakdownHTML = '<p style="margin-bottom: 5px; font-weight: bold; color: #1abc9c;">Prompt Token Breakdown:</p><ul style="list-style-type: none; padding-left: 0;">'; // Added color to title
                 const keyMapping = {
                     total_prompt_tokens: "Total Final Prompt Tokens",
                     persona_prompt_tokens: "Persona Instructions",
