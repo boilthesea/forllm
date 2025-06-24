@@ -56,7 +56,7 @@ graph TD
 
 *   **`forllm_server/`** (Core Server Logic Package):
     *   **`config.py`**: Manages all static configuration values and constants for the application (database paths, API URLs, default settings, etc.).
-    *   **`database.py`**: Handles all aspects of database interaction: provides connection objects (`get_db`), manages connection teardown (`close_db`), and contains the initial database schema creation and migration logic (`init_db`). Also includes logic for persona CRUD, versioning, assignment, and fallback. Contains helper functions for the user activity feature, model metadata caching, `get_post_ancestors` for fetching primary conversation threads. Includes functions for advanced chat history construction, such as `get_sibling_branch_roots` and `get_recent_posts_from_branch` for fetching ambient conversational context. Manages the `default_llm_context_window` setting and the `llm_requests.prompt_token_breakdown` column.
+    *   **`forllm_server/database.py`**: Handles all aspects of database interaction: provides connection objects (`get_db`), manages connection teardown (`close_db`), and contains the initial database schema creation and migration logic (`init_db`). Also includes logic for persona CRUD, versioning, assignment, and fallback. Contains helper functions for the user activity feature, model metadata caching, `get_post_ancestors` for fetching primary conversation threads. Includes functions for advanced chat history construction, such as `get_sibling_branch_roots` and `get_recent_posts_from_branch` for fetching ambient conversational context. Manages settings like `default_llm_context_window`, chat history parameters (`ch_max_ambient_posts`, `ch_max_posts_per_sibling_branch`, `ch_primary_history_budget_ratio`), and the `llm_requests.prompt_token_breakdown` column.
     *   **`markdown_config.py`**: Configures and provides the `MarkdownIt` instance used for rendering Markdown content to HTML, including custom Pygments syntax highlighting.
     *   **`tokenizer_utils.py`**: Implements token counting functionality using the `tiktoken` library. Provides a `count_tokens` function to estimate the number of tokens in a given text string.
     *   **`ollama_utils.py`**: (NEW) Contains utility functions for interacting directly with the Ollama API, such as fetching detailed model information (including context window size) and parsing it.
@@ -64,9 +64,10 @@ graph TD
     *   **`llm_processing.py`**: Contains the core logic for interacting with the LLM service (currently Ollama). This includes:
         *   Prompt construction (`process_llm_request`): Assembling all prompt components (attachments, persona instructions, primary and ambient chat history, current post).
         *   Chat history management:
-            *   Handles both primary linear history (via `get_post_ancestors`) and ambient branch-aware history (via `get_sibling_branch_roots`, `get_recent_posts_from_branch`).
+            *   Utilizes helper functions (`_get_raw_history_strings`, `_prune_history_sections`) to manage history logic.
+            *   Handles both primary linear history and ambient branch-aware history using configurable settings (max ambient posts, posts per branch, primary budget ratio) fetched from the database via `get_chat_history_settings`.
             *   Formats these history segments for inclusion in the prompt.
-        *   History pruning: Implements distinct token budgeting and pruning strategies for primary and ambient history segments to fit within context window limits.
+        *   History pruning: Implements distinct token budgeting and pruning strategies for primary and ambient history segments based on fetched settings to fit within context window limits.
         *   API call execution, streaming response handling, and error management for LLM communication.
         *   Persona prompt fetching logic (override, subforum default, global default, fallback).
         *   Token counting for all components and logging.
@@ -77,11 +78,11 @@ graph TD
     *   **`routes/main_routes.py`**: Defines Flask Blueprint for main application routes, including serving the `index.html` and static assets.
     *   **`routes/utility_routes.py`**: Defines Flask Blueprint for utility API endpoints.
         *   `/api/utils/count_tokens_for_text`: Estimates token count for a given text (primarily for simple, ad-hoc checks; detailed breakdown is preferred).
-        *   `POST /api/prompts/estimate_tokens`: Calculates and returns a detailed breakdown of estimated token counts for various prompt components (current post, persona, attachments) and compares against the current model's context window.
+        *   `POST /api/prompts/estimate_tokens`: Calculates and returns a detailed breakdown of estimated token counts. Now simulates the full, complex, and configurable chat history (primary + ambient + pruning using database settings) to provide a more accurate token breakdown, comparing against the current model's context window.
     *   **`routes/forum_routes.py`**: Defines Flask Blueprint for API endpoints related to forum management: subforums, topics, and posts (CRUD operations, listing). Includes endpoints for assigning/unassigning multiple personas per subforum and setting the per-subforum default persona. Handles parsing of `@[Persona Name](persona_id)` tags from post content, stores extracted IDs in `posts.tagged_personas_in_content`, and queues `llm_requests` for tagged personas.
     *   **`routes/llm_routes.py`**: Defines Flask Blueprint for API endpoints related to LLM interactions: requesting an LLM response for a post and fetching available Ollama models. Allows persona override at LLM request time. `POST /api/posts/<int:post_id>/tag_persona`: Allows users to tag an existing post with a persona, creating an entry in `post_persona_tags` and queuing an `llm_request`.
     *   **`routes/schedule_routes.py`**: Defines Flask Blueprint for API endpoints managing LLM processing schedules: CRUD operations for schedules, and status/next schedule information.
-    *   **`routes/settings_routes.py`**: Defines Flask Blueprint for API endpoints to get and update application-wide settings. Includes endpoints for persona management (list, create, update, delete, get, version history) and global default persona. Handles GET/PUT for the `default_llm_context_window` application setting.
+    *   **`routes/settings_routes.py`**: Defines Flask Blueprint for API endpoints to get and update application-wide settings. Includes endpoints for persona management (list, create, update, delete, get, version history) and global default persona. Handles GET/PUT for `default_llm_context_window` and chat history configuration settings (`ch_max_ambient_posts`, `ch_max_posts_per_sibling_branch`, `ch_primary_history_budget_ratio`).
     *   **`routes/persona_routes.py`**: Defines Flask Blueprint for API endpoints related to persona generation. Includes:
         *   `POST /api/personas/generate/from_details`: Queues generation of a persona from name/description hints.
         *   `POST /api/personas/generate/subforum_expert`: Queues generation of a subforum expert persona.
@@ -102,6 +103,7 @@ graph TD
     *   Links to the main CSS stylesheet (`static/style.css`) and the EasyMDE CSS.
     *   Includes the main JavaScript file (`static/script.js`) and the EasyMDE JavaScript library.
     *   Uses Jinja templating (`{% raw %}{% for subforum in subforums %}{% endraw %}`) for initially populating the subforum list (`ul#subforum-list`) when the page is first served by Flask.
+    *   Now includes input fields for chat history configuration settings within the settings modal structure.
 
 *   **`static/js/`** (Frontend JavaScript Modules):
     *   **`main.js`**: The main application entry point. Initializes the application, sets up global event listeners (like `DOMContentLoaded`, window events, periodic updates), and orchestrates the loading and interaction of other modules.
@@ -111,10 +113,10 @@ graph TD
     *   **`ui.js`**: Handles general user interface logic, including switching between different sections of the page (`showSection`) and managing UI components like the LLM link warning popup (`showLinkWarningPopup`).
     *   **`forum.js`**: Encapsulates all logic related to the forum features: loading, rendering, and handling user interactions for subforums, topics, and posts (including replies and LLM response requests). Displays assigned personas for a subforum, indicates the default persona, and allows persona selection/override when requesting an LLM response.
     *   **`schedule.js`**: Manages the scheduling functionality, including loading, rendering, and saving user-defined processing schedules, as well as displaying the next scheduled time and the current processor status.
-    *   **`settings.js`**: Deals with application-wide settings, including loading, rendering, and saving user preferences like selected LLM model, personas and LLM link security. Also handles loading available Ollama models. Integrates persona management into the settings navigation and display. Manages the UI for configuring `default_llm_context_window`.
+    *   **`settings.js`**: Deals with application-wide settings, including loading, rendering, and saving user preferences like selected LLM model, personas, LLM link security, `default_llm_context_window`, and chat history configuration settings (`ch_max_ambient_posts`, `ch_max_posts_per_sibling_branch`, `ch_primary_history_budget_ratio`). Also handles loading available Ollama models and integrates persona management into the settings navigation.
     *   **`queue.js`**: Manages the display of the LLM processing queue, including fetching and rendering the list of queued tasks. Displays the `prompt_token_breakdown` (fetched from `llm_requests` data) for completed or errored items in the queue, showing individual component token counts.
     *   **`activity.js`**: Contains the frontend JavaScript logic for the Recent Activity Page, including fetching data from the activity API endpoints (recent topics, replies, personas) and rendering it into the respective panels on the activity page. Manages navigation from activity items to their respective content areas.
-    *   **`editor.js`**: Responsible for initializing and configuring the EasyMDE Markdown editor instances used for creating new topics and replies. Integrates with `/api/prompts/estimate_tokens` to display a detailed token breakdown (post content, persona, attachments, total vs. model limit) with a visual bar near the editor, updating dynamically as the user types or changes attachments/persona. Replaces the previous simpler token count display.
+    *   **`editor.js`**: Responsible for initializing and configuring the EasyMDE Markdown editor instances used for creating new topics and replies. Integrates with `/api/prompts/estimate_tokens` to display a detailed token breakdown (post content, persona, attachments, chat history, total vs. model limit) with a visual bar near the editor. The chat history estimation now benefits from the more accurate backend simulation of history construction and pruning.
 
 *   **`static/css/base.css`**: Contains fundamental styles like body, typography, basic resets, and CSS variables. 
 *   **`static/css/layout.css`**: Handles the main structural layout, including `main`, `nav#subforum-nav`, `section`, and future layouts. 
@@ -226,12 +228,13 @@ graph TD
         *   Backend function `count_tokens(text)` available in `forllm_server.tokenizer_utils`.
             *   LLM processing logs token counts for prompt components (persona, user post, attachments, chat history).
             *   Frontend UI in the post/reply editor displays an estimated token count for the current text, updated dynamically via `/api/utils/count_tokens_for_text` (though detailed breakdown via `/api/prompts/estimate_tokens` is richer).
-        *   **Chat history construction for replies:** [SUBSTANTIALLY COMPLETE - Advanced Branch-Aware History Implemented]
+        *   **Chat history construction for replies:** [SUBSTANTIALLY COMPLETE - Advanced Branch-Aware History Implemented, Configurable, and Estimated]
             *   Implemented primary (linear) chat history fetching (`get_post_ancestors` in `database.py`).
             *   Implemented fetching of sibling/ambient thread summaries (`get_sibling_branch_roots`, `get_recent_posts_from_branch` in `database.py`).
-            *   New prompt structure in `llm_processing.py` incorporates both primary and ambient history with clear separation (e.g., "--- Current Conversation Thread ---", "--- Other Recent Discussions ---").
-            *   Prioritized pruning is implemented: primary history is pruned against a dedicated budget, then ambient history is pruned against the remaining available tokens.
+            *   New prompt structure in `llm_processing.py` incorporates both primary and ambient history with clear separation (e.g., "--- Current Conversation Thread ---", "--- Other Recent Discussions ---"), using configurable settings from the database.
+            *   Prioritized pruning is implemented: primary history is pruned against a dedicated budget (also configurable), then ambient history is pruned against the remaining available tokens.
             *   Token breakdown in `llm_requests` is updated to include `primary_chat_history_tokens`, `ambient_chat_history_tokens`, and `headers_tokens`.
+            *   The `/api/prompts/estimate_tokens` endpoint now accurately simulates this complex, configurable history construction and pruning, providing a reliable estimate to the frontend.
 *   **Basic File Attachment:** [DONE]
 *   **Improved Error Handling & Status:** [WIP]
     *   More detailed status updates for queued requests (e.g., "queued", "processing", "error: connection failed", "error: inference failed"). (DB has status, but UI for queue page is basic). [DONE]

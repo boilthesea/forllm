@@ -221,22 +221,71 @@ Here's a phased development plan, incorporating your groundwork steps and then e
 
 ---
 
-*   **Sub-Phase 2.3: UI/UX and Configuration for Chat History**
-    *   **Task 2.3.1 (Frontend): Update Token Breakdown Display.**
+*   **[DONE] Sub-Phase 2.3: UI/UX and Configuration for Chat History**
+    *   **[DONE] Task 2.3.1 (Frontend): Update Token Breakdown Display.**
         *   The UI from Task 1.4.1 should now show an estimated count for "Chat History: ~E tokens", reflecting the history that *would be constructed* based on the current post's context. This requires the backend endpoint (`/api/prompts/estimate_tokens`) to simulate the history building and pruning logic.
         *   **Note:** The backend estimation logic for `/api/prompts/estimate_tokens` will need significant updates to accurately mirror the new complex history building (primary + ambient fetching, formatting, and multi-stage pruning) now implemented in `process_llm_request`. This is a non-trivial change for the estimator.
         *   **Benefit:** User sees impact of history on token count.
-    *   **Task 2.3.2 (Backend/Settings - Optional): Configuration for History Depth/Style.**
+    *   **[DONE] Task 2.3.2 (Backend/Settings - Optional): Configuration for History Depth/Style.**
         *   Add application settings for:
             *   `max_ambient_posts_to_include`: User can tune how much "other discussion" is included. (Currently handled by `MAX_TOTAL_AMBIENT_POSTS` constant in `llm_processing.py`).
             *   `max_posts_per_sibling_branch`: (Currently `MAX_POSTS_PER_SIBLING_BRANCH` constant).
             *   `prefer_primary_thread_depth_over_ambient`: A boolean, if true, prioritize fitting more of the primary thread even if it means less/no ambient context. (Currently handled by `PRIMARY_HISTORY_BUDGET_RATIO` constant).
         *   Make these user configurable in the database and via the settings UI under the LLM tab in a chat history section and place a tooltip in the UI where a user can get a brief explanation of what the setting does.
         *   **Benefit:** Gives users some control over the trade-off between direct conversation depth and ambient awareness.
-    *   **Task 2.3.3 (Documentation/Help): Explain History Mechanism.**
+    *   **[DONE] Task 2.3.3 (Documentation/Help): Explain History Mechanism.**
         *   Provide simple documentation explaining to users how chat history is constructed (primary and ambient) and pruned, so they understand why an LLM might sometimes seem to "forget" very old parts of a long branched discussion.
         *   **Benefit:** Manages user expectations.
+
+    **Implementation Summary for Sub-Phase 2.3:**
+    This sub-phase completed the chat history feature set by enhancing UI/UX and adding configurability.
+    1.  **Token Estimator Accuracy (Task 2.3.1):** The `/api/prompts/estimate_tokens` endpoint in `utility_routes.py` was significantly upgraded. It now calls the refactored helper functions (`_get_raw_history_strings`, `_prune_history_sections`) from `llm_processing.py`, ensuring it accurately simulates the full primary and ambient history construction, including the multi-stage pruning logic based on current database settings. This provides a much more precise token breakdown in the frontend editor.
+    2.  **Configurable History Settings (Task 2.3.2):**
+        *   **Database & Backend:** New settings (`ch_max_ambient_posts`, `ch_max_posts_per_sibling_branch`, `ch_primary_history_budget_ratio`) were added to the `settings` table in `database.py` with defaults. The `llm_processing.py` module was updated to fetch and use these settings (with fallbacks to defaults) instead of hardcoded constants, via a new `get_chat_history_settings` helper. The settings API in `settings_routes.py` now handles GET/PUT for these new keys, including validation.
+        *   **Frontend:** The settings UI (`index.html` and `settings.js`) was updated to include a "Chat History Configuration" section under LLM settings, allowing users to view and modify these parameters.
+    3.  **User Documentation (Task 2.3.3):** A "User Instructions: Understanding Chat History in FORLLM" section was appended to this `chathistory.md` file, explaining how history is built, pruned, and configured.
 
 ---
 
 This detailed plan gives you a roadmap. Remember to commit frequently and test each small piece. The chat history, especially the branch-aware part, will require careful debugging and iteration. Good luck!
+
+## User Instructions: Understanding Chat History in FORLLM
+
+FORLLM's chat history feature is designed to give the LLM context about the ongoing conversation, making its responses more relevant and coherent. Here's a breakdown of how it works:
+
+### How History is Constructed
+
+When you ask an LLM to respond to a post, FORLLM automatically assembles relevant context from the current topic:
+
+1.  **Primary Conversation Thread:**
+    *   This includes the direct chain of posts leading up to the post you're responding to (i.e., its parent, its parent's parent, and so on, up to the original topic post).
+    *   This is considered the most important context.
+    *   Posts are formatted to distinguish between user messages and LLM responses (e.g., "User: ..." or "LLM (Persona Name): ...").
+
+2.  **Ambient Conversational Context:**
+    *   To provide broader awareness, FORLLM also looks at other discussion branches within the same topic.
+    *   It tries to pick up recent, relevant snippets from these "sibling" threads.
+    *   This helps the LLM understand if related points are being discussed elsewhere in the topic, even if not directly in the current reply chain.
+
+These two types of history are presented to the LLM in clearly marked sections (e.g., "--- Current Conversation Thread ---" and "--- Other Recent Discussions ---") to help it differentiate.
+
+### Token Limits and Pruning
+
+LLMs have a limited "context window" – they can only process a certain number of tokens (words or parts of words) at once. If the combined history, your current post, persona instructions, and any attachments exceed this limit, FORLLM must shorten, or "prune," the history.
+
+*   **Pruning Strategy:** FORLLM prioritizes keeping the most recent information and the primary conversation thread.
+    1.  First, it calculates the tokens needed for your current post, the persona's instructions, and any file attachments. These are considered essential and are not pruned.
+    2.  The remaining available tokens are then allocated to chat history.
+    3.  The **Primary Conversation Thread** gets a larger portion of this budget (you can configure this ratio). If it's too long, the *oldest* posts from this thread are removed one by one until it fits its allocated budget.
+    4.  The **Ambient Conversational Context** then uses the remaining token budget. If it's too long, the *oldest* or least relevant snippets from sibling threads are removed until it fits.
+*   **Why Pruning is Necessary:** Without pruning, prompts could become too long for the LLM to handle, leading to errors or incomplete responses. The goal is to provide the most relevant context possible within the available limits. This means very old parts of a long and branched discussion might eventually be "forgotten" by the LLM in that specific interaction.
+
+### Configuring Chat History
+
+You can customize how chat history is constructed via the application settings (under the "LLM" tab):
+
+*   **Max Ambient Posts:** Controls the maximum total number of recent posts from *all other* discussion branches to include as ambient history. Setting this to 0 effectively disables ambient history. (Default: 5)
+*   **Max Posts Per Sibling Branch:** Sets the maximum number of recent posts to draw from *each individual* sibling branch when gathering ambient history. (Default: 2)
+*   **Primary History Budget Ratio:** A value between 0.0 and 1.0 that determines the proportion of the available token budget (after accounting for your post, persona, etc.) that should be reserved for the primary conversation thread. For example, a value of 0.7 means 70% of the history tokens will be dedicated to the primary thread, and 30% to ambient context. (Default: 0.7)
+
+By adjusting these settings, you can fine-tune the balance between the depth of the direct conversation and the breadth of ambient context provided to the LLM.
