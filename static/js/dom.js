@@ -53,6 +53,7 @@ export const exitQueueBtn = document.getElementById('exit-queue-btn');
 // Full Prompt Modal Elements
 export const fullPromptModal = document.getElementById('full-prompt-modal');
 export const fullPromptContent = document.getElementById('full-prompt-content');
+export const fullPromptMetadataPane = document.getElementById('full-prompt-metadata-pane'); // Added for token breakdown
 export const fullPromptClose = fullPromptModal ? fullPromptModal.querySelector('.close-btn') : null;
 
 // Activity Page Elements
