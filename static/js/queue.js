@@ -58,40 +58,57 @@ export function renderQueueList(queueItems) {
                 // Initially hidden, will be shown if content is added.
                 // Or, style directly with 'block' if always shown when present.
                 breakdownDiv.style.marginTop = '5px';
-                breakdownDiv.style.padding = '5px';
-                breakdownDiv.style.backgroundColor = '#f0f0f0';
-                breakdownDiv.style.borderRadius = '3px';
+                breakdownDiv.style.padding = '8px'; // Increased padding
+                breakdownDiv.style.backgroundColor = '#2c3e50'; // Darker background, fits dark theme
+                breakdownDiv.style.borderRadius = '4px'; // Slightly more rounded
+                breakdownDiv.style.color = '#ecf0f1'; // Light text color for all content within
 
-                let breakdownHTML = '<p style="margin-bottom: 3px;"><strong>Prompt Token Breakdown:</strong></p><ul>';
+                let breakdownHTML = '<p style="margin-bottom: 5px; font-weight: bold; color: #1abc9c;">Prompt Token Breakdown:</p><ul style="list-style-type: none; padding-left: 0;">'; // Added color to title
                 const keyMapping = {
                     total_prompt_tokens: "Total Final Prompt Tokens",
                     persona_prompt_tokens: "Persona Instructions",
                     user_post_tokens: "User Post",
                     attachments_token_count: "Attachments",
-                    chat_history_tokens: "Chat History"
+                    // Old key, for backward compatibility if some records have it
+                    chat_history_tokens: "Chat History (Legacy)",
+                    // New keys
+                    primary_chat_history_tokens: "Primary Chat History",
+                    ambient_chat_history_tokens: "Ambient Chat History",
+                    headers_tokens: "History Headers"
                 };
 
-                // Iterate in a specific order if desired, or just over keys
+                // Display total first
                 if (breakdown.total_prompt_tokens !== undefined) {
                      breakdownHTML += `<li>${keyMapping.total_prompt_tokens}: ${breakdown.total_prompt_tokens}</li>`;
                 }
-                if (breakdown.persona_prompt_tokens !== undefined) {
-                    breakdownHTML += `<li>${keyMapping.persona_prompt_tokens}: ${breakdown.persona_prompt_tokens}</li>`;
-                }
-                if (breakdown.user_post_tokens !== undefined) {
-                    breakdownHTML += `<li>${keyMapping.user_post_tokens}: ${breakdown.user_post_tokens}</li>`;
-                }
-                if (breakdown.attachments_token_count !== undefined) {
-                    breakdownHTML += `<li>${keyMapping.attachments_token_count}: ${breakdown.attachments_token_count}</li>`;
-                }
-                if (breakdown.chat_history_tokens !== undefined && breakdown.chat_history_tokens > 0) { // Only show if > 0
-                    breakdownHTML += `<li>${keyMapping.chat_history_tokens}: ${breakdown.chat_history_tokens}</li>`;
-                }
+
+                // Display other components
+                const componentKeys = [
+                    'persona_prompt_tokens',
+                    'user_post_tokens',
+                    'attachments_token_count',
+                    'primary_chat_history_tokens',
+                    'ambient_chat_history_tokens',
+                    'headers_tokens',
+                    'chat_history_tokens' // Check legacy last
+                ];
+
+                componentKeys.forEach(key => {
+                    if (breakdown[key] !== undefined && breakdown[key] !== null) {
+                        // Only display if value is not zero, except for total_prompt_tokens
+                        if (key === 'total_prompt_tokens' || parseFloat(breakdown[key]) !== 0) {
+                             breakdownHTML += `<li>${keyMapping[key] || key}: ${breakdown[key]}</li>`;
+                        }
+                    }
+                });
+
                 breakdownHTML += '</ul>';
 
-                breakdownDiv.innerHTML = breakdownHTML;
-                li.appendChild(breakdownDiv); // Append to the list item
-                // No need to set display: block if it's appended and not initially display:none in CSS for this class
+                // Only append if there's meaningful content beyond the title
+                if (breakdownHTML.includes('<li>')) {
+                    breakdownDiv.innerHTML = breakdownHTML;
+                    li.appendChild(breakdownDiv);
+                }
             } catch (e) {
                 console.error(`Error parsing token breakdown for request ${item.request_id}:`, e);
                 const errorDiv = document.createElement('div');

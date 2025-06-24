@@ -113,6 +113,7 @@ def get_queue():
             lr.status,
             lr.llm_model,
             lr.llm_persona, -- This is the persona_id
+            lr.prompt_token_breakdown, -- <<< ADDED THIS LINE
             p_orig.content AS post_snippet,
             pers.name AS persona_name -- Fetch persona name
         FROM llm_requests lr
