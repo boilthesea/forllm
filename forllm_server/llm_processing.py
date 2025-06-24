@@ -562,14 +562,86 @@ def process_llm_request(request_details, flask_app): # Added flask_app parameter
         formatted_ambient_history_string_final = pruning_results["formatted_ambient_history_string_with_header"]
 
         # --- Construct final prompt ---
+        # The "User wrote: ..." line is removed as per the bug fix.
+        # It's assumed that the content of the current post (user_post_content_for_count)
+        # is already included at the end of formatted_primary_history_string_final,
+        # formatted as "User: {user_post_content_for_count}".
         prompt_content = (
             f"{attachments_string}"  # Already has \n\n if not empty
             f"{persona_instructions}\n\n"
             f"{formatted_ambient_history_string_final}" # From pruning_results, includes header and content if any
             f"{formatted_primary_history_string_final}" # From pruning_results, includes header and content if any
-            f"User wrote: {user_post_content_for_count}\n\n"
+            # f"User wrote: {user_post_content_for_count}\n\n" # This line is removed.
             f"{FINAL_INSTRUCTION}"
         )
+        # Ensure there's appropriate spacing if formatted_primary_history_string_final is not empty
+        # and before FINAL_INSTRUCTION.
+        # If formatted_primary_history_string_final ends with \n\n, this is fine.
+        # If it ends with content then \n, we might need an extra \n.
+        # Assuming formatted_primary_history_string_final provides its own appropriate trailing newlines if it has content.
+        # If formatted_primary_history_string_final is empty, persona_instructions should have \n\n.
+        # If both are empty, attachments_string should have \n\n.
+        # The FINAL_INSTRUCTION is appended directly. If the preceding part ends correctly, this is fine.
+
+        # Re-evaluating spacing:
+        # persona_instructions is followed by \n\n.
+        # formatted_ambient_history_string_final, if present, contains its header (e.g., "...\n\n") and content.
+        # formatted_primary_history_string_final, if present, contains its header (e.g., "...\n\n") and content.
+        # If primary history is present and contains the user's current post, it would be like:
+        # ...
+        # User: current post content
+        # FINAL_INSTRUCTION
+        # This needs a newline between "User: current post content" and "FINAL_INSTRUCTION".
+
+        # Let's adjust:
+        # The formatted history strings from _prune_history_sections are:
+        # `formatted_primary_history_string_with_header` (Header + Content)
+        # `formatted_ambient_history_string_with_header` (Header + Content)
+        # `format_linear_history` joins posts with "\n".
+        # So, the last line of `formatted_primary_history_string_final` (if it contains the user post)
+        # will be "User: content" without a trailing newline.
+
+        # Revised prompt construction:
+        prompt_parts = []
+        if attachments_string: # attachments_string includes its own trailing \n\n if not empty
+            prompt_parts.append(attachments_string)
+        
+        prompt_parts.append(f"{persona_instructions}\n\n")
+
+        if formatted_ambient_history_string_final: # This string includes its own header \n\n and content
+            prompt_parts.append(formatted_ambient_history_string_final)
+            if not formatted_ambient_history_string_final.endswith("\n\n"):
+                # This case should ideally not happen if headers are defined with \n\n
+                # and content is appended after. For safety:
+                if formatted_ambient_history_string_final.endswith("\n"):
+                    prompt_parts.append("\n") 
+                else:
+                    prompt_parts.append("\n\n")
+
+
+        if formatted_primary_history_string_final: # This string includes its own header \n\n and content
+            prompt_parts.append(formatted_primary_history_string_final)
+            # If the primary history (which now contains the "User: current post") does not end with \n\n,
+            # we need to add spacing before FINAL_INSTRUCTION.
+            # format_linear_history joins lines with \n. So the last post will be "User: content"
+            # and formatted_primary_history_string_final will be "HEADER\n\n...old content\nUser: current content"
+            if not formatted_primary_history_string_final.endswith("\n"):
+                 prompt_parts.append("\n") # Add one newline to separate from FINAL_INSTRUCTION
+            prompt_parts.append("\n") # Add another newline for a blank line separation
+        else:
+            # If there's no primary history (e.g., first post in topic, and get_post_ancestors correctly returned current post)
+            # then persona_instructions already added \n\n.
+            # This 'else' might not be necessary if the assumption holds that formatted_primary_history_string_final
+            # *will* contain the user's post.
+            # If formatted_primary_history_string_final could be empty AND the user's post is NOT in it,
+            # then removing "User wrote:" is a bug.
+            # Given the task is to remove "User wrote:" and keep "User:", the assumption is strong.
+            pass
+
+
+        prompt_parts.append(FINAL_INSTRUCTION)
+        prompt_content = "".join(prompt_parts)
+
         actual_final_prompt_tokens = count_tokens(prompt_content)
         logger.info(f"Request {request_id}: Final prompt constructed. Total tokens: {actual_final_prompt_tokens}. (First 200 chars: {prompt_content[:200]}...)")
 

@@ -184,12 +184,11 @@ Here's a phased development plan, incorporating your groundwork steps and then e
                 3.  `AMBIENT_HISTORY_HEADER` (e.g., "--- Other Recent Discussions ---", if ambient posts exist, followed by `\n\n`)
                 4.  Formatted Ambient Posts (each post prefixed like `[From other thread by User/LLM (PersonaName)]: content`, joined by `\n`, followed by `\n\n` if the section exists)
                 5.  `PRIMARY_HISTORY_HEADER` (e.g., "--- Current Conversation Thread ---", if primary history posts exist, followed by `\n\n`)
-                6.  Formatted Primary Conversation Thread (from `format_linear_history`, followed by `\n\n` if the section exists)
-                7.  `User wrote: ` + `original_post['content']` (followed by `\n\n`)
-                8.  `FINAL_INSTRUCTION` (e.g., "Respond to this post.")
+                6.  Formatted Primary Conversation Thread (from `format_linear_history`). This section is assumed to end with the current user's post, formatted as "User: <content>", followed by `\n\n` before the final instruction.
+                7.  `FINAL_INSTRUCTION` (e.g., "Respond to this post.")
             *   **Token Allocation and Pruning Strategy:**
                 *   A helper function `_prune_history_string(history_content, budget, logger_prefix, request_id)` was implemented to remove the oldest lines from a given string of history content until it fits the `budget`.
-                *   `fixed_elements_tokens` are calculated first (attachments, persona, user's current post with "User wrote: " prefix, final instruction).
+                *   `fixed_elements_tokens` are calculated first (attachments, persona, final instruction). The user's current post content is assumed to be part of the primary history section for token budgeting.
                 *   `available_tokens_for_history_sections` is `max_allowed_tokens - fixed_elements_tokens`.
                 *   **Primary Thread:**
                     *   The budget for primary history *content* is `(available_tokens_for_history_sections * PRIMARY_HISTORY_BUDGET_RATIO) - tokens(PRIMARY_HISTORY_HEADER + "\n\n")`.
