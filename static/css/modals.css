@@ -6,23 +6,23 @@
     top: 0;
     width: 100%;
     height: 100%;
-    overflow: auto; /* Allows scroll for modal itself if content is huge */
+    overflow: auto;
     background-color: rgba(0,0,0,0.4);
-    display: flex;
-    align-items: center;
-    justify-content: center;
+    /* display: flex; align-items: center; justify-content: center; -- REVERTED */
 }
 
 .modal-content {
     background-color: var(--modal-bg);
-    /* margin: 15% auto; REMOVED for flexbox centering */
     padding: 20px;
     border: 1px solid var(--modal-border);
     color: var(--modal-text); /* Added from dark mode */
     width: 80%;
     max-width: 500px; /* Default max-width */
     border-radius: 5px;
-    position: relative; /* Added for close button positioning */
+    position: fixed; /* Changed for transform centering */
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
     max-height: 90vh; /* Ensure modal content doesn't overflow viewport vertically */
     overflow-y: auto; /* Allow modal content to scroll if it's too tall */
 }
