@@ -1,7 +1,103 @@
 // This file will manage the processing queue view.
 
 import { apiRequest } from './api.js';
-import { queuePageContent, fullPromptModal, fullPromptContent, fullPromptClose } from './dom.js'; // Assuming fullPromptModal, fullPromptContent, fullPromptClose are added to dom.js
+import { queuePageContent, fullPromptModal, fullPromptContent, fullPromptClose, fullPromptMetadataPane } from './dom.js'; // Added fullPromptMetadataPane
+
+// --- Helper function to escape HTML for displaying prompt content safely ---
+// Moved here to be accessible by other functions if needed, or can be kept local
+function escapeHTML(str) {
+    if (typeof str !== 'string') return ''; // Ensure str is a string
+    const div = document.createElement('div');
+    div.appendChild(document.createTextNode(str));
+    return div.innerHTML;
+}
+
+
+// --- New Token Breakdown Rendering Function for Modal ---
+function renderTokenBreakdownForModal(breakdownString, containerElement) {
+    if (!containerElement) return;
+    containerElement.innerHTML = ''; // Clear previous content
+
+    if (!breakdownString) {
+        containerElement.innerHTML = '<p>No token breakdown available.</p>';
+        return;
+    }
+
+    try {
+        const breakdown = JSON.parse(breakdownString);
+        const table = document.createElement('div'); // Using divs for table structure
+        table.style.display = 'table';
+        table.style.width = '100%'; // Use full width of the pane
+
+        const keyMapping = {
+            total_prompt_tokens: "Total Final Prompt Tokens",
+            persona_prompt_tokens: "Persona Instructions",
+            user_post_tokens: "User Post",
+            attachments_token_count: "Attachments",
+            primary_chat_history_tokens: "Primary Chat History",
+            ambient_chat_history_tokens: "Ambient Chat History",
+            headers_tokens: "History Headers",
+            chat_history_tokens: "Chat History (Legacy)" // Keep for older records
+        };
+
+        // Order of display, total first
+        const displayOrder = [
+            'total_prompt_tokens',
+            'persona_prompt_tokens',
+            'user_post_tokens',
+            'attachments_token_count',
+            'primary_chat_history_tokens',
+            'ambient_chat_history_tokens',
+            'headers_tokens',
+            'chat_history_tokens'
+        ];
+
+        displayOrder.forEach(key => {
+            if (breakdown[key] !== undefined && breakdown[key] !== null) {
+                const isTotal = key === 'total_prompt_tokens';
+                // Only display if value is not zero, OR if it's the total tokens
+                if (isTotal || parseFloat(breakdown[key]) !== 0) {
+                    const row = document.createElement('div');
+                    row.style.display = 'table-row';
+
+                    const labelCell = document.createElement('div');
+                    labelCell.style.display = 'table-cell';
+                    labelCell.style.textAlign = 'left';
+                    labelCell.style.padding = '2px 5px';
+                    labelCell.textContent = keyMapping[key] || key;
+
+                    const valueCell = document.createElement('div');
+                    valueCell.style.display = 'table-cell';
+                    valueCell.style.textAlign = 'right';
+                    valueCell.style.padding = '2px 5px';
+                    valueCell.textContent = breakdown[key];
+
+                    if (!isTotal) {
+                        labelCell.style.fontSize = '0.9em';
+                        valueCell.style.fontSize = '0.9em';
+                    } else {
+                        labelCell.style.fontWeight = 'bold';
+                        valueCell.style.fontWeight = 'bold';
+                    }
+                    row.appendChild(labelCell);
+                    row.appendChild(valueCell);
+                    table.appendChild(row);
+                }
+            }
+        });
+
+        if (table.children.length > 0) {
+            containerElement.appendChild(table);
+        } else {
+            containerElement.innerHTML = '<p>Token breakdown contains no data or only zero values.</p>';
+        }
+
+    } catch (e) {
+        console.error('Error parsing or rendering token breakdown for modal:', e);
+        containerElement.innerHTML = '<p class="error-message">Error displaying token breakdown.</p>';
+    }
+}
+
 
 // --- Queue Rendering Functions ---
 export function renderQueueList(queueItems) {
@@ -21,108 +117,47 @@ export function renderQueueList(queueItems) {
         li.className = 'queue-item'; // Add class for potential styling
         li.dataset.requestId = item.request_id; // Store request ID for click handling
 
-        // Display more details based on backend response structure
-        const postIdText = item.post_id_to_respond_to ? `Post ID: ${item.post_id_to_respond_to}` : 'N/A';
         const queuedAt = item.requested_at ? new Date(item.requested_at).toLocaleString() : 'Unknown time';
         const status = item.status || 'unknown';
         const model = item.llm_model || 'default';
-        let personaDisplay = 'default'; // Default text
-        if (item.llm_persona) { // Check if persona ID exists
+        let personaDisplay = 'default';
+        if (item.llm_persona) {
             if (item.persona_name) {
                 personaDisplay = `${item.persona_name} (ID: ${item.llm_persona})`;
             } else {
-                // If persona_name is null/undefined but ID exists (e.g., persona deleted, or ID was invalid)
                 personaDisplay = `ID: ${item.llm_persona} (Name not found)`;
             }
         }
-        const snippet = item.post_snippet ? item.post_snippet.substring(0, 150) + '...' : 'No snippet available'; // Display a snippet
+        const snippet = item.post_snippet ? escapeHTML(item.post_snippet.substring(0, 150) + '...') : 'No snippet available';
+
+        // Get total tokens for summary display
+        let totalTokensDisplay = "N/A";
+        if (item.prompt_token_breakdown) {
+            try {
+                const breakdown = JSON.parse(item.prompt_token_breakdown);
+                if (breakdown.total_prompt_tokens !== undefined) {
+                    totalTokensDisplay = breakdown.total_prompt_tokens;
+                }
+            } catch (e) {
+                console.warn(`Could not parse token breakdown for item ${item.request_id} in summary.`);
+            }
+        }
 
         li.innerHTML = `
             <div class="queue-item-summary">
                 <strong>Request ID: ${item.request_id}</strong><br>
                 Status: <span class="queue-status status-${status}">${status}</span><br>
                 Model: ${model}, Persona: ${personaDisplay}<br> 
-                Queued: <span class="queue-meta">${queuedAt}</span>
+                Queued: <span class="queue-meta">${queuedAt}</span><br>
+                Total Tokens: <span class="queue-meta">${totalTokensDisplay}</span>
             </div>
             <div class="queue-item-snippet">
                 Original Post Snippet: "${snippet}"
             </div>
         `;
 
-        // --- NEW: Add Prompt Token Breakdown ---
-        if (item.prompt_token_breakdown) {
-            try {
-                const breakdown = JSON.parse(item.prompt_token_breakdown);
-                const breakdownDiv = document.createElement('div');
-                breakdownDiv.className = 'queue-item-token-breakdown';
-                // Initially hidden, will be shown if content is added.
-                // Or, style directly with 'block' if always shown when present.
-                breakdownDiv.style.marginTop = '5px';
-                breakdownDiv.style.padding = '8px'; // Increased padding
-                breakdownDiv.style.backgroundColor = '#2c3e50'; // Darker background, fits dark theme
-                breakdownDiv.style.borderRadius = '4px'; // Slightly more rounded
-                breakdownDiv.style.color = '#ecf0f1'; // Light text color for all content within
-
-                let breakdownHTML = '<p style="margin-bottom: 5px; font-weight: bold; color: #1abc9c;">Prompt Token Breakdown:</p><ul style="list-style-type: none; padding-left: 0;">'; // Added color to title
-                const keyMapping = {
-                    total_prompt_tokens: "Total Final Prompt Tokens",
-                    persona_prompt_tokens: "Persona Instructions",
-                    user_post_tokens: "User Post",
-                    attachments_token_count: "Attachments",
-                    // Old key, for backward compatibility if some records have it
-                    chat_history_tokens: "Chat History (Legacy)",
-                    // New keys
-                    primary_chat_history_tokens: "Primary Chat History",
-                    ambient_chat_history_tokens: "Ambient Chat History",
-                    headers_tokens: "History Headers"
-                };
-
-                // Display total first
-                if (breakdown.total_prompt_tokens !== undefined) {
-                     breakdownHTML += `<li>${keyMapping.total_prompt_tokens}: ${breakdown.total_prompt_tokens}</li>`;
-                }
-
-                // Display other components
-                const componentKeys = [
-                    'persona_prompt_tokens',
-                    'user_post_tokens',
-                    'attachments_token_count',
-                    'primary_chat_history_tokens',
-                    'ambient_chat_history_tokens',
-                    'headers_tokens',
-                    'chat_history_tokens' // Check legacy last
-                ];
-
-                componentKeys.forEach(key => {
-                    if (breakdown[key] !== undefined && breakdown[key] !== null) {
-                        // Only display if value is not zero, except for total_prompt_tokens
-                        if (key === 'total_prompt_tokens' || parseFloat(breakdown[key]) !== 0) {
-                             breakdownHTML += `<li>${keyMapping[key] || key}: ${breakdown[key]}</li>`;
-                        }
-                    }
-                });
-
-                breakdownHTML += '</ul>';
-
-                // Only append if there's meaningful content beyond the title
-                if (breakdownHTML.includes('<li>')) {
-                    breakdownDiv.innerHTML = breakdownHTML;
-                    li.appendChild(breakdownDiv);
-                }
-            } catch (e) {
-                console.error(`Error parsing token breakdown for request ${item.request_id}:`, e);
-                const errorDiv = document.createElement('div');
-                errorDiv.className = 'queue-item-token-breakdown-error';
-                errorDiv.textContent = 'Error displaying token breakdown.';
-                errorDiv.style.color = 'red';
-                errorDiv.style.fontSize = '0.9em';
-                li.appendChild(errorDiv);
-            }
-        }
-        // --- END NEW ---
-
-        // Add click listener to show full prompt
-        li.addEventListener('click', () => showFullPromptModal(item.request_id));
+        // Add click listener to show full prompt and pass token breakdown string
+        li.addEventListener('click', () => showFullPromptModal(item.request_id, item.prompt_token_breakdown));
 
         list.appendChild(li);
     });
@@ -131,16 +166,16 @@ export function renderQueueList(queueItems) {
 }
 
 // --- Full Prompt Modal Functions ---
-async function showFullPromptModal(requestId) {
-    if (!fullPromptModal || !fullPromptContent) return;
+async function showFullPromptModal(requestId, tokenBreakdownString) { // Added tokenBreakdownString parameter
+    if (!fullPromptModal || !fullPromptContent || !fullPromptMetadataPane) return;
 
     fullPromptContent.innerHTML = '<p>Loading prompt...</p>';
+    fullPromptMetadataPane.innerHTML = ''; // Clear metadata pane initially
     fullPromptModal.style.display = 'block'; // Show the modal
 
     try {
         const response = await apiRequest(`/api/queue/${requestId}/prompt`);
         if (response && response.prompt) {
-            // Display the prompt, maybe format it nicely
             fullPromptContent.innerHTML = `<pre>${escapeHTML(response.prompt)}</pre>`;
         } else {
             fullPromptContent.innerHTML = '<p class="error-message">Failed to load prompt.</p>';
@@ -149,13 +184,9 @@ async function showFullPromptModal(requestId) {
         console.error(`Error loading prompt for request ${requestId}:`, error);
         fullPromptContent.innerHTML = `<p class="error-message">Failed to load prompt: ${error.message}</p>`;
     }
-}
 
-// Helper function to escape HTML for displaying prompt content safely
-function escapeHTML(str) {
-    const div = document.createElement('div');
-    div.appendChild(document.createTextNode(str));
-    return div.innerHTML;
+    // Render the token breakdown in the metadata pane
+    renderTokenBreakdownForModal(tokenBreakdownString, fullPromptMetadataPane);
 }
 
 
