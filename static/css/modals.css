@@ -6,13 +6,16 @@
     top: 0;
     width: 100%;
     height: 100%;
-    overflow: auto;
+    overflow: auto; /* Allows scroll for modal itself if content is huge */
     background-color: rgba(0,0,0,0.4);
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
 
 .modal-content {
     background-color: var(--modal-bg);
-    margin: 15% auto;
+    /* margin: 15% auto; REMOVED for flexbox centering */
     padding: 20px;
     border: 1px solid var(--modal-border);
     color: var(--modal-text); /* Added from dark mode */
@@ -20,6 +23,8 @@
     max-width: 500px; /* Default max-width */
     border-radius: 5px;
     position: relative; /* Added for close button positioning */
+    max-height: 90vh; /* Ensure modal content doesn't overflow viewport vertically */
+    overflow-y: auto; /* Allow modal content to scroll if it's too tall */
 }
 
 /* Wider modal for schedules */
