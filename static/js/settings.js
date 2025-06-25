@@ -13,6 +13,7 @@ export let currentSettings = { // Store loaded settings
     selectedModel: null,
     llmLinkSecurity: 'true',
     default_llm_context_window: '4096',
+    autoCheckContextWindow: false, // New setting
     // Add new chat history settings with their string defaults
     ch_max_ambient_posts: '5',
     ch_max_posts_per_sibling_branch: '2',
@@ -68,6 +69,11 @@ export function renderSettingsPage() {
         <p style="margin-top: 5px;" id="model-info-display">
            <span id="selected-model-context-window-display" style="font-size: 0.9em; color: #aaa;"></span>
         </p>
+    </div>
+    <div class="setting-item">
+        <label for="auto-check-context-window-toggle">Auto-check model context window:</label>
+        <input type="checkbox" id="auto-check-context-window-toggle">
+        <span class="tooltip-icon" title="If checked, FORLLM will attempt to automatically determine the model's context window from its modelfile. Most modelfiles do not include this information. It's often best to manually set a 'Default LLM Context Window' below that meets your needs.">?</span>
     </div>
     <div class="setting-item">
         <label for="llm-link-security-toggle">LLM Link Security:</label>
@@ -188,6 +194,11 @@ export function renderSettingsPage() {
                 }
 
                 // Re-attach listeners for this container
+                const autoCheckToggleInput = container.querySelector('#auto-check-context-window-toggle');
+                if (autoCheckToggleInput) {
+                    autoCheckToggleInput.checked = currentSettings.autoCheckContextWindow;
+                }
+
                 const linkSecurityToggleInput = container.querySelector('#llm-link-security-toggle');
                 if (linkSecurityToggleInput) {
                     linkSecurityToggleInput.checked = currentSettings.llmLinkSecurity === 'true';
@@ -266,6 +277,7 @@ export async function loadSettings() {
             selectedModel: settings.selectedModel || null,
             llmLinkSecurity: settings.llmLinkSecurity === 'true' ? 'true' : 'false',
             default_llm_context_window: settings.default_llm_context_window || '4096',
+            autoCheckContextWindow: settings.autoCheckContextWindow === true || settings.autoCheckContextWindow === 'true', // Ensure boolean
             // Load new chat history settings, using defaults if missing from backend response
             ch_max_ambient_posts: settings.ch_max_ambient_posts || '5',
             ch_max_posts_per_sibling_branch: settings.ch_max_posts_per_sibling_branch || '2',
@@ -273,12 +285,17 @@ export async function loadSettings() {
         };
         // Ensure boolean-like strings are strictly 'true' or 'false'
         if (currentSettings.llmLinkSecurity === undefined) currentSettings.llmLinkSecurity = 'true';
+        if (currentSettings.autoCheckContextWindow === undefined) currentSettings.autoCheckContextWindow = false;
+
 
         applyDarkMode(true); // Apply dark mode immediately
 
         // Update UI elements if they exist (they might be created later by renderSettingsPage)
         // This part is somewhat redundant if renderSettingsPage correctly populates fields
         // based on currentSettings during its execution.
+        const autoCheckToggleInput = settingsPageContent.querySelector('#auto-check-context-window-toggle');
+        if (autoCheckToggleInput) autoCheckToggleInput.checked = currentSettings.autoCheckContextWindow;
+
         const linkSecurityToggleInput = settingsPageContent.querySelector('#llm-link-security-toggle');
         if (linkSecurityToggleInput) linkSecurityToggleInput.checked = currentSettings.llmLinkSecurity === 'true';
 
@@ -359,8 +376,9 @@ export async function loadOllamaModels() {
         // } // REMOVED
         currentSettings.selectedModel = modelToSelect; // Update current setting state
 
-        if (modelToSelect && modelToSelect !== 'None') {
-            await fetchAndDisplayModelContextWindow(modelToSelect, false); // Explicitly false
+        const autoCheckToggle = settingsPageContent.querySelector('#auto-check-context-window-toggle');
+        if (modelToSelect && modelToSelect !== 'None' && autoCheckToggle && autoCheckToggle.checked) {
+            await fetchAndDisplayModelContextWindow(modelToSelect, false);
         } else {
             const contextDisplay = settingsPageContent.querySelector('#selected-model-context-window-display');
             if (contextDisplay) contextDisplay.textContent = '';
@@ -393,8 +411,14 @@ async function handleModelSelectionChange(event) {
     //     selectedOllamaModelDisplay.textContent = selectedModel; // REMOVED
     // } // REMOVED
     currentSettings.selectedModel = selectedModel;
-    // updateSetting('selected_model', selectedModel); // If you have a function to save to backend immediately
-    await fetchAndDisplayModelContextWindow(selectedModel, false); // Explicitly false
+    const autoCheckToggle = settingsPageContent.querySelector('#auto-check-context-window-toggle');
+
+    if (autoCheckToggle && autoCheckToggle.checked) {
+        await fetchAndDisplayModelContextWindow(selectedModel, false);
+    } else {
+        const contextDisplay = settingsPageContent.querySelector('#selected-model-context-window-display');
+        if (contextDisplay) contextDisplay.textContent = '';
+    }
 }
 
 // New function to fetch and display context window
@@ -405,11 +429,22 @@ async function fetchAndDisplayModelContextWindow(modelName, isForcedRefresh = fa
         return;
     }
 
-    // 5. If !modelName || modelName === 'None', set textContent to '' and no refresh icon.
+    // If !modelName || modelName === 'None', set textContent to '' and no refresh icon.
     if (!modelName || modelName === 'None') {
         displayElement.textContent = '';
         return;
     }
+
+    const autoCheckToggle = settingsPageContent.querySelector('#auto-check-context-window-toggle');
+    if (!autoCheckToggle || !autoCheckToggle.checked) {
+        // If the auto-check is off, ensure the display is clear, unless we are force refreshing (e.g. user clicked refresh icon)
+        if (!isForcedRefresh) {
+             displayElement.textContent = '';
+             return;
+        }
+        // If it IS a forced refresh, proceed even if the main checkbox is off.
+    }
+
 
     displayElement.innerHTML = ''; // Clear previous content, including any refresh icon
     displayElement.textContent = ' (Context: Loading...)'; // Temporary text
@@ -458,6 +493,7 @@ async function fetchAndDisplayModelContextWindow(modelName, isForcedRefresh = fa
 export async function saveSettings() {
     // Get elements from within the settings page content
     const modelSelectElement = settingsPageContent.querySelector('#model-select');
+    const autoCheckToggleInput = settingsPageContent.querySelector('#auto-check-context-window-toggle'); // New
     const linkSecurityToggleInput = settingsPageContent.querySelector('#llm-link-security-toggle');
     const contextWindowInput = settingsPageContent.querySelector('#default-llm-context-window-input');
     // New chat history inputs
@@ -468,15 +504,27 @@ export async function saveSettings() {
     const saveButton = settingsPageContent.querySelector('#save-settings-btn');
     const settingsErrorElement = settingsPageContent.querySelector('#settings-error');
 
-    if (!modelSelectElement || !linkSecurityToggleInput || !contextWindowInput ||
+    if (!modelSelectElement || !autoCheckToggleInput || !linkSecurityToggleInput || !contextWindowInput ||
         !chMaxAmbientPostsInput || !chMaxPostsPerSiblingBranchInput || !chPrimaryHistoryBudgetRatioInput ||
         !saveButton || !settingsErrorElement) {
         console.error("Settings elements not found for saving.");
-        console.error("An error occurred. Could not save settings. Required elements missing.");
+        // More detailed logging for missing elements
+        if (!modelSelectElement) console.error("Missing: modelSelectElement");
+        if (!autoCheckToggleInput) console.error("Missing: autoCheckToggleInput");
+        if (!linkSecurityToggleInput) console.error("Missing: linkSecurityToggleInput");
+        if (!contextWindowInput) console.error("Missing: contextWindowInput");
+        if (!chMaxAmbientPostsInput) console.error("Missing: chMaxAmbientPostsInput");
+        if (!chMaxPostsPerSiblingBranchInput) console.error("Missing: chMaxPostsPerSiblingBranchInput");
+        if (!chPrimaryHistoryBudgetRatioInput) console.error("Missing: chPrimaryHistoryBudgetRatioInput");
+        if (!saveButton) console.error("Missing: saveButton");
+        if (!settingsErrorElement) console.error("Missing: settingsErrorElement");
+
+        settingsErrorElement.textContent = "An error occurred. Could not save settings. Required elements missing.";
         return;
     }
 
     const newSelectedModel = modelSelectElement.value;
+    const newAutoCheckContextWindow = autoCheckToggleInput.checked; // New
     const newLlmLinkSecurity = linkSecurityToggleInput.checked;
     const newDefaultContextWindow = contextWindowInput.value;
     // Get values from new fields
@@ -515,6 +563,7 @@ export async function saveSettings() {
 
     const settingsToSave = {
         selectedModel: newSelectedModel,
+        autoCheckContextWindow: newAutoCheckContextWindow, // New
         llmLinkSecurity: newLlmLinkSecurity.toString(),
         default_llm_context_window: parseInt(newDefaultContextWindow, 10).toString(),
         // Add new settings to payload
@@ -533,6 +582,7 @@ export async function saveSettings() {
         // Update local state immediately based on what was sent,
         // assuming the backend confirms or handles potential discrepancies.
         currentSettings.selectedModel = settingsToSave.selectedModel;
+        currentSettings.autoCheckContextWindow = settingsToSave.autoCheckContextWindow; // New
         currentSettings.llmLinkSecurity = settingsToSave.llmLinkSecurity;
         currentSettings.default_llm_context_window = settingsToSave.default_llm_context_window;
         // Update local state for new settings
@@ -542,7 +592,8 @@ export async function saveSettings() {
 
         // Update UI (redundant if page isn't re-rendered, but good practice for consistency)
         applyDarkMode(true);
-        linkSecurityToggleInput.checked = currentSettings.llmLinkSecurity === 'true';
+        if(autoCheckToggleInput) autoCheckToggleInput.checked = currentSettings.autoCheckContextWindow; // New
+        if(linkSecurityToggleInput) linkSecurityToggleInput.checked = currentSettings.llmLinkSecurity === 'true';
         if (contextWindowInput) contextWindowInput.value = currentSettings.default_llm_context_window;
         // Update new fields in UI
         if (chMaxAmbientPostsInput) chMaxAmbientPostsInput.value = currentSettings.ch_max_ambient_posts;
