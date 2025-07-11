@@ -20,6 +20,7 @@ def handle_settings():
     known_settings_with_defaults = {
         'selectedModel': DEFAULT_MODEL,
         'llmLinkSecurity': 'true',
+        'autoCheckContextWindow': 'false', # New setting with default 'false'
         'default_llm_context_window': '4096',
         'ch_max_ambient_posts': '5',
         'ch_max_posts_per_sibling_branch': '2',
@@ -37,8 +38,8 @@ def handle_settings():
                     print(f"Warning: Ignoring unknown setting key during update: {key}")
                     continue
 
-                if key == 'llmLinkSecurity':
-                    processed_value = 'true' if str(value).strip().lower() in ['true', '1', 'yes', 'on'] else 'false'
+                if key == 'llmLinkSecurity' or key == 'autoCheckContextWindow': # Handle new boolean
+                    processed_value = 'true' if str(value).strip().lower() in ['true', '1', 'yes', 'on', True] else 'false'
                 elif key == 'selectedModel':
                     processed_value = str(value).strip()
                     if not processed_value:
@@ -47,7 +48,7 @@ def handle_settings():
                 elif key == 'default_llm_context_window' or key == 'ch_max_ambient_posts' or key == 'ch_max_posts_per_sibling_branch':
                     try:
                         int_value = int(value)
-                        if key.startswith('ch_') and int_value < 0:
+                        if key.startswith('ch_') and int_value < 0: # default_llm_context_window can also be 0 or positive
                             print(f"Warning: Invalid negative value for {key}: {int_value}. Skipping.")
                             continue
                         processed_value = str(int_value)
@@ -75,14 +76,19 @@ def handle_settings():
 
             # Fetch all settings again to return the current state
             cursor.execute("SELECT setting_key, setting_value FROM settings")
-            settings = {row['setting_key']: row['setting_value'] for row in cursor.fetchall()}
+            raw_settings = {row['setting_key']: row['setting_value'] for row in cursor.fetchall()}
 
             # Ensure all known settings have a value in the response, applying defaults if somehow missing
+            # And convert boolean-like strings to actual booleans for the response
+            processed_settings_response = {}
             for s_key, s_default in known_settings_with_defaults.items():
-                if s_key not in settings:
-                    settings[s_key] = s_default
+                value = raw_settings.get(s_key, s_default)
+                if s_key == 'llmLinkSecurity' or s_key == 'autoCheckContextWindow':
+                    processed_settings_response[s_key] = (value == 'true')
+                else:
+                    processed_settings_response[s_key] = value
 
-            return jsonify(settings)
+            return jsonify(processed_settings_response)
         except Exception as e:
             db.rollback()
             print(f"Error updating settings: {e}")
@@ -90,14 +96,19 @@ def handle_settings():
     else: # GET
         try:
             cursor.execute("SELECT setting_key, setting_value FROM settings")
-            settings = {row['setting_key']: row['setting_value'] for row in cursor.fetchall()}
+            raw_settings = {row['setting_key']: row['setting_value'] for row in cursor.fetchall()}
+
             # Ensure all known settings have a value, applying defaults if missing
-            # This is important if the DB was somehow cleared or a new setting was added
-            # and not yet saved by a PUT.
+            # And convert boolean-like strings to actual booleans for the response
+            processed_settings_response = {}
             for s_key, s_default in known_settings_with_defaults.items():
-                if s_key not in settings:
-                    settings[s_key] = s_default
-            return jsonify(settings)
+                value = raw_settings.get(s_key, s_default)
+                if s_key == 'llmLinkSecurity' or s_key == 'autoCheckContextWindow':
+                    processed_settings_response[s_key] = (value == 'true')
+                else:
+                    processed_settings_response[s_key] = value
+
+            return jsonify(processed_settings_response)
         except Exception as e:
             print(f"Error fetching settings: {e}")
             return jsonify({'error': f'Failed to fetch settings: {e}'}), 500

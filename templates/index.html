@@ -158,7 +158,14 @@
 
     <main>
         <nav id="subforum-nav">
-            <h1>FORLLM</h1>
+            <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+                <h1 style="margin-top: 0;">FORLLM</h1>
+                <div id="processing-status-indicator-container" title="Schedule status: Loading...">
+                    <div class="status-dot-background">
+                         <div id="processing-status-dot" class="status-dot status-loading"></div>
+                    </div>
+                </div>
+            </div>
             <p id="site-subtitle">Asynchronous Forum for Local LLM Interaction</p>
             <div id="schedule-display">
                 Next schedule: Loading...
@@ -177,11 +184,6 @@
             <div class="add-item-form">
                 <input type="text" id="new-subforum-name" placeholder="New subforum name">
                 <button id="add-subforum-btn">Add Subforum</button>
-            </div>
-            <div id="processing-status-indicator-container" title="Schedule status: Loading...">
-                <div class="status-dot-background">
-                     <div id="processing-status-dot" class="status-dot status-loading"></div>
-                </div>
             </div>
         </nav>
 

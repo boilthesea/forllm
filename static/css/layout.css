@@ -17,7 +17,7 @@ nav#subforum-nav {
     min-height: 100vh; /* Make sidebar full height */
     max-height: 100vh; /* Ensure it doesn't exceed viewport */
     overflow-y: auto; /* Allow sidebar to scroll if content overflows */
-    position: relative; /* For positioning status indicator */
+    /* position: relative; /* For positioning status indicator - no longer needed here */
 }
 
 nav#subforum-nav h1 {
