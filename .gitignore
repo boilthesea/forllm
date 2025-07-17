@@ -1,6 +1,7 @@
 *.db
 FORLLM_plan.md 
 uploads/
+*.gi.*
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
