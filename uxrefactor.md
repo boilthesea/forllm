@@ -11,19 +11,19 @@ To track progress, update the status of each substep from `[TODO]` to `[WIP]` (W
 
 **Goal:** Implement the core HTML structure and CSS for all new layout states. This phase is about building the static "scaffolding" without full interactivity.
 
-- **1.1: Update HTML Structure** `[TODO]`
+- **1.1: Update HTML Structure** `[DONE]`
   - Modify `templates/index.html` to support the new layout.
   - Create a main container to hold the panes, e.g., `<main id="main-container">`.
   - Define the primary pane element, e.g., `<div id="primary-pane" class="main-pane">`. The existing `<section>` elements will be loaded into this pane.
   - The secondary pane will be created dynamically by JavaScript in a later phase and should not be in the initial HTML.
 
-- **1.2: Implement Core CSS** `[TODO]`
+- **1.2: Implement Core CSS** `[DONE]`
   - In `static/css/layout.css`, add CSS rules for the new layout states.
   - **Default State:** Style `#main-container` to be a flex container. Style `#primary-pane` to have a fixed maximum width and be centered horizontally (e.g., using `margin: 0 auto`).
   - **Expanded Primary State:** Create a modifier class (e.g., `.primary-pane-expanded`) that makes `#primary-pane` take up all available flexible space.
   - **Tripane State:** Create a modifier class for `#main-container` (e.g., `.tripane-active`) that changes its `justify-content` to `flex-start` (left-aligning all panes). Define the initial width for the secondary pane.
 
-- **1.3: Solidify Fixed Navigation** `[TODO]`
+- **1.3: Solidify Fixed Navigation** `[DONE]`
   - Review and confirm the CSS for `nav#subforum-nav` in `static/css/layout.css`.
   - Ensure it has `height: 100vh`, `position: sticky`, `top: 0`, and `overflow-y: auto` to make it a fixed, internally scrollable sidebar.
 

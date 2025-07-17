@@ -14,10 +14,10 @@ nav#subforum-nav {
     box-shadow: 0 0 5px rgba(255,255,255,0.1); /* Softer shadow */
     display: flex;
     flex-direction: column;
-    min-height: 100vh; /* Make sidebar full height */
-    max-height: 100vh; /* Ensure it doesn't exceed viewport */
+    height: 100vh; /* Make sidebar full height */
+    position: sticky;
+    top: 0;
     overflow-y: auto; /* Allow sidebar to scroll if content overflows */
-    /* position: relative; /* For positioning status indicator - no longer needed here */
 }
 
 nav#subforum-nav h1 {
@@ -40,7 +40,7 @@ hr.sidebar-separator {
 }
 
 section {
-    flex: 3;
+    /* flex: 3; /* This is no longer a direct flex item of main */
     background: var(--nav-bg); /* Was #fff */
     padding: 1rem;
     border-radius: 5px;
@@ -75,4 +75,44 @@ section {
     background-color: var(--nav-bg);
     border-color: var(--input-border);
     /* Assuming some padding/margin might be needed, but will stick to original instruction for now */
+}
+/* New Tripane Layout Styles */
+#main-container {
+    display: flex;
+    flex-grow: 1;
+    justify-content: center; /* Default: Center the primary pane */
+}
+
+#main-container.tripane-active {
+    justify-content: flex-start; /* Left-align panes when tripane is active */
+}
+
+#primary-pane {
+    max-width: 900px; /* Fixed max-width for the primary content area */
+    width: 100%;
+    /* The margin: 0 auto effect is achieved by the parent's justify-content: center */
+}
+
+#primary-pane.primary-pane-expanded {
+    max-width: none; /* Allow it to take up all available space */
+    flex-grow: 1;
+}
+
+/* All sections inside the primary pane should not have their own box-shadow or border-radius,
+   as the pane itself provides the container styling. */
+#primary-pane > section {
+    box-shadow: none;
+    border-radius: 0;
+    padding: 0; /* Remove padding from sections if the pane has it */
+    background: transparent; /* Make section background transparent */
+}
+
+#secondary-pane {
+    /* Styles for the dynamically created secondary pane */
+    flex: 0 0 450px; /* Example initial width */
+    background: var(--section-bg);
+    padding: 1.5rem;
+    border-left: 1px solid var(--post-border);
+    box-shadow: -2px 0 5px rgba(0,0,0,0.1);
+    overflow-y: auto;
 }

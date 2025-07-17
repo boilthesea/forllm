@@ -187,124 +187,128 @@
             </div>
         </nav>
 
-        <section id="topic-list-section" style="display: none;">
-            <h2 id="current-subforum-name"></h2>
-            <button id="back-to-subforums-btn">< Exit</button>
-            <h3>Topics</h3>
-            <ul id="topic-list">
-                <!-- Topics will be loaded here -->
-            </ul>
-             <div class="add-item-form">
-                <h4>Create New Topic</h4>
-                <input type="text" id="new-topic-title" placeholder="Topic Title">
-                <textarea id="new-topic-content" placeholder="Your initial post content..."></textarea>
-                <!-- Token Breakdown Display for New Topic -->
-                <div id="new-topic-token-breakdown-container" style="margin-top: 10px; padding: 10px; border: 1px solid #ccc; display: none;">
-                    <h4>Estimated Prompt Tokens:</h4>
-                    <p>Post Content: <span id="new-topic-token-post-content">~0</span> tokens</p>
-                    <p>Persona Prompt (<span id="new-topic-token-persona-name">Default</span>): <span id="new-topic-token-persona-prompt">~0</span> tokens</p>
-                    <p>System Instructions: <span id="new-topic-token-system-prompt">~0</span> tokens</p>
-                    <p>Attachments: <span id="new-topic-token-attachments">~0</span> tokens</p>
-                    <p>Chat History: <span id="new-topic-token-chat-history">~0</span> tokens</p>
-                    <hr>
-                    <p><strong>Total Estimated: <span id="new-topic-token-total-estimated">~0</span> / <span id="new-topic-token-model-context-window">N/A</span> tokens (for <span id="new-topic-token-model-name">model</span>)</strong></p>
-                    <div id="new-topic-token-visual-bar-container" style="background-color: #eee; height: 20px; border-radius: 5px; margin-top: 5px;">
-                        <div id="new-topic-token-visual-bar" style="width: 0%; height: 100%; background-color: #4CAF50; border-radius: 5px; transition: width 0.3s ease, background-color 0.3s ease;"></div>
+        <div id="main-container">
+            <div id="primary-pane" class="main-pane">
+                <section id="topic-list-section" style="display: none;">
+                    <h2 id="current-subforum-name"></h2>
+                    <button id="back-to-subforums-btn">< Exit</button>
+                    <h3>Topics</h3>
+                    <ul id="topic-list">
+                        <!-- Topics will be loaded here -->
+                    </ul>
+                     <div class="add-item-form">
+                        <h4>Create New Topic</h4>
+                        <input type="text" id="new-topic-title" placeholder="Topic Title">
+                        <textarea id="new-topic-content" placeholder="Your initial post content..."></textarea>
+                        <!-- Token Breakdown Display for New Topic -->
+                        <div id="new-topic-token-breakdown-container" style="margin-top: 10px; padding: 10px; border: 1px solid #ccc; display: none;">
+                            <h4>Estimated Prompt Tokens:</h4>
+                            <p>Post Content: <span id="new-topic-token-post-content">~0</span> tokens</p>
+                            <p>Persona Prompt (<span id="new-topic-token-persona-name">Default</span>): <span id="new-topic-token-persona-prompt">~0</span> tokens</p>
+                            <p>System Instructions: <span id="new-topic-token-system-prompt">~0</span> tokens</p>
+                            <p>Attachments: <span id="new-topic-token-attachments">~0</span> tokens</p>
+                            <p>Chat History: <span id="new-topic-token-chat-history">~0</span> tokens</p>
+                            <hr>
+                            <p><strong>Total Estimated: <span id="new-topic-token-total-estimated">~0</span> / <span id="new-topic-token-model-context-window">N/A</span> tokens (for <span id="new-topic-token-model-name">model</span>)</strong></p>
+                            <div id="new-topic-token-visual-bar-container" style="background-color: #eee; height: 20px; border-radius: 5px; margin-top: 5px;">
+                                <div id="new-topic-token-visual-bar" style="width: 0%; height: 100%; background-color: #4CAF50; border-radius: 5px; transition: width 0.3s ease, background-color 0.3s ease;"></div>
+                            </div>
+                        </div>
+                        <!-- File attachment input for new topics -->
+                        <label for="new-topic-attachment-input" class="form-label">Attachments (plain text only):</label>
+                        <input type="file" id="new-topic-attachment-input" multiple class="file-input mb-2">
+                        <div id="new-topic-pending-attachments-list" class="pending-attachments-list mb-2">
+                            <!-- Selected files for new topic will be listed here by JS -->
+                        </div>
+                        <button id="add-topic-btn">Create Topic</button>
                     </div>
-                </div>
-                <!-- File attachment input for new topics -->
-                <label for="new-topic-attachment-input" class="form-label">Attachments (plain text only):</label>
-                <input type="file" id="new-topic-attachment-input" multiple class="file-input mb-2">
-                <div id="new-topic-pending-attachments-list" class="pending-attachments-list mb-2">
-                    <!-- Selected files for new topic will be listed here by JS -->
-                </div>
-                <button id="add-topic-btn">Create Topic</button>
-            </div>
-        </section>
+                </section>
 
-        <section id="topic-view-section" style="display: none;">
-            <h2 id="current-topic-title"></h2>
-             <button id="back-to-topics-btn">< Back to Topics</button>
-            <h3>Posts</h3>
-            <div id="post-list">
-                <!-- Posts will be loaded here in a threaded view -->
-                <!-- For each post, forum.js should include:
-                     <div class="post-attachments-list mt-2" id="post-attachments-<post_id>">
-                         Attachments will be rendered here by JS
+                <section id="topic-view-section" style="display: none;">
+                    <h2 id="current-topic-title"></h2>
+                     <button id="back-to-topics-btn">< Back to Topics</button>
+                    <h3>Posts</h3>
+                    <div id="post-list">
+                        <!-- Posts will be loaded here in a threaded view -->
+                        <!-- For each post, forum.js should include:
+                             <div class="post-attachments-list mt-2" id="post-attachments-<post_id>">
+                                 Attachments will be rendered here by JS
+                             </div>
+                        -->
+                    </div>
+                     <div id="reply-form-container" style="display:none;">
+                         <h4>Reply to Post <span id="reply-to-post-id"></span></h4>
+                         <textarea id="reply-content" placeholder="Your reply..."></textarea>
+                         <!-- Token Breakdown Display for Reply -->
+                        <div id="reply-token-breakdown-container" style="margin-top: 10px; padding: 10px; border: 1px solid #ccc; display: none;">
+                            <h4>Estimated Prompt Tokens:</h4>
+                            <p>Post Content: <span id="reply-token-post-content">~0</span> tokens</p>
+                            <p>Persona Prompt (<span id="reply-token-persona-name">Default</span>): <span id="reply-token-persona-prompt">~0</span> tokens</p>
+                            <p>System Instructions: <span id="reply-token-system-prompt">~0</span> tokens</p>
+                            <p>Attachments: <span id="reply-token-attachments">~0</span> tokens</p>
+                            <p>Chat History: <span id="reply-token-chat-history">~0</span> tokens</p>
+                            <hr>
+                            <p><strong>Total Estimated: <span id="reply-token-total-estimated">~0</span> / <span id="reply-token-model-context-window">N/A</span> tokens (for <span id="reply-token-model-name">model</span>)</strong></p>
+                            <div id="reply-token-visual-bar-container" style="background-color: #eee; height: 20px; border-radius: 5px; margin-top: 5px;">
+                                <div id="reply-token-visual-bar" style="width: 0%; height: 100%; background-color: #4CAF50; border-radius: 5px; transition: width 0.3s ease, background-color 0.3s ease;"></div>
+                            </div>
+                        </div>
+                         <!-- File attachment input for replies -->
+                         <label for="reply-attachment-input" class="form-label">Attachments (plain text only):</label>
+                         <input type="file" id="reply-attachment-input" multiple class="file-input mb-2">
+                         <div id="reply-pending-attachments-list" class="pending-attachments-list mb-2">
+                             <!-- Selected files for reply will be listed here by JS -->
+                         </div>
+                         <button id="submit-reply-btn">Submit Reply</button>
+                         <button id="cancel-reply-btn">Cancel</button>
                      </div>
-                -->
-            </div>
-             <div id="reply-form-container" style="display:none;">
-                 <h4>Reply to Post <span id="reply-to-post-id"></span></h4>
-                 <textarea id="reply-content" placeholder="Your reply..."></textarea>
-                 <!-- Token Breakdown Display for Reply -->
-                <div id="reply-token-breakdown-container" style="margin-top: 10px; padding: 10px; border: 1px solid #ccc; display: none;">
-                    <h4>Estimated Prompt Tokens:</h4>
-                    <p>Post Content: <span id="reply-token-post-content">~0</span> tokens</p>
-                    <p>Persona Prompt (<span id="reply-token-persona-name">Default</span>): <span id="reply-token-persona-prompt">~0</span> tokens</p>
-                    <p>System Instructions: <span id="reply-token-system-prompt">~0</span> tokens</p>
-                    <p>Attachments: <span id="reply-token-attachments">~0</span> tokens</p>
-                    <p>Chat History: <span id="reply-token-chat-history">~0</span> tokens</p>
-                    <hr>
-                    <p><strong>Total Estimated: <span id="reply-token-total-estimated">~0</span> / <span id="reply-token-model-context-window">N/A</span> tokens (for <span id="reply-token-model-name">model</span>)</strong></p>
-                    <div id="reply-token-visual-bar-container" style="background-color: #eee; height: 20px; border-radius: 5px; margin-top: 5px;">
-                        <div id="reply-token-visual-bar" style="width: 0%; height: 100%; background-color: #4CAF50; border-radius: 5px; transition: width 0.3s ease, background-color 0.3s ease;"></div>
+          <div id="subforum-personas-bar" style="display:none">
+            <label for="llm-persona-select">Persona for LLM Response:</label>
+            <select id="llm-persona-select"></select>
+            <button id="llm-persona-override-btn">Override Persona</button>
+            <span id="llm-persona-current-label"></span>
+          </div>
+                </section>
+
+                <section id="settings-page-section" style="display: none;">
+                    <h2>Settings</h2>
+                    <button id="exit-settings-btn" class="exit-section-btn">< Exit</button>
+                    <div id="settings-page-content">
+                        <!-- Settings content will be loaded here by JS -->
                     </div>
-                </div>
-                 <!-- File attachment input for replies -->
-                 <label for="reply-attachment-input" class="form-label">Attachments (plain text only):</label>
-                 <input type="file" id="reply-attachment-input" multiple class="file-input mb-2">
-                 <div id="reply-pending-attachments-list" class="pending-attachments-list mb-2">
-                     <!-- Selected files for reply will be listed here by JS -->
-                 </div>
-                 <button id="submit-reply-btn">Submit Reply</button>
-                 <button id="cancel-reply-btn">Cancel</button>
-             </div>
-  <div id="subforum-personas-bar" style="display:none">
-    <label for="llm-persona-select">Persona for LLM Response:</label>
-    <select id="llm-persona-select"></select>
-    <button id="llm-persona-override-btn">Override Persona</button>
-    <span id="llm-persona-current-label"></span>
-  </div>
-        </section>
+                </section>
 
-        <section id="settings-page-section" style="display: none;">
-            <h2>Settings</h2>
-            <button id="exit-settings-btn" class="exit-section-btn">< Exit</button>
-            <div id="settings-page-content">
-                <!-- Settings content will be loaded here by JS -->
-            </div>
-        </section>
+                <section id="queue-page-section" style="display: none;">
+                    <h2>Queue</h2>
+                    <button id="exit-queue-btn" class="exit-section-btn">< Exit</button>
+                    <div id="queue-page-content">
+                        <!-- Queue content will be loaded here by JS -->
+                    </div>
+                </section>
 
-        <section id="queue-page-section" style="display: none;">
-            <h2>Queue</h2>
-            <button id="exit-queue-btn" class="exit-section-btn">< Exit</button>
-            <div id="queue-page-content">
-                <!-- Queue content will be loaded here by JS -->
+                <section id="activity-page-section" style="display: none;">
+                    <h2>Recent Activity</h2>
+                    <div id="activity-new-topics-panel">
+                        <h3>New Topics</h3>
+                        <ul id="activity-new-topics-list">
+                            <li>Placeholder...</li>
+                        </ul>
+                    </div>
+                    <div id="activity-new-replies-panel">
+                        <h3>New Replies</h3>
+                        <ul id="activity-new-replies-list">
+                            <li>Placeholder...</li>
+                        </ul>
+                    </div>
+                    <div id="activity-new-personas-panel">
+                        <h3>New Personas</h3>
+                        <ul id="activity-new-personas-list">
+                            <li>Placeholder...</li>
+                        </ul>
+                    </div>
+                </section>
             </div>
-        </section>
-
-        <section id="activity-page-section" style="display: none;">
-            <h2>Recent Activity</h2>
-            <div id="activity-new-topics-panel">
-                <h3>New Topics</h3>
-                <ul id="activity-new-topics-list">
-                    <li>Placeholder...</li>
-                </ul>
-            </div>
-            <div id="activity-new-replies-panel">
-                <h3>New Replies</h3>
-                <ul id="activity-new-replies-list">
-                    <li>Placeholder...</li>
-                </ul>
-            </div>
-            <div id="activity-new-personas-panel">
-                <h3>New Personas</h3>
-                <ul id="activity-new-personas-list">
-                    <li>Placeholder...</li>
-                </ul>
-            </div>
-        </section>
+        </div>
     </main>
 
     <!-- Container for @mention persona suggestions, used by editor.js -->
