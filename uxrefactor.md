@@ -27,7 +27,7 @@ To track progress, update the status of each substep from `[TODO]` to `[WIP]` (W
   - Review and confirm the CSS for `nav#subforum-nav` in `static/css/layout.css`.
   - Ensure it has `height: 100vh`, `position: sticky`, `top: 0`, and `overflow-y: auto` to make it a fixed, internally scrollable sidebar.
 
-- **1.4: Initial Layout Testing** `[TODO]`
+- **1.4: Initial Layout Testing** `[DONE]`
   - Manually add the modifier classes from step 1.2 in the browser's developer tools to simulate the different layout states.
   - Verify that the primary pane toggles correctly between centered and expanded.
   - Manually add a temporary secondary pane element and apply the `.tripane-active` class to verify the three-column layout aligns correctly to the left.
@@ -38,12 +38,12 @@ To track progress, update the status of each substep from `[TODO]` to `[WIP]` (W
 
 **Goal:** Wire up the JavaScript to dynamically manage pane creation, destruction, and content loading.
 
-- **2.1: Implement Primary Pane Toggle** `[TODO]`
+- **2.1: Implement Primary Pane Toggle** `[DONE]`
   - In `static/js/ui.js`, create a function `togglePrimaryPaneExpansion()`.
   - This function will add or remove the `.primary-pane-expanded` class on the primary pane element.
   - Add a new UI control (e.g., an expand/contract icon button) to the primary pane's header and attach an event listener to call this function.
 
-- **2.2: Implement Secondary Pane Logic** `[TODO]`
+- **2.2: Implement Secondary Pane Logic** `[DONE]`
   - In `static/js/ui.js`, create two functions: `openSecondaryPane()` and `closeSecondaryPane()`.
   - `openSecondaryPane(contentUrl)`:
     - Checks if the secondary pane already exists. If not, it creates the `div` element, gives it an ID (e.g., `secondary-pane`), and appends it to `#main-container`.
@@ -55,11 +55,11 @@ To track progress, update the status of each substep from `[TODO]` to `[WIP]` (W
     - Removes the secondary pane element from the DOM.
     - Removes the `.tripane-active` class from `#main-container`.
 
-- **2.3: Implement Content Routing Hook** `[TODO]`
+- **2.3: Implement Content Routing Hook** `[DONE]`
   - In `static/js/forum.js`, within the function that renders the list of topics, add a new icon button (e.g., "open in new pane") next to each topic link.
   - Attach a click event listener to this new button that calls `ui.openSecondaryPane()` with the URL for that topic.
 
-- **2.4: Pane Management Testing** `[TODO]`
+- **2.4: Pane Management Testing** `[DONE]`
   - Verify the primary pane's expand/contract button works.
   - Click the new "open in new pane" icon on a topic and verify:
     - The secondary pane appears on the right.

@@ -6,6 +6,11 @@ main {
     margin: auto;
 }
 
+/* New rule to allow the main container to expand to full width */
+main.pane-expanded-mode {
+    max-width: none;
+}
+
 nav#subforum-nav {
     flex: 0 0 280px; /* Fixed width for the sidebar */
     background: var(--nav-bg);
@@ -88,8 +93,9 @@ section {
 }
 
 #primary-pane {
-    max-width: 900px; /* Fixed max-width for the primary content area */
-    width: 100%;
+    flex-basis: 0;
+    flex-grow: 1;
+    max-width: 900px; /* Retain max-width for the default centered state */
     /* The margin: 0 auto effect is achieved by the parent's justify-content: center */
 }
 
@@ -109,7 +115,8 @@ section {
 
 #secondary-pane {
     /* Styles for the dynamically created secondary pane */
-    flex: 0 0 450px; /* Example initial width */
+    flex-basis: 0;
+    flex-grow: 1;
     background: var(--section-bg);
     padding: 1.5rem;
     border-left: 1px solid var(--post-border);

@@ -28,7 +28,7 @@ import {
 
 import { loadQueueData } from './queue.js';
 
-import { showSection, lastVisibleSectionId } from './ui.js';
+import { showSection, lastVisibleSectionId, togglePrimaryPaneExpansion } from './ui.js';
 
 import {
     addSubforumBtn,
@@ -96,6 +96,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 showSection('subforum-list-only'); // Go back to just the sidebar view
             }
         });
+    }
+
+    const primaryPaneToggleBtn = document.getElementById('primary-pane-toggle-btn');
+    if (primaryPaneToggleBtn) {
+        primaryPaneToggleBtn.addEventListener('click', togglePrimaryPaneExpansion);
     }
 
     // Schedule Modal Listeners

@@ -17,7 +17,7 @@ import {
     replyContentInput,
     settingsPageContent // Needed for link security check in postList event listener
 } from './dom.js';
-import { showSection, showLinkWarningPopup } from './ui.js';
+import { showSection, showLinkWarningPopup, openSecondaryPane } from './ui.js';
 import { newTopicEditor, replyEditor } from './editor.js'; // Import editor instances
 
 // --- State Variables ---
@@ -87,10 +87,61 @@ export function renderTopicList(topics) {
             loadPosts(topic.topic_id, topic.title);
         });
 
+        const openInPaneBtn = document.createElement('button');
+        openInPaneBtn.className = 'open-in-pane-btn';
+        openInPaneBtn.title = 'Open in new pane';
+        openInPaneBtn.innerHTML = '&#x2924;'; // Symbol for "Open in new window"
+        openInPaneBtn.addEventListener('click', async (e) => {
+            e.preventDefault();
+            e.stopPropagation(); // Prevent the topic link's click event
+            
+            try {
+                // Fetch the raw post data for the topic
+                const posts = await apiRequest(`/api/topics/${topic.topic_id}/posts`);
+                if (posts && posts.length > 0) {
+                    // Create the same structure as the primary pane to ensure CSS rules apply
+                    const tempSection = document.createElement('section');
+                    tempSection.id = 'topic-view-section'; // Use the same ID to match styles
+
+                    const tempPostList = document.createElement('div');
+                    tempPostList.id = 'post-list';
+
+                    // Reuse the existing post rendering logic to build the HTML
+                    const postsById = posts.reduce((map, post) => {
+                        map[post.post_id] = { ...post, children: [] };
+                        return map;
+                    }, {});
+
+                    const rootPosts = [];
+                    posts.forEach(post => {
+                        if (post.parent_post_id && postsById[post.parent_post_id]) {
+                            postsById[post.parent_post_id].children.push(postsById[post.post_id]);
+                        } else if (!post.parent_post_id) {
+                            rootPosts.push(postsById[post.post_id]);
+                        }
+                    });
+
+                    rootPosts.sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+                    rootPosts.forEach(post => renderPostNode(post, tempPostList, 0));
+
+                    tempSection.appendChild(tempPostList);
+
+                    // Pass the generated HTML to openSecondaryPane
+                    openSecondaryPane(tempSection.innerHTML, topic.title);
+                } else {
+                    openSecondaryPane('<p>This topic has no posts.</p>', topic.title);
+                }
+            } catch (error) {
+                console.error('Failed to load topic for secondary pane:', error);
+                openSecondaryPane('<p>Error loading topic content.</p>', 'Error');
+            }
+        });
+
         const meta = document.createElement('div');
         meta.className = 'topic-meta';
         meta.textContent = `Started by ${topic.username} | Posts: ${topic.post_count} | Last post: ${new Date(topic.last_post_at).toLocaleString()}`;
         li.appendChild(a);
+        li.appendChild(openInPaneBtn);
         li.appendChild(meta);
 
         // Add notification badge for topic

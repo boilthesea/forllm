@@ -7,7 +7,10 @@ import {
     settingsPageSection,
     queuePageSection,
     activityPageSection,
-    scheduleModal
+    scheduleModal,
+    mainElement,
+    mainContainer,
+    primaryPane
 } from './dom.js';
 
 import { currentSettings } from './settings.js'; // Need currentSettings for link security
@@ -153,3 +156,60 @@ window.addEventListener('click', (event) => {
 
 // Apply dark mode on initial load
 applyDarkMode();
+
+export function togglePrimaryPaneExpansion() {
+    if (primaryPane && mainElement) {
+        const isExpanded = primaryPane.classList.toggle('primary-pane-expanded');
+        mainElement.classList.toggle('pane-expanded-mode', isExpanded);
+    }
+}
+
+export function openSecondaryPane(htmlContent, title = 'Details') {
+    if (!mainContainer) return;
+
+    // Ensure any expanded primary pane is contracted when opening a new pane
+    if (primaryPane && primaryPane.classList.contains('primary-pane-expanded')) {
+        primaryPane.classList.remove('primary-pane-expanded');
+    }
+
+    let secondaryPane = document.getElementById('secondary-pane');
+    if (!secondaryPane) {
+        secondaryPane = document.createElement('div');
+        secondaryPane.id = 'secondary-pane';
+        // Note: The class 'secondary-pane' is not in layout.css, but we'll add it for consistency.
+        // The ID is what provides the styling.
+        mainContainer.appendChild(secondaryPane);
+    }
+
+    secondaryPane.innerHTML = `
+        <div class="pane-header">
+            <h3>${title}</h3>
+            <button class="close-pane-btn" title="Close Pane">&times;</button>
+        </div>
+        <div class="pane-content">
+            ${htmlContent}
+        </div>
+    `;
+
+    secondaryPane.querySelector('.close-pane-btn').addEventListener('click', closeSecondaryPane);
+
+    // Add the tripane-active class to the container AFTER the pane is created and populated
+    mainContainer.classList.add('tripane-active');
+}
+
+export function closeSecondaryPane() {
+    if (!mainContainer) return;
+
+    const secondaryPane = document.getElementById('secondary-pane');
+    if (secondaryPane) {
+        secondaryPane.remove();
+    }
+
+    // Only remove the tripane class if the secondary pane was the last one.
+    // This is a placeholder for future logic if more panes are added.
+    // For now, this is correct as we only have one secondary pane.
+    mainContainer.classList.remove('tripane-active');
+
+    // Optional: Restore primary pane to expanded if it was before?
+    // For now, we'll leave it contracted as per the plan.
+}

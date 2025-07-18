@@ -1,5 +1,9 @@
 // This file will centralize DOM element references.
 
+export const mainElement = document.querySelector('main');
+export const mainContainer = document.getElementById('main-container');
+export const primaryPane = document.getElementById('primary-pane');
+
 export const subforumNav = document.getElementById('subforum-nav');
 export const subforumList = document.getElementById('subforum-list');
 export const addSubforumBtn = document.getElementById('add-subforum-btn');
