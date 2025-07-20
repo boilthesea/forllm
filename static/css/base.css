@@ -9,34 +9,91 @@ body {
     background-color: var(--bg-color);
     color: var(--text-color);
     font-size: 16px; /* Base font size */
+    transition: background-color 0.3s ease, color 0.3s ease;
+}
 
-    /* Dark Mode Styles by default */
-    --bg-color: #222;
-    --text-color: #eee;
-    --header-bg: #111;
-    --header-text: #eee;
-    --nav-bg: #333;
-    --section-bg: #333;
-    --post-bg: #444;
-    --post-border: #555;
-    --post-meta-color: #bbb;
-    --llm-response-bg: #2a3f3c;
-    --llm-response-border: #1abc9c;
-    --llm-meta-color: #1abc9c;
-    --link-color: #5dade2;
-    --button-bg: #5dade2; /* This is now the DARK mode button base color */
-    --button-hover-bg: #3498db; /* This is now the DARK mode button hover color */
-    --input-bg: #555;
-    --input-border: #777;
-    --input-text: #eee;
-    --modal-bg: #444;
-    --modal-border: #666;
-    --modal-text: #eee;
-    --close-btn-color: #ccc;
-    --close-btn-hover-color: #fff;
-    --footer-bg: #111;
-    --footer-text: #ccc;
-    --schedule-display-color: #888;
+/* --- Theme: Silvery (Default) --- */
+body, body.theme-silvery {
+    --bg-color: #f4f4f9;
+    --text-color: #333;
+    --nav-bg: #e9ecef;
+    --section-bg: #ffffff;
+    --post-bg: #ffffff;
+    --post-border: #dee2e6;
+    --post-meta-color: #6c757d;
+    --llm-response-bg: #e6f7ff;
+    --llm-response-border: #91d5ff;
+    --llm-meta-color: #0050b3;
+    --link-color: #007bff;
+    --input-bg: #ffffff;
+    --input-border: #ced4da;
+    --input-text: #495057;
+    --input-focus-border: #80bdff;
+    --input-focus-shadow: rgba(0, 123, 255, 0.25);
+    --modal-bg: #ffffff;
+    --modal-border: #dee2e6;
+    --modal-text: #333;
+    --close-btn-color: #6c757d;
+    --close-btn-hover-color: #000;
+    --schedule-display-color: #6c757d;
+
+    /* Button Variables */
+    --button-bg: #6c757d;
+    --button-hover-bg: #5a6268;
+    --button-active-bg: #545b62;
+    --button-primary-bg: #007bff;
+    --button-primary-text: #fff;
+    --button-primary-border: #007bff;
+    --button-primary-hover-bg: #0069d9;
+    --button-secondary-text: #007bff;
+    --button-secondary-border: #007bff;
+    --button-secondary-hover-bg: rgba(0, 123, 255, 0.1);
+    --button-secondary-hover-border: #0056b3;
+    --icon-button-color: #6c757d;
+    --icon-button-hover-bg: #e9ecef;
+    --icon-button-hover-color: #000;
+}
+
+/* --- Theme: High-Contrast Black --- */
+body.theme-hc-black {
+    --bg-color: #000000;
+    --text-color: #f0f0f0;
+    --nav-bg: #1a1a1a;
+    --section-bg: #1a1a1a;
+    --post-bg: #242424;
+    --post-border: #4d4d4d;
+    --post-meta-color: #a0a0a0;
+    --llm-response-bg: #1c2b33;
+    --llm-response-border: #00aaff;
+    --llm-meta-color: #00aaff;
+    --link-color: #00aaff;
+    --input-bg: #242424;
+    --input-border: #4d4d4d;
+    --input-text: #f0f0f0;
+    --input-focus-border: #00aaff;
+    --input-focus-shadow: rgba(0, 170, 255, 0.3);
+    --modal-bg: #242424;
+    --modal-border: #4d4d4d;
+    --modal-text: #f0f0f0;
+    --close-btn-color: #a0a0a0;
+    --close-btn-hover-color: #ffffff;
+    --schedule-display-color: #a0a0a0;
+
+    /* Button Variables */
+    --button-bg: #3d3d3d;
+    --button-hover-bg: #525252;
+    --button-active-bg: #666666;
+    --button-primary-bg: #00aaff;
+    --button-primary-text: #000;
+    --button-primary-border: #00aaff;
+    --button-primary-hover-bg: #33bbff;
+    --button-secondary-text: #00aaff;
+    --button-secondary-border: #00aaff;
+    --button-secondary-hover-bg: rgba(0, 170, 255, 0.15);
+    --button-secondary-hover-border: #33bbff;
+    --icon-button-color: #a0a0a0;
+    --icon-button-hover-bg: #3d3d3d;
+    --icon-button-hover-color: #ffffff;
 }
 
 /* header styling can be direct if specific dark mode overrides are not needed */

@@ -18,7 +18,7 @@
     color: var(--modal-text); /* Added from dark mode */
     width: 80%;
     max-width: 500px; /* Default max-width */
-    border-radius: 5px;
+    border-radius: 6px;
     position: fixed; /* Changed for transform centering */
     left: 50%;
     top: 50%;
@@ -201,26 +201,17 @@
     font-weight: bold;
 }
 
-#persona-name-input {
+#persona-name-input,
+#persona-instructions-input {
+    /* These will now inherit styles from components.css */
+    /* We can add specific overrides here if needed, e.g., width */
     width: 100%;
-    padding: 0.5rem;
-    border: 1px solid #444; /* Was #ddd */
-    border-radius: 4px;
-    margin-bottom: 1rem;
-    background-color: #1f1f1f; /* Added from dark mode */
-    color: #e0e0e0; /* Added from dark mode */
+    box-sizing: border-box; /* Ensure padding doesn't make it overflow */
 }
 
 #persona-instructions-input {
-    width: 100%;
     min-height: 150px;
-    padding: 0.5rem;
-    border: 1px solid #444; /* Was #ddd */
-    border-radius: 4px;
     resize: vertical;
-    margin-bottom: 1rem;
-    background-color: #1f1f1f; /* Added from dark mode */
-    color: #e0e0e0; /* Added from dark mode */
 }
 
 #persona-prompt-preview {

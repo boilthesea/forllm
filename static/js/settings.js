@@ -14,6 +14,7 @@ export let currentSettings = { // Store loaded settings
     llmLinkSecurity: 'true',
     default_llm_context_window: '4096',
     autoCheckContextWindow: false, // New setting
+    theme: 'theme-silvery', // Add theme setting
     // Add new chat history settings with their string defaults
     ch_max_ambient_posts: '5',
     ch_max_posts_per_sibling_branch: '2',
@@ -83,6 +84,13 @@ export function renderSettingsPage() {
         <label for="default-llm-context-window-input">Default LLM Context Window (tokens):</label>
         <input type="number" id="default-llm-context-window-input" class="number-input" min="0" placeholder="e.g., 4096">
         <p style="font-size: 0.8em; color: #888; margin-top: 3px;">Used if model-specific context window detection fails.</p>
+    </div>
+    <div class="setting-item">
+        <label for="theme-select">Theme:</label>
+        <select id="theme-select">
+            <option value="theme-silvery">Silvery</option>
+            <option value="theme-hc-black">High-Contrast Black</option>
+        </select>
     </div>
     <button id="save-settings-btn">Save Settings</button>
     <p id="settings-error" class="error-message"></p>
@@ -209,6 +217,11 @@ export function renderSettingsPage() {
                     contextWindowInput.value = currentSettings.default_llm_context_window;
                 }
 
+                const themeSelect = container.querySelector('#theme-select');
+                if (themeSelect) {
+                    themeSelect.value = currentSettings.theme;
+                }
+
                 // Populate new chat history settings fields
                 const maxAmbientPostsInput = container.querySelector('#ch-max-ambient-posts');
                 if (maxAmbientPostsInput) {
@@ -278,6 +291,7 @@ export async function loadSettings() {
             llmLinkSecurity: settings.llmLinkSecurity === 'true' ? 'true' : 'false',
             default_llm_context_window: settings.default_llm_context_window || '4096',
             autoCheckContextWindow: settings.autoCheckContextWindow === true || settings.autoCheckContextWindow === 'true', // Ensure boolean
+            theme: settings.theme || 'theme-silvery',
             // Load new chat history settings, using defaults if missing from backend response
             ch_max_ambient_posts: settings.ch_max_ambient_posts || '5',
             ch_max_posts_per_sibling_branch: settings.ch_max_posts_per_sibling_branch || '2',
@@ -287,8 +301,7 @@ export async function loadSettings() {
         if (currentSettings.llmLinkSecurity === undefined) currentSettings.llmLinkSecurity = 'true';
         if (currentSettings.autoCheckContextWindow === undefined) currentSettings.autoCheckContextWindow = false;
 
-
-        applyDarkMode(true); // Apply dark mode immediately
+        applyTheme(currentSettings.theme);
 
         // Update UI elements if they exist (they might be created later by renderSettingsPage)
         // This part is somewhat redundant if renderSettingsPage correctly populates fields
@@ -489,6 +502,11 @@ async function fetchAndDisplayModelContextWindow(modelName, isForcedRefresh = fa
     }
 }
 
+function applyTheme(themeName) {
+    document.body.classList.remove('theme-silvery', 'theme-hc-black');
+    document.body.classList.add(themeName);
+}
+
 // --- Settings Actions ---
 export async function saveSettings() {
     // Get elements from within the settings page content
@@ -496,6 +514,7 @@ export async function saveSettings() {
     const autoCheckToggleInput = settingsPageContent.querySelector('#auto-check-context-window-toggle'); // New
     const linkSecurityToggleInput = settingsPageContent.querySelector('#llm-link-security-toggle');
     const contextWindowInput = settingsPageContent.querySelector('#default-llm-context-window-input');
+    const themeSelect = settingsPageContent.querySelector('#theme-select');
     // New chat history inputs
     const chMaxAmbientPostsInput = settingsPageContent.querySelector('#ch-max-ambient-posts');
     const chMaxPostsPerSiblingBranchInput = settingsPageContent.querySelector('#ch-max-posts-per-sibling-branch');
@@ -504,7 +523,7 @@ export async function saveSettings() {
     const saveButton = settingsPageContent.querySelector('#save-settings-btn');
     const settingsErrorElement = settingsPageContent.querySelector('#settings-error');
 
-    if (!modelSelectElement || !autoCheckToggleInput || !linkSecurityToggleInput || !contextWindowInput ||
+    if (!modelSelectElement || !autoCheckToggleInput || !linkSecurityToggleInput || !contextWindowInput || !themeSelect ||
         !chMaxAmbientPostsInput || !chMaxPostsPerSiblingBranchInput || !chPrimaryHistoryBudgetRatioInput ||
         !saveButton || !settingsErrorElement) {
         console.error("Settings elements not found for saving.");
@@ -513,6 +532,7 @@ export async function saveSettings() {
         if (!autoCheckToggleInput) console.error("Missing: autoCheckToggleInput");
         if (!linkSecurityToggleInput) console.error("Missing: linkSecurityToggleInput");
         if (!contextWindowInput) console.error("Missing: contextWindowInput");
+        if (!themeSelect) console.error("Missing: themeSelect");
         if (!chMaxAmbientPostsInput) console.error("Missing: chMaxAmbientPostsInput");
         if (!chMaxPostsPerSiblingBranchInput) console.error("Missing: chMaxPostsPerSiblingBranchInput");
         if (!chPrimaryHistoryBudgetRatioInput) console.error("Missing: chPrimaryHistoryBudgetRatioInput");
@@ -527,6 +547,7 @@ export async function saveSettings() {
     const newAutoCheckContextWindow = autoCheckToggleInput.checked; // New
     const newLlmLinkSecurity = linkSecurityToggleInput.checked;
     const newDefaultContextWindow = contextWindowInput.value;
+    const newTheme = themeSelect.value;
     // Get values from new fields
     const chMaxAmbientPosts = chMaxAmbientPostsInput.value;
     const chMaxPostsPerSiblingBranch = chMaxPostsPerSiblingBranchInput.value;
@@ -566,6 +587,7 @@ export async function saveSettings() {
         autoCheckContextWindow: newAutoCheckContextWindow, // New
         llmLinkSecurity: newLlmLinkSecurity.toString(),
         default_llm_context_window: parseInt(newDefaultContextWindow, 10).toString(),
+        theme: newTheme,
         // Add new settings to payload
         ch_max_ambient_posts: chMaxAmbientPosts,
         ch_max_posts_per_sibling_branch: chMaxPostsPerSiblingBranch,
@@ -585,13 +607,14 @@ export async function saveSettings() {
         currentSettings.autoCheckContextWindow = settingsToSave.autoCheckContextWindow; // New
         currentSettings.llmLinkSecurity = settingsToSave.llmLinkSecurity;
         currentSettings.default_llm_context_window = settingsToSave.default_llm_context_window;
+        currentSettings.theme = settingsToSave.theme;
         // Update local state for new settings
         currentSettings.ch_max_ambient_posts = settingsToSave.ch_max_ambient_posts;
         currentSettings.ch_max_posts_per_sibling_branch = settingsToSave.ch_max_posts_per_sibling_branch;
         currentSettings.ch_primary_history_budget_ratio = settingsToSave.ch_primary_history_budget_ratio;
 
         // Update UI (redundant if page isn't re-rendered, but good practice for consistency)
-        applyDarkMode(true);
+        applyTheme(currentSettings.theme);
         if(autoCheckToggleInput) autoCheckToggleInput.checked = currentSettings.autoCheckContextWindow; // New
         if(linkSecurityToggleInput) linkSecurityToggleInput.checked = currentSettings.llmLinkSecurity === 'true';
         if (contextWindowInput) contextWindowInput.value = currentSettings.default_llm_context_window;

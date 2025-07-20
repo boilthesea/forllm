@@ -24,7 +24,8 @@ def handle_settings():
         'default_llm_context_window': '4096',
         'ch_max_ambient_posts': '5',
         'ch_max_posts_per_sibling_branch': '2',
-        'ch_primary_history_budget_ratio': '0.7'
+        'ch_primary_history_budget_ratio': '0.7',
+        'theme': 'theme-hc-black'
     }
 
     if request.method == 'PUT':
@@ -40,6 +41,13 @@ def handle_settings():
 
                 if key == 'llmLinkSecurity' or key == 'autoCheckContextWindow': # Handle new boolean
                     processed_value = 'true' if str(value).strip().lower() in ['true', '1', 'yes', 'on', True] else 'false'
+                elif key == 'theme':
+                    allowed_themes = ['theme-silvery', 'theme-hc-black']
+                    if value in allowed_themes:
+                        processed_value = value
+                    else:
+                        print(f"Warning: Ignoring unknown theme value: {value}")
+                        continue
                 elif key == 'selectedModel':
                     processed_value = str(value).strip()
                     if not processed_value:

@@ -6,7 +6,7 @@ nav#subforum-nav button { /* Specificity for buttons inside the nav if needed */
 button,
 input[type="submit"],
 input[type="button"] {
-    background: linear-gradient(to bottom, #5a5a5a 0%, #484848 100%); /* Dark silver gradient */
+    background-color: var(--button-bg, #5a5a5a);
     color: var(--text-color, #eee);
     border: 1px solid #666;
     padding: 0.6rem 1.2rem; /* Increased padding */
@@ -15,29 +15,60 @@ input[type="button"] {
     margin-top: 0.5rem;
     font-size: 0.95em;
     font-weight: 500;
-    transition: background 0.2s ease, box-shadow 0.2s ease, transform 0.1s ease;
-    box-shadow: 0 1px 2px rgba(0,0,0,0.3);
+    transition: background-color 0.2s ease, border-color 0.2s ease, transform 0.1s ease;
 }
 
 button:hover,
 input[type="submit"]:hover,
 input[type="button"]:hover {
-    background: linear-gradient(to bottom, #626262 0%, #505050 100%);
+    background-color: var(--button-hover-bg, #626262);
     border-color: #777;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.4);
 }
 
 button:active,
 input[type="submit"]:active,
 input[type="button"]:active {
-    background: linear-gradient(to bottom, #454545 0%, #383838 100%);
-    box-shadow: inset 0 1px 2px rgba(0,0,0,0.5);
-    border-color: #555; /* Added from dark mode active styles */
+    background-color: var(--button-active-bg, #454545);
+    border-color: #555;
     transform: translateY(1px);
 }
 
 /* Specific button types that should retain brand color or semantic colors */
 /* Example: A primary action button could be styled differently if needed */
+/* --- Button Hierarchy --- */
+.button-primary {
+    background-color: var(--button-primary-bg, #3498db);
+    color: var(--button-primary-text, white);
+    border: 1px solid var(--button-primary-border, #2980b9);
+}
+
+.button-primary:hover {
+    background-color: var(--button-primary-hover-bg, #2980b9);
+}
+
+.button-secondary {
+    background-color: transparent;
+    color: var(--button-secondary-text, #eee);
+    border: 1px solid var(--button-secondary-border, #666);
+}
+
+.button-secondary:hover {
+    background-color: var(--button-secondary-hover-bg, rgba(255, 255, 255, 0.1));
+    border-color: var(--button-secondary-hover-border, #888);
+}
+
+.button-icon {
+    background: none;
+    border: none;
+    padding: 0.4rem;
+    border-radius: 50%;
+    color: var(--icon-button-color, #ccc);
+}
+
+.button-icon:hover {
+    background-color: var(--icon-button-hover-bg, rgba(255, 255, 255, 0.1));
+    color: var(--icon-button-hover-color, #fff);
+}
 /* .button-primary { background: #3498db; color: white; ... } */
 
 /* Delete/Remove buttons (like in schedule modal) */
@@ -76,9 +107,18 @@ input[type="text"], textarea, select /* Style select dropdown too */ {
     padding: 0.5rem;
     margin-bottom: 0.5rem;
     border: 1px solid var(--input-border, #777);
-    border-radius: 3px;
+    border-radius: 6px;
     background-color: var(--input-bg, #555);
     color: var(--input-text, #eee);
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+input[type="text"]:focus,
+textarea:focus,
+select:focus {
+    outline: none;
+    border-color: var(--input-focus-border, #007bff);
+    box-shadow: 0 0 0 2px var(--input-focus-shadow, rgba(0, 123, 255, 0.25));
 }
 
 textarea {

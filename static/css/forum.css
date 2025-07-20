@@ -13,7 +13,24 @@ li {
     border-top: 1px solid var(--post-border); /* Was #eee */
 }
 
-#topic-list li, #post-list .post {
+#topic-list li {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border: 1px solid var(--post-border); /* Was #eee */
+    padding: 1rem;
+    margin-bottom: 1rem;
+    border-radius: 4px;
+    background-color: var(--post-bg); /* Was #f9f9f9 */
+}
+
+#topic-list li > a {
+    flex-grow: 1;
+    text-decoration: none;
+    color: var(--text-color);
+}
+
+#post-list .post {
     border: 1px solid var(--post-border); /* Was #eee */
     padding: 1rem;
     margin-bottom: 1rem;

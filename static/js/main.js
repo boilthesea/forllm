@@ -112,9 +112,11 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // Schedule Modal Listeners
-    const openScheduleModal = async () => {
+    const openScheduleModal = async (e) => {
         await loadSchedules();
         if (scheduleModal) scheduleModal.style.display = 'block';
+        // We don't show a section here, so we don't set active nav.
+        // The modal is an overlay.
     };
     if (editScheduleBtn) editScheduleBtn.addEventListener('click', openScheduleModal);
     if (mobileScheduleBtn) mobileScheduleBtn.addEventListener('click', openScheduleModal);
@@ -129,9 +131,9 @@ document.addEventListener('DOMContentLoaded', () => {
     if (saveSchedulesBtn) saveSchedulesBtn.addEventListener('click', saveSchedules);
 
     // Settings Page Listeners
-    const openSettingsPage = () => {
+    const openSettingsPage = (e) => {
         renderSettingsPage();
-        showSection('settings-page-section');
+        showSection('settings-page-section', e.target);
     };
     if (settingsBtn) settingsBtn.addEventListener('click', openSettingsPage);
     if (mobileSettingsBtn) mobileSettingsBtn.addEventListener('click', openSettingsPage);
@@ -143,8 +145,8 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // Queue Page Listeners
-    const openQueuePage = () => {
-        showSection('queue-page-section');
+    const openQueuePage = (e) => {
+        showSection('queue-page-section', e.target);
         loadQueueData();
     };
     if (queueBtn) queueBtn.addEventListener('click', openQueuePage);

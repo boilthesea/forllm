@@ -20,10 +20,12 @@ let lastVisibleSectionId = 'activity-page-section'; // Default to activity page
 // Import loadActivityData from activity.js
 import { loadActivityData } from './activity.js';
 
-export function showSection(sectionIdToShow) {
+export function showSection(sectionIdToShow, navElement = null) {
     if (!sectionIdToShow) {
         sectionIdToShow = 'activity-page-section'; // Default to activity page
     }
+
+    setActiveNav(navElement);
 
     // Always keep the sidebar visible
     subforumNav.style.display = 'flex'; // Use flex as defined in CSS
@@ -241,5 +243,20 @@ export function closeSecondaryPane() {
         // Desktop logic: remove the element and the tripane class
         secondaryPane.remove();
         mainContainer.classList.remove('tripane-active');
+    }
+}
+
+export function setActiveNav(clickedElement) {
+    // Find all nav links in the main navigation
+    const navLinks = document.querySelectorAll('#main-nav ul li a');
+
+    // Remove 'active' class from all links
+    navLinks.forEach(link => {
+        link.classList.remove('active');
+    });
+
+    // Add 'active' class to the clicked link
+    if (clickedElement) {
+        clickedElement.classList.add('active');
     }
 }

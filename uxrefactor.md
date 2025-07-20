@@ -142,11 +142,11 @@ To track progress, update the status of each substep from `[TODO]` to `[WIP]` (W
 
 **Goal:** Transition the application from a gradient-based, skeuomorphic design to a modern, flat aesthetic. This involves creating a clear visual hierarchy for interactive elements, redesigning core navigation components, and ensuring a consistent style across the UI.
 
-- **4.1: Adopt a Flat Design Philosophy** `[TODO]`
+- **4.1: Adopt a Flat Design Philosophy** `[DONE]`
   - **Principle:** Eliminate gradients and heavy shadows in favor of solid colors, clean lines, and meaningful use of space.
   - **Action:** In `static/css/components.css`, remove `linear-gradient` backgrounds and `box-shadow` properties from the base `button` style.
 
-- **4.2: Implement New Button Hierarchy** `[TODO]`
+- **4.2: Implement New Button Hierarchy** `[DONE]`
   - **Primary Actions** (e.g., "Create Topic", "Save"): Style with a solid, high-contrast background color to draw user attention.
     - Create a `.button-primary` class.
   - **Secondary Actions** (e.g., "Cancel", "Back"): Style with a transparent background and a colored border (outline style).
@@ -154,29 +154,29 @@ To track progress, update the status of each substep from `[TODO]` to `[WIP]` (W
   - **Tertiary/Icon-Only Actions** (e.g., "Open in new pane"): Style with no background or border by default. A subtle background should appear on hover to indicate the clickable area.
     - Create a `.button-icon` or similar utility class.
 
-- **4.3: Redesign Main Navigation** `[TODO]`
+- **4.3: Redesign Main Navigation** `[DONE]`
   - **Goal:** Convert the heavy navigation buttons into a lighter, "tab-like" list.
   - **HTML Change:** In `templates/index.html`, replace the `<button>` elements for "Edit Schedules", "Settings", and "Queue" with a `<ul>` containing `<li>` and `<a>` tags.
   - **CSS Change:** In `static/css/layout.css`, style the new navigation list to be clean and scannable.
   - **Active State:** Implement a style for the active navigation link (e.g., a persistent background color and a contrasting left border) to clearly show the user's current location. This will require JavaScript in `ui.js` to toggle an `.active` class.
 
-- **4.4: Redesign Contextual Actions** `[TODO]`
+- **4.4: Redesign Contextual Actions** `[DONE]`
   - **Goal:** Make the "Open in new pane" action a subtle, icon-only button.
   - **JS Change:** In `static/js/forum.js`, modify the element creation from `<button>` to a `<span>` or `<i>` with a specific class (e.g., `topic-action-icon`).
   - **CSS Change:** In `static/css/forum.css`, use Flexbox on the parent `<li>` to position the icon to the right (`justify-content: space-between`). Style the icon to be minimal, with a background appearing only on hover.
 
-- **4.5: Update Other Components for Consistency** `[TODO]`
+- **4.5: Update Other Components for Consistency** `[DONE]`
   - Review and update input fields, textareas, and modals to align with the new flat design language.
   - Focus on clean borders, consistent corner-rounding, and clear focus states.
 
-- **4.6: Define Color Themes** `[TODO]`
+- **4.6: Define Color Themes** `[DONE]`
   - In `static/css/base.css`, define the full set of CSS variables for the "Silvery" and "High-Contrast Black" themes under modifier classes (e.g., `body.theme-silvery`, `body.theme-hc-black`). This should now include variables for the new primary and secondary action colors.
 
-- **4.7: Implement Theme Switcher** `[TODO]`
+- **4.7: Implement Theme Switcher** `[DONE]`
   - In the settings page/modal, add a dropdown or set of buttons to select a theme.
   - In `static/js/settings.js`, add logic to handle theme selection. This will involve changing a class on the `<body>` element and saving the user's preference to local storage and the backend.
 
-- **4.8: Style Testing** `[TODO]`
+- **4.8: Style Testing** `[DONE]`
   - Verify all buttons and components reflect the new design hierarchy.
   - Test the theme switcher and ensure all colors update correctly across the entire application.
   - Confirm the new navigation and contextual actions are functional and visually polished.

@@ -93,8 +93,8 @@ export function renderTopicList(topics) {
             loadPosts(topic.topic_id, topic.title);
         });
 
-        const openInPaneBtn = document.createElement('button');
-        openInPaneBtn.className = 'open-in-pane-btn';
+        const openInPaneBtn = document.createElement('span');
+        openInPaneBtn.className = 'topic-action-icon button-icon';
         openInPaneBtn.title = 'Open in new pane';
         openInPaneBtn.innerHTML = '&#x2924;'; // Symbol for "Open in new window"
         openInPaneBtn.addEventListener('click', async (e) => {
