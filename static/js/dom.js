@@ -37,8 +37,8 @@ export const scheduleListContainer = document.getElementById('schedule-list-cont
 export const addScheduleRowBtn = document.getElementById('add-schedule-row-btn');
 export const saveSchedulesBtn = document.getElementById('save-schedules-btn'); // Renamed save button
 export const scheduleError = document.getElementById('schedule-error');
-export const statusIndicatorContainer = document.getElementById('processing-status-indicator-container');
-export const statusDot = document.getElementById('processing-status-dot');
+export const statusIndicatorContainers = document.querySelectorAll('.processing-status-indicator-container');
+export const statusDots = document.querySelectorAll('.status-dot');
 
 // Settings Modal Elements
 export const settingsBtn = document.getElementById('settings-btn');
@@ -66,3 +66,8 @@ export const exitActivityBtn = document.getElementById('exit-activity-btn');
 export const activityNewTopicsList = document.getElementById('activity-new-topics-list');
 export const activityNewRepliesList = document.getElementById('activity-new-replies-list');
 export const activityNewPersonasList = document.getElementById('activity-new-personas-list');
+
+// Mobile Nav Buttons
+export const mobileScheduleBtn = document.getElementById('mobile-schedule-btn');
+export const mobileQueueBtn = document.getElementById('mobile-queue-btn');
+export const mobileSettingsBtn = document.getElementById('mobile-settings-btn');

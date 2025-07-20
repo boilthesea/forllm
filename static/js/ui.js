@@ -164,23 +164,26 @@ export function togglePrimaryPaneExpansion() {
     }
 }
 
+// Helper function to check for mobile viewport
+export const isMobile = () => window.matchMedia("(max-width: 768px)").matches;
+
+export function toggleMobileMenu() {
+    if (subforumNav) {
+        subforumNav.classList.toggle('mobile-menu-visible');
+    }
+}
+
 export function openSecondaryPane(htmlContent, title = 'Details') {
     if (!mainContainer) return;
-
-    // Ensure any expanded primary pane is contracted when opening a new pane
-    if (primaryPane && primaryPane.classList.contains('primary-pane-expanded')) {
-        primaryPane.classList.remove('primary-pane-expanded');
-    }
 
     let secondaryPane = document.getElementById('secondary-pane');
     if (!secondaryPane) {
         secondaryPane = document.createElement('div');
         secondaryPane.id = 'secondary-pane';
-        // Note: The class 'secondary-pane' is not in layout.css, but we'll add it for consistency.
-        // The ID is what provides the styling.
         mainContainer.appendChild(secondaryPane);
     }
 
+    // Always ensure the pane has the correct inner structure
     secondaryPane.innerHTML = `
         <div class="pane-header">
             <h3>${title}</h3>
@@ -191,25 +194,52 @@ export function openSecondaryPane(htmlContent, title = 'Details') {
         </div>
     `;
 
+    // Attach event listeners
     secondaryPane.querySelector('.close-pane-btn').addEventListener('click', closeSecondaryPane);
 
-    // Add the tripane-active class to the container AFTER the pane is created and populated
-    mainContainer.classList.add('tripane-active');
+    if (isMobile()) {
+        // Mobile logic: show as a "peeking" bottom sheet
+        secondaryPane.classList.add('mobile-pane-peek');
+        secondaryPane.classList.remove('mobile-pane-visible'); // Ensure it's not fully visible initially
+
+        // Add a new listener to the header to toggle full visibility
+        const paneHeader = secondaryPane.querySelector('.pane-header');
+        // Avoid adding duplicate listeners
+        if (!paneHeader.dataset.listenerAttached) {
+            paneHeader.addEventListener('click', (e) => {
+                // Don't toggle if the close button itself was clicked
+                if (e.target.classList.contains('close-pane-btn')) return;
+                
+                secondaryPane.classList.toggle('mobile-pane-visible');
+                // If it's not peeking anymore, it must be visible.
+                if(!secondaryPane.classList.contains('mobile-pane-peek')) {
+                    secondaryPane.classList.add('mobile-pane-peek');
+                }
+            });
+            paneHeader.dataset.listenerAttached = 'true';
+        }
+
+    } else {
+        // Desktop logic: use tripane view
+        if (primaryPane && primaryPane.classList.contains('primary-pane-expanded')) {
+            primaryPane.classList.remove('primary-pane-expanded');
+        }
+        mainContainer.classList.add('tripane-active');
+    }
 }
 
 export function closeSecondaryPane() {
     if (!mainContainer) return;
-
     const secondaryPane = document.getElementById('secondary-pane');
-    if (secondaryPane) {
+    if (!secondaryPane) return;
+
+    if (isMobile()) {
+        // Mobile logic: just hide the pane, don't remove it
+        secondaryPane.classList.remove('mobile-pane-peek');
+        secondaryPane.classList.remove('mobile-pane-visible');
+    } else {
+        // Desktop logic: remove the element and the tripane class
         secondaryPane.remove();
+        mainContainer.classList.remove('tripane-active');
     }
-
-    // Only remove the tripane class if the secondary pane was the last one.
-    // This is a placeholder for future logic if more panes are added.
-    // For now, this is correct as we only have one secondary pane.
-    mainContainer.classList.remove('tripane-active');
-
-    // Optional: Restore primary pane to expanded if it was before?
-    // For now, we'll leave it contracted as per the plan.
 }

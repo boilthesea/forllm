@@ -70,47 +70,116 @@ To track progress, update the status of each substep from `[TODO]` to `[WIP]` (W
 
 ---
 
-### Phase 3: Mobile Experience
+### Phase 3: Mobile Experience & Responsive Overhaul
 
-**Goal:** Implement the responsive CSS and logic for an optimized mobile layout.
+**Goal:** Implement a fully responsive, mobile-first experience. This includes a new condensed top navigation bar, a slide-down main menu, and a two-stage "bottom sheet" for the secondary pane.
 
-- **3.1: Add Mobile CSS Media Queries** `[TODO]`
-  - In `static/css/layout.css`, add a media query for mobile screen sizes.
-  - Inside the query, override the desktop styles:
-    - The primary pane should have `width: 100%`.
-    - The secondary pane should be styled as a "bottom sheet" overlay: `position: fixed; bottom: 0; left: 0; width: 100%; height: 70%; transform: translateY(100%); transition: transform 0.3s ease-in-out;`.
-    - Create a class `.mobile-pane-visible` that sets `transform: translateY(0);`.
+- **3.1: Add HTML for Mobile Navigation** `[DONE]`
+  - In `templates/index.html`, create a new `<nav id="mobile-top-nav">` element, positioned before the main `<main>` tag. This element will be hidden by default and made visible only on mobile.
+  - Inside `<mobile-top-nav>`:
+    - Create the hamburger menu button: `<button id="mobile-menu-btn" title="Toggle Menu">`.
+    - Inside the button, construct the "FOR/LLM" logo using a nested structure for better CSS control:
+      ```html
+      <div class="mobile-logo">
+          <div class="logo-bar"></div>
+          <div class="logo-text-container">
+              <span class="logo-text">FOR</span>
+              <span class="logo-text">LLM</span>
+          </div>
+          <div class="logo-bar"></div>
+      </div>
+      ```
+    - Add the `<div id="processing-status-indicator-container">` to the mobile nav. The original remains in the desktop sidebar, and JavaScript is updated to manage both.
+    - Create a container for icons: `<div class="mobile-nav-icons">`.
+    - Add icon buttons with unique IDs (`mobile-schedule-btn`, etc.) for Schedule (`&#x1F552;`), Queue (`&#x2630;`), and Settings (`&#x2699;`).
 
-- **3.2: Update Pane Logic for Mobile** `[TODO]`
-  - In `static/js/ui.js`, modify `openSecondaryPane()` and `closeSecondaryPane()` to be screen-aware.
-  - Use `window.matchMedia()` to check if the mobile media query is active.
-  - If mobile is active, instead of creating/destroying the element, these functions will toggle the `.mobile-pane-visible` class to trigger the slide-up/slide-down animation.
+- **3.2: Implement Responsive CSS with Media Queries** `[DONE]`
+  - In `static/css/layout.css`, add a media query for mobile screen sizes (e.g., `@media (max-width: 768px)`).
+  - **Mobile Layout Adjustments (Inside Media Query):**
+    - Hide the desktop sidebar: `nav#subforum-nav { display: none; }`.
+    - Make the mobile top nav visible and style it:
+      - `#mobile-top-nav { display: flex; justify-content: space-between; align-items: center; position: fixed; top: 0; left: 0; width: 100%; height: 50px; /* Adjust height as needed */ z-index: 1000; }`
+      - Add styles for the logo and icons within the top bar.
+    - Repurpose `nav#subforum-nav` as the slide-down menu:
+      - Override its desktop styles to be a full-screen overlay: `display: flex; position: fixed; top: 0; left: 0; width: 100%; height: 100vh; transform: translateX(-100%); transition: transform 0.3s ease-in-out; z-index: 999;`.
+      - Create a modifier class `.mobile-menu-visible { transform: translateX(0); }`.
+    - Style the primary pane to take up the full width: `#primary-pane { width: 100%; }`.
+  - **Secondary Pane "Bottom Sheet" CSS (Inside Media Query):**
+    - Override desktop styles: `#secondary-pane { position: fixed; bottom: 0; left: 0; width: 100%; height: 75%; /* Adjust height */ transform: translateY(100%); transition: transform 0.3s ease-in-out; border-left: none; border-top: 1px solid var(--post-border); }`.
+    - Create a class for the "peeking" state: `.mobile-pane-peek { transform: translateY(calc(100% - 60px)); /* 60px 'peek' height */ }`.
+    - Create a class for the fully visible state: `.mobile-pane-visible { transform: translateY(0); }`.
 
-- **3.3: Mobile Testing** `[TODO]`
-  - Using browser developer tools, switch to a mobile device view.
-  - Verify that opening content in the secondary pane causes it to slide up from the bottom as an overlay.
-  - Verify that closing it causes it to slide back down.
+- **3.3: Update JavaScript Logic for Mobile Interactivity** `[DONE]`
+  - In `static/js/ui.js`, add a helper function: `const isMobile = () => window.matchMedia("(max-width: 768px)").matches;`.
+  - **Implement Mobile Menu Toggle:**
+    - Create a new function `toggleMobileMenu()`.
+    - This function will toggle the `.mobile-menu-visible` class on the `nav#subforum-nav` element.
+    - In `main.js`, attach an event listener to the `#mobile-menu-btn` to call this new function.
+  - **Update Pane Logic to be Screen-Aware:**
+    - Modify `openSecondaryPane()`:
+      - Add a check: `if (isMobile()) { ... } else { ... }`.
+      - **Mobile Logic:** Instead of adding `.tripane-active`, it should create the `#secondary-pane` if it doesn't exist, and then toggle the `.mobile-pane-peek` class to show the initial bottom bar. The pane's header should get a new event listener to toggle between `.mobile-pane-peek` and `.mobile-pane-visible`.
+      - **Desktop Logic:** Keep the existing behavior.
+    - Modify `closeSecondaryPane()`:
+      - Add a check: `if (isMobile()) { ... } else { ... }`.
+      - **Mobile Logic:** Remove both `.mobile-pane-peek` and `.mobile-pane-visible` classes to hide the pane. The DOM element can be kept for reuse.
+      - **Desktop Logic:** Keep the existing behavior of removing the element and the `.tripane-active` class.
+
+- **3.4: Mobile Experience Testing** `[DONE]`
+  - Using browser developer tools, switch to a mobile device viewport.
+  - **Top Navigation:**
+    - Verify the desktop sidebar is hidden and the new fixed top navigation bar is displayed correctly with the logo, icons, and status indicator.
+    - Click the hamburger icon to verify the main navigation menu slides in from the side, and clicking a link or a close button hides it.
+  - **Secondary Pane Workflow:**
+    - Verify that opening content in the secondary pane causes it to first appear as a "peeking" bar at the bottom.
+    - Verify that tapping/clicking the peeking bar causes it to expand into the full "bottom sheet" overlay.
+    - Verify that closing the pane (e.g., via a close button) causes it to slide back down and out of view.
+
 
 ---
 
-### Phase 4: UI Modernization
+### Phase 4: UI Modernization & Flat Design Implementation
 
-**Goal:** Implement the new visual styles for buttons and add theme-switching capabilities.
+**Goal:** Transition the application from a gradient-based, skeuomorphic design to a modern, flat aesthetic. This involves creating a clear visual hierarchy for interactive elements, redesigning core navigation components, and ensuring a consistent style across the UI.
 
-- **4.1: Redefine Component Styles** `[TODO]`
-  - In `static/css/components.css`, rewrite the CSS for buttons to match the new design language (rounded corners, gradients for primary, outlines for secondary, etc.).
-  - Review and update other components like input fields and modals for consistency.
+- **4.1: Adopt a Flat Design Philosophy** `[TODO]`
+  - **Principle:** Eliminate gradients and heavy shadows in favor of solid colors, clean lines, and meaningful use of space.
+  - **Action:** In `static/css/components.css`, remove `linear-gradient` backgrounds and `box-shadow` properties from the base `button` style.
 
-- **4.2: Define Color Themes** `[TODO]`
-  - In `static/css/base.css`, define the full set of CSS variables for the "Silvery" and "High-Contrast Black" themes under modifier classes (e.g., `body.theme-silvery`, `body.theme-hc-black`).
+- **4.2: Implement New Button Hierarchy** `[TODO]`
+  - **Primary Actions** (e.g., "Create Topic", "Save"): Style with a solid, high-contrast background color to draw user attention.
+    - Create a `.button-primary` class.
+  - **Secondary Actions** (e.g., "Cancel", "Back"): Style with a transparent background and a colored border (outline style).
+    - Create a `.button-secondary` class.
+  - **Tertiary/Icon-Only Actions** (e.g., "Open in new pane"): Style with no background or border by default. A subtle background should appear on hover to indicate the clickable area.
+    - Create a `.button-icon` or similar utility class.
 
-- **4.3: Implement Theme Switcher** `[TODO]`
+- **4.3: Redesign Main Navigation** `[TODO]`
+  - **Goal:** Convert the heavy navigation buttons into a lighter, "tab-like" list.
+  - **HTML Change:** In `templates/index.html`, replace the `<button>` elements for "Edit Schedules", "Settings", and "Queue" with a `<ul>` containing `<li>` and `<a>` tags.
+  - **CSS Change:** In `static/css/layout.css`, style the new navigation list to be clean and scannable.
+  - **Active State:** Implement a style for the active navigation link (e.g., a persistent background color and a contrasting left border) to clearly show the user's current location. This will require JavaScript in `ui.js` to toggle an `.active` class.
+
+- **4.4: Redesign Contextual Actions** `[TODO]`
+  - **Goal:** Make the "Open in new pane" action a subtle, icon-only button.
+  - **JS Change:** In `static/js/forum.js`, modify the element creation from `<button>` to a `<span>` or `<i>` with a specific class (e.g., `topic-action-icon`).
+  - **CSS Change:** In `static/css/forum.css`, use Flexbox on the parent `<li>` to position the icon to the right (`justify-content: space-between`). Style the icon to be minimal, with a background appearing only on hover.
+
+- **4.5: Update Other Components for Consistency** `[TODO]`
+  - Review and update input fields, textareas, and modals to align with the new flat design language.
+  - Focus on clean borders, consistent corner-rounding, and clear focus states.
+
+- **4.6: Define Color Themes** `[TODO]`
+  - In `static/css/base.css`, define the full set of CSS variables for the "Silvery" and "High-Contrast Black" themes under modifier classes (e.g., `body.theme-silvery`, `body.theme-hc-black`). This should now include variables for the new primary and secondary action colors.
+
+- **4.7: Implement Theme Switcher** `[TODO]`
   - In the settings page/modal, add a dropdown or set of buttons to select a theme.
   - In `static/js/settings.js`, add logic to handle theme selection. This will involve changing a class on the `<body>` element and saving the user's preference to local storage and the backend.
 
-- **4.4: Style Testing** `[TODO]`
-  - Verify all buttons and components reflect the new design.
-  - Test the theme switcher and ensure all colors update correctly across the entire application for all three themes.
+- **4.8: Style Testing** `[TODO]`
+  - Verify all buttons and components reflect the new design hierarchy.
+  - Test the theme switcher and ensure all colors update correctly across the entire application.
+  - Confirm the new navigation and contextual actions are functional and visually polished.
 
 ---
 

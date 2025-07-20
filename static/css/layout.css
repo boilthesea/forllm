@@ -123,3 +123,142 @@ section {
     box-shadow: -2px 0 5px rgba(0,0,0,0.1);
     overflow-y: auto;
 }
+
+/* Hide mobile nav by default */
+#mobile-top-nav {
+    display: none;
+}
+
+/* Phase 3: Mobile Responsive Styles */
+@media (max-width: 768px) {
+    /* Hide desktop sidebar and repurpose as slide-in menu */
+    nav#subforum-nav {
+        display: flex; /* Keep it as a flex container for content alignment */
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100vh;
+        transform: translateX(-100%);
+        transition: transform 0.3s ease-in-out;
+        z-index: 999;
+        /* Override sticky positioning from desktop */
+        position: fixed; 
+    }
+
+    nav#subforum-nav.mobile-menu-visible {
+        transform: translateX(0);
+    }
+
+    /* Show and style mobile top nav */
+    #mobile-top-nav {
+        display: flex;
+        justify-content: space-between;
+        gap: 1rem; /* Add some gap between elements */
+        align-items: center;
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 50px; /* As per plan */
+        background: var(--nav-bg);
+        border-bottom: 1px solid var(--post-border);
+        padding: 0 1rem;
+        z-index: 1000;
+    }
+
+    #mobile-menu-btn {
+        background: none;
+        border: none;
+        cursor: pointer;
+        padding: 0;
+        display: flex; /* Use flex to center the logo content */
+        align-items: center;
+        justify-content: center;
+    }
+
+    .mobile-logo {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 2px;
+    }
+
+    .logo-bar {
+        height: 3px;
+        width: 100%;
+        min-width: 40px; /* Give the logo a minimum width */
+        background-color: var(--text-color);
+    }
+
+    .logo-text-container {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        line-height: 1;
+    }
+
+    .logo-text {
+        font-weight: bold;
+        color: var(--text-color);
+        font-size: 0.8rem;
+    }
+
+    .mobile-nav-icons {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+    }
+
+    /* Ensure the logo and status indicator don't grow, but the icons container does, pushing it to the right */
+    #mobile-top-nav > #mobile-menu-btn {
+        flex-shrink: 0;
+    }
+    #mobile-top-nav > .processing-status-indicator-container {
+        flex-shrink: 0;
+    }
+    #mobile-top-nav > .mobile-nav-icons {
+        flex-grow: 1;
+        justify-content: flex-end;
+    }
+
+    .mobile-nav-icons button {
+        background: none;
+        border: none;
+        color: var(--text-color);
+        font-size: 1.5rem;
+        cursor: pointer;
+    }
+
+    /* Adjust main content for fixed header */
+    main {
+        padding-top: 60px; /* 50px nav height + 10px gap */
+    }
+
+    #primary-pane {
+        width: 100%;
+        max-width: 100%; /* Override desktop max-width */
+    }
+
+    /* Secondary Pane "Bottom Sheet" Styles */
+    #secondary-pane {
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        width: 100%;
+        height: 75%;
+        transform: translateY(100%);
+        transition: transform 0.3s ease-in-out;
+        border-left: none;
+        border-top: 1px solid var(--post-border);
+        z-index: 1001; /* Above top nav */
+    }
+
+    #secondary-pane.mobile-pane-peek {
+        transform: translateY(calc(100% - 60px)); /* 60px 'peek' height */
+    }
+
+    #secondary-pane.mobile-pane-visible {
+        transform: translateY(0);
+    }
+}

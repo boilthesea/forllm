@@ -28,7 +28,7 @@ import {
 
 import { loadQueueData } from './queue.js';
 
-import { showSection, lastVisibleSectionId, togglePrimaryPaneExpansion } from './ui.js';
+import { showSection, lastVisibleSectionId, togglePrimaryPaneExpansion, toggleMobileMenu, isMobile } from './ui.js';
 
 import {
     addSubforumBtn,
@@ -47,8 +47,11 @@ import {
     exitQueueBtn,
     activityPageSection, // Added
     exitActivityBtn,     // Added
-    subforumList, 
-    scheduleModal
+    subforumList,
+    scheduleModal,
+    mobileScheduleBtn,
+    mobileQueueBtn,
+    mobileSettingsBtn
 } from './dom.js';
 
 // Import loadActivityData for the exit button, though ui.js handles calling it on showSection
@@ -75,7 +78,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (submitReplyBtn) submitReplyBtn.addEventListener('click', submitReply);
     if (cancelReplyBtn) cancelReplyBtn.addEventListener('click', hideReplyForm);
 
-    // Navigation Buttons
+    // Page Navigation Buttons
     if (backToSubforumsBtn) {
         backToSubforumsBtn.addEventListener('click', (e) => {
             e.preventDefault();
@@ -103,17 +106,18 @@ document.addEventListener('DOMContentLoaded', () => {
         primaryPaneToggleBtn.addEventListener('click', togglePrimaryPaneExpansion);
     }
 
-    // Schedule Modal Listeners
-    if (editScheduleBtn) {
-        editScheduleBtn.addEventListener('click', async () => {
-            // scheduleError.textContent = ""; // Error handling moved to schedule.js
-            // statusDot.classList.remove('status-error'); // Status updates moved to schedule.js
-            // statusDot.classList.add('status-loading');
-            // statusIndicatorContainer.title = 'Schedule status: Loading...';
-            await loadSchedules(); // Load current schedules into modal before showing
-            if (scheduleModal) scheduleModal.style.display = 'block';
-        });
+    const mobileMenuBtn = document.getElementById('mobile-menu-btn');
+    if (mobileMenuBtn) {
+        mobileMenuBtn.addEventListener('click', toggleMobileMenu);
     }
+
+    // Schedule Modal Listeners
+    const openScheduleModal = async () => {
+        await loadSchedules();
+        if (scheduleModal) scheduleModal.style.display = 'block';
+    };
+    if (editScheduleBtn) editScheduleBtn.addEventListener('click', openScheduleModal);
+    if (mobileScheduleBtn) mobileScheduleBtn.addEventListener('click', openScheduleModal);
 
     if (scheduleCloseBtn && scheduleModal) { // Ensure both exist
         scheduleCloseBtn.addEventListener('click', () => {
@@ -125,12 +129,12 @@ document.addEventListener('DOMContentLoaded', () => {
     if (saveSchedulesBtn) saveSchedulesBtn.addEventListener('click', saveSchedules);
 
     // Settings Page Listeners
-    if (settingsBtn) {
-        settingsBtn.addEventListener('click', () => {
-            renderSettingsPage(); // Ensure content is created
-            showSection('settings-page-section');
-        });
-    }
+    const openSettingsPage = () => {
+        renderSettingsPage();
+        showSection('settings-page-section');
+    };
+    if (settingsBtn) settingsBtn.addEventListener('click', openSettingsPage);
+    if (mobileSettingsBtn) mobileSettingsBtn.addEventListener('click', openSettingsPage);
 
     if (exitSettingsBtn) {
         exitSettingsBtn.addEventListener('click', () => {
@@ -139,12 +143,12 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // Queue Page Listeners
-    if (queueBtn) {
-        queueBtn.addEventListener('click', () => {
-            showSection('queue-page-section');
-            loadQueueData(); // Load data when section is shown
-        });
-    }
+    const openQueuePage = () => {
+        showSection('queue-page-section');
+        loadQueueData();
+    };
+    if (queueBtn) queueBtn.addEventListener('click', openQueuePage);
+    if (mobileQueueBtn) mobileQueueBtn.addEventListener('click', openQueuePage);
 
     if (exitQueueBtn) {
         exitQueueBtn.addEventListener('click', () => {

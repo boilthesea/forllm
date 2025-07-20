@@ -156,13 +156,38 @@
     </div>
     <!-- End Full Prompt Modal -->
 
+    <!-- Mobile Top Navigation -->
+    <nav id="mobile-top-nav">
+        <button id="mobile-menu-btn" title="Toggle Menu">
+            <div class="mobile-logo">
+                <div class="logo-bar"></div>
+                <div class="logo-text-container">
+                    <span class="logo-text">FOR</span>
+                    <span class="logo-text">LLM</span>
+                </div>
+                <div class="logo-bar"></div>
+            </div>
+        </button>
+        <div id="processing-status-indicator-container" class="processing-status-indicator-container" title="Schedule status: Loading...">
+            <div class="status-dot-background">
+                 <div id="processing-status-dot" class="status-dot status-loading"></div>
+            </div>
+        </div>
+        <div class="mobile-nav-icons">
+            <button id="mobile-schedule-btn" title="Schedule">&#x1F552;</button>
+            <button id="mobile-queue-btn" title="Queue">&#x2630;</button>
+            <button id="mobile-settings-btn" title="Settings">&#x2699;</button>
+        </div>
+    </nav>
+    <!-- End Mobile Top Navigation -->
+
     <main>
         <nav id="subforum-nav">
             <div style="display: flex; justify-content: space-between; align-items: flex-start;">
                 <h1 style="margin-top: 0;">FORLLM</h1>
-                <div id="processing-status-indicator-container" title="Schedule status: Loading...">
+                <div id="processing-status-indicator-container-desktop" class="processing-status-indicator-container" title="Schedule status: Loading...">
                     <div class="status-dot-background">
-                         <div id="processing-status-dot" class="status-dot status-loading"></div>
+                         <div id="processing-status-dot-desktop" class="status-dot status-loading"></div>
                     </div>
                 </div>
             </div>

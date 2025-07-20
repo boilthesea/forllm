@@ -17,7 +17,7 @@ import {
     replyContentInput,
     settingsPageContent // Needed for link security check in postList event listener
 } from './dom.js';
-import { showSection, showLinkWarningPopup, openSecondaryPane } from './ui.js';
+import { showSection, showLinkWarningPopup, openSecondaryPane, isMobile, toggleMobileMenu } from './ui.js';
 import { newTopicEditor, replyEditor } from './editor.js'; // Import editor instances
 
 // --- State Variables ---
@@ -37,6 +37,8 @@ let nextStagedAttachmentId = 0; // Counter for unique IDs for staged attachments
 
 // --- Rendering Functions ---
 
+import { subforumNav } from './dom.js';
+
 export function renderSubforumList(subforums) {
     subforumList.innerHTML = '';
     if (!Array.isArray(subforums)) {
@@ -53,6 +55,10 @@ export function renderSubforumList(subforums) {
         a.addEventListener('click', (e) => {
             e.preventDefault();
             loadTopics(subforum.subforum_id, subforum.name);
+            // If on mobile and the menu is open, close it
+            if (isMobile() && subforumNav.classList.contains('mobile-menu-visible')) {
+                toggleMobileMenu();
+            }
         });
         li.appendChild(a);
 
