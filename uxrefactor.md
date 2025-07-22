@@ -230,10 +230,10 @@ To track progress, update the status of each substep from `[TODO]` to `[WIP]` (W
 
 **Goal:** Review the implementation and update project documentation.
 
-- **6.1: Code Review & Refinement** `[TODO]`
+- **6.1: Code Review & Refinement** `[DONE]`
   - Perform a full review of all new HTML, CSS, and JavaScript.
   - Add comments where necessary, ensure code is clean and consistent, and remove any temporary testing code.
 
-- **6.2: Update `blueprint.md`** `[TODO]`
+- **6.2: Update `blueprint.md`** `[DONE]`
   - Edit the `blueprint.md` file to document the new UI architecture.
   - Describe the three-column layout, the pane management system, and the content routing logic. This will serve as the new source of truth for the application's frontend structure.

@@ -222,7 +222,9 @@ export function openSecondaryPane(htmlContent, title = 'Details') {
         }
 
     } else {
-        // Desktop logic: use tripane view
+        // Desktop logic: Activate tripane view.
+        // This implementation expands the primary pane to fill the remaining space
+        // when the secondary pane is opened, creating a side-by-side view.
         if (primaryPane && !primaryPane.classList.contains('primary-pane-expanded')) {
             primaryPane.classList.add('primary-pane-expanded');
             if (mainElement) {
@@ -243,11 +245,11 @@ export function closeSecondaryPane() {
         secondaryPane.classList.remove('mobile-pane-peek');
         secondaryPane.classList.remove('mobile-pane-visible');
     } else {
-        // Desktop logic: remove the element and the tripane class
+        // Desktop logic: remove the secondary pane element and deactivate the tripane layout.
         secondaryPane.remove();
         mainContainer.classList.remove('tripane-active');
 
-        // Also contract the primary pane
+        // Contract the primary pane back to its default centered state.
         if (primaryPane && primaryPane.classList.contains('primary-pane-expanded')) {
             primaryPane.classList.remove('primary-pane-expanded');
             if (mainElement) {
