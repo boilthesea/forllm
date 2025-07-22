@@ -97,10 +97,7 @@ input[type="button"]:active {
 }
 
 /* Exit buttons for new sections */
-.exit-section-btn {
-    margin-bottom: 1rem;
-    /* Uses general button styling */
-}
+/* .exit-section-btn is now handled by .pane-header-controls */
 
 input[type="text"], textarea, select /* Style select dropdown too */ {
     width: calc(100% - 22px); /* Account for padding/border */

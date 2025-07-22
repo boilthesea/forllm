@@ -145,6 +145,28 @@ section {
     padding: 0; /* Remove padding from sections if the pane has it */
     background: transparent; /* Make section background transparent */
 }
+.pane-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1rem; /* Space below the header */
+    border-bottom: 1px solid var(--post-border);
+    padding-bottom: 0.75rem;
+}
+
+.pane-header h2 {
+    margin: 0; /* Remove default margins from h2 */
+}
+
+.pane-header-controls {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem; /* Space between buttons */
+}
+
+.pane-header-controls .button-icon {
+    margin: 0; /* Reset any default margins */
+}
 
 #secondary-pane {
     /* Styles for the dynamically created secondary pane */

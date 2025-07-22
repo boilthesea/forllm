@@ -221,9 +221,11 @@
                 <section id="topic-list-section" style="display: none;">
                     <div class="pane-header">
                         <h2 id="current-subforum-name"></h2>
-                        <button id="primary-pane-toggle-btn" class="pane-control-btn" title="Toggle Expansion">&#x2194;</button> <!-- Expand/Contract Arrow -->
+                        <div class="pane-header-controls">
+                            <button id="back-to-subforums-btn" class="button-icon" title="Back to Subforums">< Exit</button>
+                            <button id="primary-pane-toggle-btn" class="pane-control-btn button-icon" title="Toggle Expansion">&#x2194;</button> <!-- Expand/Contract Arrow -->
+                        </div>
                     </div>
-                    <button id="back-to-subforums-btn">< Exit</button>
                     <h3>Topics</h3>
                     <ul id="topic-list">
                         <!-- Topics will be loaded here -->
@@ -257,8 +259,12 @@
                 </section>
 
                 <section id="topic-view-section" style="display: none;">
-                    <h2 id="current-topic-title"></h2>
-                     <button id="back-to-topics-btn">< Back to Topics</button>
+                    <div class="pane-header">
+                        <h2 id="current-topic-title"></h2>
+                        <div class="pane-header-controls">
+                            <button id="back-to-topics-btn" class="button-icon" title="Back to Topics">< Back to Topics</button>
+                        </div>
+                    </div>
                     <h3>Posts</h3>
                     <div id="post-list">
                         <!-- Posts will be loaded here in a threaded view -->
@@ -303,16 +309,24 @@
                 </section>
 
                 <section id="settings-page-section" style="display: none;">
-                    <h2>Settings</h2>
-                    <button id="exit-settings-btn" class="exit-section-btn">< Exit</button>
+                    <div class="pane-header">
+                        <h2>Settings</h2>
+                        <div class="pane-header-controls">
+                            <button id="exit-settings-btn" class="exit-section-btn button-icon" title="Exit Settings">< Exit</button>
+                        </div>
+                    </div>
                     <div id="settings-page-content">
                         <!-- Settings content will be loaded here by JS -->
                     </div>
                 </section>
 
                 <section id="queue-page-section" style="display: none;">
-                    <h2>Queue</h2>
-                    <button id="exit-queue-btn" class="exit-section-btn">< Exit</button>
+                    <div class="pane-header">
+                        <h2>Queue</h2>
+                        <div class="pane-header-controls">
+                            <button id="exit-queue-btn" class="exit-section-btn button-icon" title="Exit Queue">< Exit</button>
+                        </div>
+                    </div>
                     <div id="queue-page-content">
                         <!-- Queue content will be loaded here by JS -->
                     </div>
