@@ -223,8 +223,11 @@ export function openSecondaryPane(htmlContent, title = 'Details') {
 
     } else {
         // Desktop logic: use tripane view
-        if (primaryPane && primaryPane.classList.contains('primary-pane-expanded')) {
-            primaryPane.classList.remove('primary-pane-expanded');
+        if (primaryPane && !primaryPane.classList.contains('primary-pane-expanded')) {
+            primaryPane.classList.add('primary-pane-expanded');
+            if (mainElement) {
+                mainElement.classList.add('pane-expanded-mode');
+            }
         }
         mainContainer.classList.add('tripane-active');
     }
@@ -243,6 +246,14 @@ export function closeSecondaryPane() {
         // Desktop logic: remove the element and the tripane class
         secondaryPane.remove();
         mainContainer.classList.remove('tripane-active');
+
+        // Also contract the primary pane
+        if (primaryPane && primaryPane.classList.contains('primary-pane-expanded')) {
+            primaryPane.classList.remove('primary-pane-expanded');
+            if (mainElement) {
+                mainElement.classList.remove('pane-expanded-mode');
+            }
+        }
     }
 }
 
