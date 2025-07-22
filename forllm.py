@@ -1,12 +1,11 @@
 import os
 import threading
-import os
-import threading
+import argparse
 from flask import Flask
 
 # Import functionalities from the new forllm_server package
-from forllm_server.config import DATABASE, UPLOAD_FOLDER # Import UPLOAD_FOLDER
-from forllm_server.database import init_db, close_db
+from forllm_server.config import DATABASE, UPLOAD_FOLDER
+from forllm_server.database import init_db, close_db, update_setting
 from forllm_server.llm_queue import llm_worker
 
 # Import Blueprints
@@ -40,8 +39,24 @@ app.register_blueprint(utility_bp) # Added for utility routes
 def teardown_db(error):
     close_db(error)
 
+# --- Helper Functions ---
+def reset_theme_to_default():
+    """Resets the theme setting in the database to the default."""
+    with app.app_context():
+        print("Resetting theme to default 'theme-silvery'...")
+        update_setting('theme', 'theme-silvery')
+        print("Theme has been reset.")
+
 # --- Main Execution ---
 if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description="Run the forllm server.")
+    parser.add_argument('--reset-theme', action='store_true', help="Reset the application theme to the default 'silvery' and exit.")
+    args = parser.parse_args()
+
+    if args.reset_theme:
+        reset_theme_to_default()
+        exit()
+        
     # Create upload folder if it doesn't exist
     try:
         os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)

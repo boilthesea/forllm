@@ -128,23 +128,23 @@ li {
 }
 
 .queue-status.status-pending {
-    background-color: #f39c12; /* Orange */
+    background-color: var(--status-pending-bg);
 }
 
 .queue-status.status-processing {
-    background-color: #3498db; /* Blue */
+    background-color: var(--status-processing-bg);
 }
 
 .queue-status.status-complete {
-    background-color: #2ecc71; /* Green */
+    background-color: var(--status-complete-bg);
 }
 
 .queue-status.status-error {
-    background-color: #e74c3c; /* Red */
+    background-color: var(--status-error-bg);
 }
 
 .queue-status.status-unknown {
-    background-color: #95a5a6; /* Gray */
+    background-color: var(--status-unknown-bg);
 }
 
 /* --- Attachment Styles --- */
@@ -248,16 +248,16 @@ input[type="file"]::file-selector-button:hover {
 .delete-attachment-btn {
     padding: 0.3rem 0.6rem;
     font-size: 0.85em;
-    background-color: var(--btn-danger-bg, #e74c3c); /* Kept explicit red as it's semantic */
-    color: var(--btn-danger-text, white);
+    background-color: var(--button-danger-bg);
+    color: var(--button-danger-text);
     border: none;
     border-radius: 3px;
     cursor: pointer;
-    flex-shrink: 0; 
+    flex-shrink: 0;
 }
 
 .delete-attachment-btn:hover {
-    background-color: var(--btn-danger-hover-bg, #c0392b); /* Kept explicit red */
+    background-color: var(--button-danger-hover-bg);
 }
 
 /* --- Staged Attachment Styles --- */
@@ -361,8 +361,8 @@ input[type="file"]::file-selector-button:hover {
 
 /* --- Rendered Persona Tag in Post Content --- */
 .persona-tag {
-    background-color: var(--accent-bg-light, #e0eafc); /* Light blue/purple */
-    color: var(--accent-text-dark, #3367d6);       /* Darker blue text */
+    background-color: var(--persona-tag-bg);
+    color: var(--persona-tag-text);
     padding: 2px 8px;
     border-radius: 12px; /* More pill-shaped */
     font-size: 0.85em;

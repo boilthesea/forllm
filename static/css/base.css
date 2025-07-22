@@ -24,8 +24,9 @@ body, body.theme-silvery {
     --llm-response-bg: #e6f7ff;
     --llm-response-border: #91d5ff;
     --llm-meta-color: #0050b3;
-    --link-color: #007bff;
+    --link-color: #1abc9c;
     --input-bg: #ffffff;
+    --input-bg-darker: #f8f9fa;
     --input-border: #ced4da;
     --input-text: #495057;
     --input-focus-border: #80bdff;
@@ -36,22 +37,57 @@ body, body.theme-silvery {
     --close-btn-color: #6c757d;
     --close-btn-hover-color: #000;
     --schedule-display-color: #6c757d;
+    --schedule-bg-color: #f9f9f9; /* Lighter background for schedule display */
+
+    /* Nav Variables */
+    --nav-text-color: #333;
+    --nav-hover-bg: #e0f7f4;
+    --nav-hover-text-color: #000;
+    --nav-active-bg: #1abc9c;
+    --nav-active-text-color: #fff;
+    --nav-subtitle-color: #6c757d;
 
     /* Button Variables */
-    --button-bg: #6c757d;
-    --button-hover-bg: #5a6268;
-    --button-active-bg: #545b62;
-    --button-primary-bg: #007bff;
+    --button-bg: #e0f7f4;
+    --button-hover-bg: #1abc9c;
+    --button-active-bg: #1abc9c;
+    --button-primary-bg: #1abc9c;
     --button-primary-text: #fff;
-    --button-primary-border: #007bff;
-    --button-primary-hover-bg: #0069d9;
-    --button-secondary-text: #007bff;
-    --button-secondary-border: #007bff;
+    --button-primary-border: #1abc9c;
+    --button-primary-hover-bg: #000;
+    --button-secondary-text: #1abc9c;
+    --button-secondary-border: #1abc9c;
     --button-secondary-hover-bg: rgba(0, 123, 255, 0.1);
-    --button-secondary-hover-border: #0056b3;
+    --button-secondary-hover-border: #000;
     --icon-button-color: #6c757d;
     --icon-button-hover-bg: #e9ecef;
     --icon-button-hover-color: #000;
+    
+    /* Phase 5 Theme Creator Variables */
+    --status-pending-bg: #f39c12;
+    --status-processing-bg: #3498db;
+    --status-complete-bg: #1abc9c;
+    --status-error-bg: #e74c3c;
+    --status-unknown-bg: #95a5a6;
+    --settings-nav-active-bg: #e0f7f4;
+    --settings-nav-inactive-color: #000000;
+    --settings-nav-active-color: #16a085;
+    --settings-nav-hover-bg: #f4f4f4;
+    --settings-nav-hover-color: #1abc9c;
+    --status-indicator-active-bg: #1abc9c;
+    --status-indicator-inactive-bg: #e74c3c;
+    --status-indicator-loading-bg: #f39c12;
+    --status-indicator-error-bg: #d35400;
+    --persona-tag-bg: #e0eafc;
+    --persona-tag-text: #1abc9c;
+    --button-danger-bg: #e74c3c;
+    --button-danger-text: #fff;
+    --button-danger-hover-bg: #c0392b;
+    --button-success-bg: #1abc9c;
+    --button-success-text: #fff;
+    --button-success-hover-bg: #1abc9c;
+    --notification-badge-bg: #ff3b30;
+    --error-text-color: #e74c3c;
 }
 
 /* --- Theme: High-Contrast Black --- */
@@ -64,13 +100,14 @@ body.theme-hc-black {
     --post-border: #4d4d4d;
     --post-meta-color: #a0a0a0;
     --llm-response-bg: #1c2b33;
-    --llm-response-border: #00aaff;
-    --llm-meta-color: #00aaff;
-    --link-color: #00aaff;
+    --llm-response-border: #1abc9c;
+    --llm-meta-color: #1abc9c;
+    --link-color: #1abc9c;
     --input-bg: #242424;
+    --input-bg-darker: #1c1c1c;
     --input-border: #4d4d4d;
     --input-text: #f0f0f0;
-    --input-focus-border: #00aaff;
+    --input-focus-border: #1abc9c;
     --input-focus-shadow: rgba(0, 170, 255, 0.3);
     --modal-bg: #242424;
     --modal-border: #4d4d4d;
@@ -78,22 +115,57 @@ body.theme-hc-black {
     --close-btn-color: #a0a0a0;
     --close-btn-hover-color: #ffffff;
     --schedule-display-color: #a0a0a0;
+    --schedule-bg-color: #000000;
+
+    /* Nav Variables */
+    --nav-text-color: #f0f0f0;
+    --nav-hover-bg: #3d3d3d;
+    --nav-hover-text-color: #ffffff;
+    --nav-active-bg: #1abc9c;
+    --nav-active-text-color: #000;
+    --nav-subtitle-color: #a0a0a0;
 
     /* Button Variables */
     --button-bg: #3d3d3d;
-    --button-hover-bg: #525252;
-    --button-active-bg: #666666;
-    --button-primary-bg: #00aaff;
+    --button-hover-bg: #1abc9c;
+    --button-active-bg: #000000;
+    --button-primary-bg: #1abc9c;
     --button-primary-text: #000;
-    --button-primary-border: #00aaff;
-    --button-primary-hover-bg: #33bbff;
-    --button-secondary-text: #00aaff;
-    --button-secondary-border: #00aaff;
+    --button-primary-border: #1abc9c;
+    --button-primary-hover-bg: #02a786;
+    --button-secondary-text: #1abc9c;
+    --button-secondary-border: #1abc9c;
     --button-secondary-hover-bg: rgba(0, 170, 255, 0.15);
-    --button-secondary-hover-border: #33bbff;
+    --button-secondary-hover-border: #02a786;
     --icon-button-color: #a0a0a0;
     --icon-button-hover-bg: #3d3d3d;
     --icon-button-hover-color: #ffffff;
+
+    /* Phase 5 Theme Creator Variables */
+    --status-pending-bg: #f39c12;
+    --status-processing-bg: #3498db;
+    --status-complete-bg: #1abc9c;
+    --status-error-bg: #e74c3c;
+    --status-unknown-bg: #95a5a6;
+    --settings-nav-active-bg: #222;
+    --settings-nav-inactive-color: #eee;
+    --settings-nav-active-color: #1abc9c;
+    --settings-nav-hover-bg: #333;
+    --settings-nav-hover-color: #1abc9c;
+    --status-indicator-active-bg: #1abc9c;
+    --status-indicator-inactive-bg: #e74c3c;
+    --status-indicator-loading-bg: #f39c12;
+    --status-indicator-error-bg: #d35400;
+    --persona-tag-bg: #3a3a5a;
+    --persona-tag-text: #a8bbf8;
+    --button-danger-bg: #c0392b;
+    --button-danger-text: #fff;
+    --button-danger-hover-bg: #a03021;
+    --button-success-bg: #1abc9c;
+    --button-success-text: #fff;
+    --button-success-hover-bg: #1abc9c;
+    --notification-badge-bg: #ff3b30;
+    --error-text-color: #ff4d4d;
 }
 
 /* header styling can be direct if specific dark mode overrides are not needed */

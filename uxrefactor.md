@@ -183,14 +183,57 @@ To track progress, update the status of each substep from `[TODO]` to `[WIP]` (W
 
 ---
 
-### Phase 5: Finalization & Documentation
+### Phase 5: Interactive Theme Creator
+
+**Goal:** Develop a client-side, movable modal that allows for real-time visual theme creation and customization. This tool will enable rapid iteration on color schemes and provide an easy way to export new themes for inclusion in `base.css`.
+
+- **5.1: Theme Core CSS Variables** `[DONE]`
+  - **Action:** In `static/css/base.css`, identified all hardcoded colors in other CSS files (`forum.css`, `components.css`, `status-indicator.css`, `modals.css`) and converted them to CSS variables.
+  - **New Variables Created:**
+    - `--status-pending-bg`, `--status-processing-bg`, `--status-complete-bg`, `--status-error-bg`, `--status-unknown-bg`
+    - `--settings-nav-active-bg`, `--settings-nav-active-color`, `--settings-nav-hover-bg`, `--settings-nav-hover-color`
+    - `--status-indicator-active-bg`, `--status-indicator-inactive-bg`, `--status-indicator-loading-bg`, `--status-indicator-error-bg`
+    - `--persona-tag-bg`, `--persona-tag-text`
+    - `--button-danger-bg`, `--button-danger-text`, `--button-danger-hover-bg`
+    - `--button-success-bg`, `--button-success-text`, `--button-success-hover-bg`
+    - `--notification-badge-bg`, `--error-text-color`
+  - **Action:** Replaced the hardcoded values in the respective CSS files with these new `var()` functions.
+
+- **5.2: Theme Creator Modal Scaffolding** `[DONE]`
+  - **Action:** In `static/js/ui.js`, created the `openThemeCreator()` function to generate the HTML for the theme creator modal.
+  - **Action:** In `static/css/modals.css`, added a new, dedicated set of styles for `#theme-creator-modal`.
+  - **Critical:** Styles use hardcoded, high-contrast values to ensure the modal is always usable.
+  - **Action:** Implemented `makeDraggable()` in `static/js/ui.js` to make the modal draggable by its header.
+  - **Action:** Implemented a `--reset-theme` command-line argument in `forllm.py` to reset the theme to default in the database.
+
+- **5.3: Live Theming Engine** `[DONE]`
+  - **Action:** Created a new `static/js/theming.js` module.
+  - **Action:** Implemented `getCssVariablesForTheme()` to introspect all CSS variables from the active theme stylesheet.
+  - **Action:** Implemented `populateThemeCreator()` to dynamically create controls for each variable.
+  - **Action:** Implemented `addLiveUpdateListeners()` to update CSS variables on the `<body>` element's inline style for a live preview when a color is changed.
+
+- **5.4: UI Controls & Features** `[DONE]`
+  - **Action:** The native `<input type="color">` serves as the integrated color picker.
+  - **Action:** Implemented the "In-Use Colors" palette via `updateInUseColors()`, which scans current colors and displays them as clickable swatches.
+  - **Action:** Created the "Revert Changes" button, which clears inline styles from the `<body>` and re-initializes the creator to restore stylesheet defaults.
+  - **Action:** Created the "Export to Clipboard" button, which generates a `.theme-custom` CSS ruleset with the current values and copies it to the clipboard.
+
+- **5.5: Integration** `[DONE]`
+  - **Action:** Added a "Theme Creator" button to the settings page in `static/js/settings.js`.
+  - **Action:** Added an event listener to the new button to call `initThemeCreator()` from `theming.js`.
+  - **Action:** Imported `theming.js` into `templates/index.html`.
+  - **Action:** Updated this document to reflect completion.
+
+---
+
+### Phase 6: Finalization & Documentation
 
 **Goal:** Review the implementation and update project documentation.
 
-- **5.1: Code Review & Refinement** `[TODO]`
+- **6.1: Code Review & Refinement** `[TODO]`
   - Perform a full review of all new HTML, CSS, and JavaScript.
   - Add comments where necessary, ensure code is clean and consistent, and remove any temporary testing code.
 
-- **5.2: Update `blueprint.md`** `[TODO]`
+- **6.2: Update `blueprint.md`** `[TODO]`
   - Edit the `blueprint.md` file to document the new UI architecture.
   - Describe the three-column layout, the pane management system, and the content routing logic. This will serve as the new source of truth for the application's frontend structure.

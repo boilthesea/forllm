@@ -6,7 +6,8 @@ import {
     settingsBtn, // Needed for event listener in main.js
     exitSettingsBtn // Needed for event listener in main.js
 } from './dom.js';
-import { applyDarkMode, showSection, lastVisibleSectionId } from './ui.js'; // Need applyDarkMode, showSection, and lastVisibleSectionId
+import { applyDarkMode, showSection, lastVisibleSectionId, openThemeCreator } from './ui.js'; // Need applyDarkMode, showSection, and lastVisibleSectionId
+import { initThemeCreator } from './theming.js';
 
 // --- State Variables ---
 export let currentSettings = { // Store loaded settings
@@ -91,6 +92,7 @@ export function renderSettingsPage() {
             <option value="theme-silvery">Silvery</option>
             <option value="theme-hc-black">High-Contrast Black</option>
         </select>
+        <button id="open-theme-creator-btn" class="button-secondary" style="margin-left: 10px;">Theme Creator</button>
     </div>
     <button id="save-settings-btn">Save Settings</button>
     <p id="settings-error" class="error-message"></p>
@@ -239,6 +241,19 @@ export function renderSettingsPage() {
                 const saveButton = container.querySelector('#save-settings-btn');
                 if (saveButton) {
                     saveButton.addEventListener('click', saveSettings);
+                }
+
+                const themeCreatorBtn = container.querySelector('#open-theme-creator-btn');
+                if (themeCreatorBtn) {
+                    themeCreatorBtn.addEventListener('click', () => {
+                        // Check if the theming module is loaded, then open the creator
+                        if (typeof initThemeCreator === 'function') {
+                            initThemeCreator();
+                        } else {
+                            console.error("Theme creator is not available.");
+                            alert("Error: Theme creator module could not be loaded.");
+                        }
+                    });
                 }
             }
         };

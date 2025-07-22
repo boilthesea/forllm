@@ -246,6 +246,94 @@ export function closeSecondaryPane() {
     }
 }
 
+/**
+ * Creates and displays the theme creator modal.
+ * The modal is draggable and its contents will be populated by the theming engine.
+ */
+export function openThemeCreator() {
+    // Prevent creating multiple modals
+    if (document.getElementById('theme-creator-modal')) {
+        return;
+    }
+
+    const modal = document.createElement('div');
+    modal.id = 'theme-creator-modal';
+    modal.className = 'modal';
+    modal.style.display = 'block';
+
+    modal.innerHTML = `
+        <div class="modal-content">
+            <div id="theme-creator-header">
+                <h4>Theme Creator</h4>
+                <span class="close-btn" title="Close">&times;</span>
+            </div>
+            <div id="theme-creator-content">
+                <p>Loading theme variables...</p>
+            </div>
+            <div id="theme-creator-footer" style="padding: 10px 15px; border-top: 1px solid #ccc; background-color: #f0f0f0;">
+                <!-- Buttons will be added here by the theming engine -->
+            </div>
+        </div>
+    `;
+
+    document.body.appendChild(modal);
+
+    const modalContent = modal.querySelector('.modal-content');
+    const header = modal.querySelector('#theme-creator-header');
+    const closeBtn = modal.querySelector('.close-btn');
+
+    closeBtn.onclick = () => modal.remove();
+    modal.onclick = (e) => {
+        if (e.target === modal) {
+            modal.remove();
+        }
+    };
+
+    // Make the modal draggable
+    makeDraggable(modalContent, header);
+}
+
+/**
+ * Makes an element draggable by its header.
+ * @param {HTMLElement} element - The element to make draggable.
+ * @param {HTMLElement} header - The header element that acts as the drag handle.
+ */
+function makeDraggable(element, header) {
+    let pos1 = 0, pos2 = 0, pos3 = 0, pos4 = 0;
+
+    header.onmousedown = dragMouseDown;
+
+    function dragMouseDown(e) {
+        e = e || window.event;
+        e.preventDefault();
+        // Get the mouse cursor position at startup:
+        pos3 = e.clientX;
+        pos4 = e.clientY;
+        document.onmouseup = closeDragElement;
+        // Call a function whenever the cursor moves:
+        document.onmousemove = elementDrag;
+    }
+
+    function elementDrag(e) {
+        e = e || window.event;
+        e.preventDefault();
+        // Calculate the new cursor position:
+        pos1 = pos3 - e.clientX;
+        pos2 = pos4 - e.clientY;
+        pos3 = e.clientX;
+        pos4 = e.clientY;
+        // Set the element's new position:
+        element.style.top = (element.offsetTop - pos2) + "px";
+        element.style.left = (element.offsetLeft - pos1) + "px";
+    }
+
+    function closeDragElement() {
+        // Stop moving when mouse button is released:
+        document.onmouseup = null;
+        document.onmousemove = null;
+    }
+}
+
 export function setActiveNav(clickedElement) {
     // Find all nav links in the main navigation
     const navLinks = document.querySelectorAll('#main-nav ul li a');

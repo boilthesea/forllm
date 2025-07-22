@@ -18,19 +18,19 @@
 }
 
 .status-dot.status-active {
-    background-color: #2ecc71; /* Green */
+    background-color: var(--status-indicator-active-bg);
 }
 
 .status-dot.status-inactive {
-    background-color: #e74c3c; /* Red */
+    background-color: var(--status-indicator-inactive-bg);
 }
 
 .status-dot.status-loading {
-    background-color: #f39c12; /* Orange for loading/unknown */
+    background-color: var(--status-indicator-loading-bg);
     animation: pulse 1.5s infinite ease-in-out;
 }
 .status-dot.status-error {
-    background-color: #d35400; /* Darker orange/brown for error */
+    background-color: var(--status-indicator-error-bg);
 }
 
 

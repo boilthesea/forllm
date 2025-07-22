@@ -1315,6 +1315,24 @@ def set_global_default_persona_id(persona_id):
             db.rollback()
         return False
 
+def update_setting(key, value):
+    """
+    Updates a specific setting in the settings table.
+    Uses INSERT OR REPLACE to handle both new and existing settings.
+    """
+    db = get_db()
+    try:
+        db.execute(
+            "INSERT OR REPLACE INTO settings (setting_key, setting_value) VALUES (?, ?)",
+            (key, value),
+        )
+        db.commit()
+        return True
+    except sqlite3.Error as e:
+        print(f"Database error in update_setting for key {key}: {e}")
+        db.rollback()
+        return False
+
 def get_effective_persona_for_subforum(subforum_id, override_persona_id=None):
     """
     Returns the persona row to use for a subforum, following override > subforum default > global default > fallback.

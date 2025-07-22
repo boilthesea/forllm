@@ -80,20 +80,20 @@ input[type="button"]:active {
 /* Re-styling for delete/add to ensure they stand out if desired */
 .schedule-row .delete-schedule-btn,
 #add-schedule-row-btn {
-    background: #c0392b; /* Darker Red */
-    color: white;
-    border: 1px solid #a03021;
+    background-color: var(--button-danger-bg);
+    color: var(--button-danger-text);
+    border: 1px solid var(--button-danger-hover-bg);
 }
 .schedule-row .delete-schedule-btn:hover {
-    background: #a03021;
+    background-color: var(--button-danger-hover-bg);
 }
 #add-schedule-row-btn {
-    background: #27ae60; /* Darker Green */
-    color: white;
-    border: 1px solid #1f8a4c;
+    background-color: var(--button-success-bg);
+    color: var(--button-success-text);
+    border: 1px solid var(--button-success-hover-bg);
 }
 #add-schedule-row-btn:hover {
-    background: #1f8a4c;
+    background-color: var(--button-success-hover-bg);
 }
 
 /* Exit buttons for new sections */
@@ -191,10 +191,10 @@ input:checked + .slider:before {
 #add-schedule-row-btn {
     padding: 0.3rem 0.6rem;
     font-size: 0.9em;
-    background-color: #c0392b; /* Darker Red */
+    background-color: var(--button-danger-bg);
 }
 #add-schedule-row-btn {
-    background-color: #27ae60; /* Darker Green */
+    background-color: var(--button-success-bg);
     margin-top: 0.5rem;
     margin-bottom: 1rem;
     display: block; /* Make it full width or center it */
@@ -203,10 +203,10 @@ input:checked + .slider:before {
 }
 
 .schedule-row .delete-schedule-btn:hover {
-    background-color: #a03021;
+    background-color: var(--button-danger-hover-bg);
 }
 #add-schedule-row-btn:hover {
-    background-color: #1f8a4c;
+    background-color: var(--button-success-hover-bg);
 }
 
 #save-schedules-btn { /* Style for the main save button */
@@ -261,36 +261,36 @@ input:checked + .slider:before {
     border: none;
     border-radius: 6px 6px 0 0;
     font-weight: 500;
-    color: #eee; /* Was #333 */
+    color: var(--settings-nav-inactive-color);
     transition: background 0.2s, color 0.2s;
     margin-bottom: -2px;
     border-bottom: 2px solid transparent; /* Always reserve space for border */
 }
 
 #settings-nav li.active {
-    background: #222; /* Was #e0f7f4 */
-    color: #1abc9c;
-    border-bottom: 2px solid #1abc9c;
+    background: var(--settings-nav-active-bg);
+    color: var(--settings-nav-active-color);
+    border-bottom: 2px solid var(--settings-nav-active-color);
     font-weight: 700;
-    box-shadow: 0 -2px 8px rgba(26,188,156,0.12); /* Was rgba(26,188,156,0.08) */
+    box-shadow: 0 -2px 8px rgba(26,188,156,0.12); /* This shadow is subtle and might not need a variable yet */
     z-index: 1;
 }
 
 /* --- Increased specificity for settings tab active state --- */
 /* This rule is identical to the one above, can be removed if not needed for override purposes */
 #settings-nav > ul > li.active {
-    background: #222; /* Was #e0f7f4 */
-    color: #1abc9c;
-    border-bottom: 2px solid #1abc9c;
+    background: var(--settings-nav-active-bg);
+    color: var(--settings-nav-active-color);
+    border-bottom: 2px solid var(--settings-nav-active-color);
     font-weight: 700;
-    box-shadow: 0 -2px 8px rgba(26,188,156,0.12); /* Was rgba(26,188,156,0.08) */
+    box-shadow: 0 -2px 8px rgba(26,188,156,0.12);
     z-index: 1;
 }
 
 #settings-nav li:hover {
-    background: #333; /* Was #f4f4f4 */
-    color: #1abc9c;
-    border-bottom: 2px solid #1abc9c;
+    background: var(--settings-nav-hover-bg);
+    color: var(--settings-nav-hover-color);
+    border-bottom: 2px solid var(--settings-nav-hover-color);
 }
 
 /* nav#subforum-nav button styling is inherited from general button styles */
@@ -299,7 +299,7 @@ input:checked + .slider:before {
     display: inline-block;
     width: 10px;
     height: 10px;
-    background-color: #ff3b30; /* A noticeable red color */
+    background-color: var(--notification-badge-bg);
     border-radius: 50%;
     margin-left: 8px;
     vertical-align: middle; /* Or adjust as needed */

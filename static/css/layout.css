@@ -33,7 +33,7 @@ nav#subforum-nav h1 {
 
 #site-subtitle {
     font-size: 0.65em; /* Reduced font size */
-    color: #bbb; /* Was #666, assuming this should be lighter on dark bg */
+    color: var(--nav-subtitle-color); /* this should be lighter on dark bg */
     margin-top: -0.5em;
     margin-bottom: 1.5em;
 }
@@ -54,20 +54,20 @@ nav#subforum-nav h1 {
     display: block;
     padding: 0.75rem 1.25rem;
     text-decoration: none;
-    color: var(--nav-text-color, #ccc);
+    color: var(--nav-text-color);
     border-radius: 6px;
     transition: background-color 0.2s ease, color 0.2s ease;
     font-weight: 500;
 }
 
 #main-nav li a:hover {
-    background-color: var(--nav-hover-bg, #333);
-    color: var(--nav-hover-text-color, #fff);
+    background-color: var(--nav-hover-bg);
+    color: var(--nav-hover-text-color);
 }
 
 #main-nav li a.active {
-    background-color: var(--nav-active-bg, #007bff);
-    color: var(--nav-active-text-color, #fff);
+    background-color: var(--nav-active-bg);
+    color: var(--nav-active-text-color);
     font-weight: 700;
 }
 
