@@ -1,10 +1,11 @@
 /* --- Status Indicator (Relocated) --- */
-#processing-status-indicator-container {
-    padding: 5px;
+.processing-status-indicator-container {
+    padding: 4px; /* Adjusted padding to account for border */
     border-radius: 50%;
     background-color: rgba(128, 128, 128, 0.7);
     box-shadow: 0 0 8px rgba(0,0,0,0.3);
     cursor: default;
+    border: 1px solid var(--post-border); /* Added border to visually separate from background */
     /* Removed position: absolute and related properties */
 }
 
