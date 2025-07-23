@@ -123,6 +123,10 @@ textarea {
     resize: vertical;
 }
 
+input[type="checkbox"] {
+    accent-color: var(--accent-color);
+}
+
 /* Toggle Switch for Enabled/Disabled */
 .toggle-switch {
     position: relative;

@@ -31,7 +31,8 @@ body, body.theme-silvery {
     --input-border: #ced4da;
     --input-text: #495057;
     --input-focus-border: #e0f7f4; /* #80bdff; */
-    --input-focus-shadow: rgba(26, 188, 152, 0.25); 
+    --input-focus-shadow: rgba(26, 188, 152, 0.25);
+    --accent-color: #1abc9c;
     --modal-bg: #ffffff;
     --modal-border: #dee2e6;
     --modal-text: #333;
@@ -82,9 +83,9 @@ body, body.theme-silvery {
     --status-indicator-error-bg: #d35400;
     --persona-tag-bg: #e0eafc;
     --persona-tag-text: #1abc9c;
-    --button-danger-bg: #e74c3c;
+    --button-danger-bg:  #d24d57;
     --button-danger-text: #fff;
-    --button-danger-hover-bg: #c0392b;
+    --button-danger-hover-bg: #b9404d;
     --button-success-bg: #1abc9c;
     --button-success-text: #fff;
     --button-success-hover-bg: #1abc9c;
@@ -112,6 +113,7 @@ body.theme-hc-black {
     --input-text: #f0f0f0;
     --input-focus-border: #1abc9c;
     --input-focus-shadow: rgba(26, 188, 152, 0.3);
+    --accent-color: #1abc9c;
     --modal-bg: #242424;
     --modal-border: #4d4d4d;
     --modal-text: #f0f0f0;
@@ -162,9 +164,9 @@ body.theme-hc-black {
     --status-indicator-error-bg: #d35400;
     --persona-tag-bg: #3a3a5a;
     --persona-tag-text: #a8bbf8;
-    --button-danger-bg: #c0392b;
+    --button-danger-bg:  #d24d57;
     --button-danger-text: #fff;
-    --button-danger-hover-bg: #a03021;
+    --button-danger-hover-bg: #b9404d;
     --button-success-bg: #1abc9c;
     --button-success-text: #fff;
     --button-success-hover-bg: #1abc9c;
