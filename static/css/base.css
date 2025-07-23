@@ -19,6 +19,7 @@ body, body.theme-silvery {
     --nav-bg: #e9ecef;
     --section-bg: #ffffff;
     --post-bg: #ffffff;
+    --post-bg-lighter: #ffffff;
     --post-border: #dee2e6;
     --post-meta-color: #6c757d;
     --llm-response-bg: #e6f7ff;
@@ -29,8 +30,8 @@ body, body.theme-silvery {
     --input-bg-darker: #f8f9fa;
     --input-border: #ced4da;
     --input-text: #495057;
-    --input-focus-border: #80bdff;
-    --input-focus-shadow: rgba(0, 123, 255, 0.25);
+    --input-focus-border: #e0f7f4; /* #80bdff; */
+    --input-focus-shadow: rgba(26, 188, 152, 0.25); 
     --modal-bg: #ffffff;
     --modal-border: #dee2e6;
     --modal-text: #333;
@@ -62,6 +63,7 @@ body, body.theme-silvery {
     --icon-button-color: #6c757d;
     --icon-button-hover-bg: #e9ecef;
     --icon-button-hover-color: #000;
+    --toggle-checked-bg: #1abc9c;
     
     /* Phase 5 Theme Creator Variables */
     --status-pending-bg: #f39c12;
@@ -97,6 +99,7 @@ body.theme-hc-black {
     --nav-bg: #1a1a1a;
     --section-bg: #1a1a1a;
     --post-bg: #242424;
+    --post-bg-lighter: #2c2c2c;
     --post-border: #4d4d4d;
     --post-meta-color: #a0a0a0;
     --llm-response-bg: #1c2b33;
@@ -108,7 +111,7 @@ body.theme-hc-black {
     --input-border: #4d4d4d;
     --input-text: #f0f0f0;
     --input-focus-border: #1abc9c;
-    --input-focus-shadow: rgba(0, 170, 255, 0.3);
+    --input-focus-shadow: rgba(26, 188, 152, 0.3);
     --modal-bg: #242424;
     --modal-border: #4d4d4d;
     --modal-text: #f0f0f0;
@@ -140,6 +143,7 @@ body.theme-hc-black {
     --icon-button-color: #a0a0a0;
     --icon-button-hover-bg: #3d3d3d;
     --icon-button-hover-color: #ffffff;
+    --toggle-checked-bg: #1abc9c;
 
     /* Phase 5 Theme Creator Variables */
     --status-pending-bg: #f39c12;

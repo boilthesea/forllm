@@ -91,7 +91,7 @@ function createScheduleRowElement(schedule = {}) {
 
     const deleteButton = document.createElement('button');
     deleteButton.className = 'delete-schedule-btn';
-    deleteButton.textContent = 'Delete';
+    deleteButton.textContent = '🗑';
     deleteButton.title = 'Delete this schedule';
     if (!scheduleId) {
          deleteButton.textContent = 'Remove';

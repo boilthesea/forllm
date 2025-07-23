@@ -698,7 +698,7 @@ function renderAttachmentItem(attachmentData, containerElement, postId) {
 
     const deleteButton = document.createElement('button');
     deleteButton.className = 'delete-attachment-btn btn btn-danger btn-small';
-    deleteButton.textContent = 'Delete';
+    deleteButton.textContent = '🗑';
     deleteButton.addEventListener('click', async () => {
         if (confirm(`Are you sure you want to delete attachment "${attachmentData.filename}"?`)) {
             try {

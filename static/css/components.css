@@ -163,11 +163,11 @@ textarea {
 }
 
 input:checked + .slider {
-    background-color: var(--button-bg, #5dade2); /* Was #2196F3 */
+    background-color: var(--toggle-checked-bg, #1abc9c);
 }
 
 input:focus + .slider {
-    box-shadow: 0 0 1px var(--button-bg, #5dade2); /* Was #2196F3 */
+    box-shadow: 0 0 1px var(--toggle-checked-bg, #1abc9c);
 }
 
 input:checked + .slider:before {
