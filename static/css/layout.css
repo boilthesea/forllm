@@ -86,7 +86,7 @@ hr.sidebar-separator {
 
 section {
     /* flex: 3; /* This is no longer a direct flex item of main */
-    background: var(--nav-bg); /* Was #fff */
+    background: var(--section-bg); /* Was #fff */
     padding: 1rem;
     border-radius: 5px;
     box-shadow: 0 0 5px rgba(255,255,255,0.1); /* Was rgba(0,0,0,0.1) */
@@ -179,11 +179,17 @@ section {
     /* Styles for the dynamically created secondary pane */
     flex-basis: 0;
     flex-grow: 1;
-    background: var(--section-bg);
-    padding: 1.5rem;
+    background: transparent;
     border-left: 1px solid var(--post-border);
     box-shadow: -2px 0 5px rgba(0,0,0,0.1);
+    display: flex;
+    flex-direction: column;
+}
+
+#secondary-pane .pane-content {
+    padding: 1.5rem;
     overflow-y: auto;
+    flex-grow: 1;
 }
 
 /* Hide mobile nav by default */
