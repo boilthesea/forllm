@@ -8,6 +8,7 @@ import {
 } from './dom.js';
 import { applyDarkMode, showSection, lastVisibleSectionId, openThemeCreator } from './ui.js'; // Need applyDarkMode, showSection, and lastVisibleSectionId
 import { initThemeCreator } from './theming.js';
+import { initializeTomSelect } from './ui-helpers.js';
 
 // --- State Variables ---
 export let currentSettings = { // Store loaded settings
@@ -221,7 +222,13 @@ export function renderSettingsPage() {
 
                 const themeSelect = container.querySelector('#theme-select');
                 if (themeSelect) {
-                    themeSelect.value = currentSettings.theme;
+                    const tsInstance = initializeTomSelect(themeSelect, {
+                        create: false,
+                        controlInput: null // Disables text input completely
+                    });
+                    if (tsInstance) {
+                        tsInstance.setValue(currentSettings.theme, true); // Silently set value on init
+                    }
                 }
 
                 // Populate new chat history settings fields
@@ -276,24 +283,53 @@ function renderModelOptions(modelSelectElement, models, selectedModel) {
         console.error("renderModelOptions called with no modelSelectElement");
         return;
     }
-    modelSelectElement.innerHTML = '';
-    if (!Array.isArray(models) || models.length === 0) {
-        const option = document.createElement('option');
-        option.value = '';
-        option.textContent = 'No models found or error loading.';
-        option.disabled = true;
-        modelSelectElement.appendChild(option);
+    // Keep track of the TomSelect instance
+    const tsInstance = modelSelectElement.tomselect;
+    if (tsInstance) {
+        tsInstance.clearOptions(); // Start fresh
+    } else {
+        modelSelectElement.innerHTML = ''; // Fallback for non-TomSelect elements
+    }
+
+    if (!Array.isArray(models)) {
+        // If models isn't an array, do nothing further.
         return;
     }
 
     models.forEach(modelName => {
-        const option = document.createElement('option');
-        option.value = modelName;
-        option.textContent = modelName;
-        if (modelName === selectedModel) {
-            option.selected = true;
+        const option = {
+            value: modelName,
+            text: modelName
+        };
+        if (tsInstance) {
+            tsInstance.addOption(option);
+        } else {
+            const optionEl = document.createElement('option');
+            optionEl.value = modelName;
+            optionEl.textContent = modelName;
+            modelSelectElement.appendChild(optionEl);
         }
-        modelSelectElement.appendChild(option);
+    });
+
+    if (tsInstance) {
+        tsInstance.setValue(selectedModel, true); // Silently set value
+    } else {
+        modelSelectElement.value = selectedModel;
+    }
+}
+
+// This is the new, correct block that was missing from the previous attempt
+export function updateAndInitializeAllModelSelects(models, modelToSelect) {
+    document.querySelectorAll('#model-select').forEach(selectEl => {
+        // Initialize first if it doesn't exist
+        if (!selectEl.tomselect) {
+            initializeTomSelect(selectEl, {
+                create: false,
+                controlInput: null // Disables text input completely
+            });
+        }
+        // Now populate it
+        renderModelOptions(selectEl, models, modelToSelect);
     });
 }
 
@@ -362,9 +398,17 @@ export async function loadOllamaModels() {
     // } // REMOVED
 
 
-    // Set loading state
-    modelSelectElement.innerHTML = '<option value="">Loading models...</option>';
-    modelSelectElement.disabled = true;
+    // Set loading state for all instances
+    document.querySelectorAll('#model-select').forEach(el => {
+        const ts = el.tomselect || initializeTomSelect(el, { create: false, controlInput: null });
+        if (ts) {
+            ts.clear(); // Clear selected items
+            ts.clearOptions(); // Clear all options
+            ts.addOption({ value: '', text: 'Loading models...' });
+            ts.setValue('', true); // Select the loading message
+            ts.disable();
+        }
+    });
     if(settingsErrorElement) settingsErrorElement.textContent = ""; // Clear previous errors
 
     try {
@@ -397,7 +441,14 @@ export async function loadOllamaModels() {
         }
 
 
-        renderModelOptions(modelSelectElement, models, modelToSelect);
+        // Before adding new models, clear the placeholder
+        document.querySelectorAll('#model-select').forEach(el => {
+            if (el.tomselect) {
+                el.tomselect.clearOptions(); // Attempt to clear all
+                el.tomselect.removeOption('');  // Explicitly remove the placeholder
+            }
+        });
+        updateAndInitializeAllModelSelects(models, modelToSelect);
 
         // if (selectedOllamaModelDisplay) { // REMOVED
         //     selectedOllamaModelDisplay.textContent = modelToSelect || 'None'; // REMOVED
@@ -418,7 +469,7 @@ export async function loadOllamaModels() {
 
     } catch (error) {
         console.error("Error fetching Ollama models:", error);
-        renderModelOptions(modelSelectElement, currentSettings.selectedModel ? [currentSettings.selectedModel] : [], currentSettings.selectedModel);
+        updateAndInitializeAllModelSelects(currentSettings.selectedModel ? [currentSettings.selectedModel] : [], currentSettings.selectedModel);
         if(settingsErrorElement) settingsErrorElement.textContent = `Could not fetch models: ${error.message}`;
         // if (selectedOllamaModelDisplay) { // REMOVED
         //     selectedOllamaModelDisplay.textContent = currentSettings.selectedModel || 'Error'; // REMOVED
@@ -428,7 +479,12 @@ export async function loadOllamaModels() {
             await fetchAndDisplayModelContextWindow(currentSettings.selectedModel, false); // Explicitly false
         }
     } finally {
-         if (modelSelectElement) modelSelectElement.disabled = false;
+        // Re-enable all instances
+        document.querySelectorAll('#model-select').forEach(el => {
+            if (el.tomselect) {
+                el.tomselect.enable();
+            }
+        });
     }
 }
 
@@ -630,6 +686,13 @@ export async function saveSettings() {
 
         // Update UI (redundant if page isn't re-rendered, but good practice for consistency)
         applyTheme(currentSettings.theme);
+
+        // Explicitly update the TomSelect instance for the theme
+        const themeSelectElement = settingsPageContent.querySelector('#theme-select');
+        if (themeSelectElement && themeSelectElement.tomselect) {
+            themeSelectElement.tomselect.setValue(currentSettings.theme, true); // Silently update after save
+        }
+
         if(autoCheckToggleInput) autoCheckToggleInput.checked = currentSettings.autoCheckContextWindow; // New
         if(linkSecurityToggleInput) linkSecurityToggleInput.checked = currentSettings.llmLinkSecurity === 'true';
         if (contextWindowInput) contextWindowInput.value = currentSettings.default_llm_context_window;
@@ -638,15 +701,10 @@ export async function saveSettings() {
         if (chMaxPostsPerSiblingBranchInput) chMaxPostsPerSiblingBranchInput.value = currentSettings.ch_max_posts_per_sibling_branch;
         if (chPrimaryHistoryBudgetRatioInput) chPrimaryHistoryBudgetRatioInput.value = currentSettings.ch_primary_history_budget_ratio;
 
-        // Re-render model options to ensure the saved one is selected
-        // (though it should already be selected from the user's choice)
-        if (modelSelectElement) {
-            renderModelOptions(
-                modelSelectElement,
-                Array.from(modelSelectElement.options).map(opt => opt.value).filter(value => value !== ""), // Exclude "Loading..." or error options
-                currentSettings.selectedModel
-            );
-        }
+        // Instead of trying to re-render the options in place, which can corrupt
+        // the TomSelect instance, just re-trigger the full model loading process.
+        // This is more robust and ensures the dropdown is always in a correct state.
+        await loadOllamaModels();
 
         // Optionally provide feedback to the user
         // settingsErrorElement.textContent = "Settings saved successfully!";

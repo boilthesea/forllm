@@ -15,10 +15,13 @@ import {
     replyFormContainer,
     replyToPostIdSpan,
     replyContentInput,
-    settingsPageContent // Needed for link security check in postList event listener
+    settingsPageContent, // Needed for link security check in postList event listener
+    llmPersonaSelect,
+    subforumPersonasBar
 } from './dom.js';
 import { showSection, showLinkWarningPopup, openSecondaryPane, isMobile, toggleMobileMenu } from './ui.js';
 import { newTopicEditor, replyEditor } from './editor.js'; // Import editor instances
+import { initializeTomSelect } from './ui-helpers.js';
 
 // --- State Variables ---
 let currentSubforumId = null;
@@ -440,8 +443,23 @@ export async function loadSubforumPersonas(subforumId) {
     });
     if (personas.length > 0) {
         subforumPersonasBar.style.display = '';
-        llmPersonaSelect.value = currentPersonaId;
-        llmPersonaCurrentLabel.textContent = 'Current: ' + personas.find(p => p.persona_id == currentPersonaId)?.name;
+        const tsInstance = initializeTomSelect(llmPersonaSelect, {
+            create: false,
+            controlInput: null, // Disables text input completely
+            onChange: (value) => {
+                currentPersonaId = value;
+                const llmPersonaCurrentLabel = document.getElementById('llm-persona-current-label');
+                if (llmPersonaCurrentLabel) {
+                    const selectedPersona = personas.find(p => p.persona_id == value);
+                    llmPersonaCurrentLabel.textContent = 'Current: ' + (selectedPersona ? selectedPersona.name : 'None');
+                }
+            }
+        });
+        if (tsInstance) {
+            tsInstance.setValue(currentPersonaId, true); // Silently set value
+        }
+        const llmPersonaCurrentLabel = document.getElementById('llm-persona-current-label');
+        if(llmPersonaCurrentLabel) llmPersonaCurrentLabel.textContent = 'Current: ' + personas.find(p => p.persona_id == currentPersonaId)?.name;
     } else {
         subforumPersonasBar.style.display = 'none';
     }

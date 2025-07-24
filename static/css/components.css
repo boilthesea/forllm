@@ -224,6 +224,10 @@ input:checked + .slider:before {
     gap: 0.5rem;
 }
 
+.setting-item .ts-wrapper {
+    flex-grow: 1;
+}
+
 .setting-item label {
     flex-basis: 150px; /* Align labels */
     color: var(--text-color, #eee);
@@ -304,4 +308,41 @@ input:checked + .slider:before {
     border-radius: 50%;
     margin-left: 8px;
     vertical-align: middle; /* Or adjust as needed */
+}
+/* --- Tom Select Theme Overrides --- */
+
+.ts-control {
+    background-color: var(--input-bg);
+    border-color: var(--input-border);
+    color: var(--input-text);
+    border-radius: 4px;
+    padding: 8px 12px;
+    width: 100%;
+    box-sizing: border-box; /* Ensures padding doesn't add to the width */
+}
+
+.ts-control.focus {
+    border-color: var(--input-focus-border);
+    box-shadow: 0 0 0 0.2rem var(--input-focus-shadow);
+}
+
+.ts-dropdown {
+    background-color: var(--section-bg);
+    border-color: var(--modal-border);
+    color: var(--input-text);
+}
+
+.ts-dropdown .option {
+    padding: 8px 12px;
+}
+
+/* This is the key style for the selection highlight */
+.ts-dropdown .option.active,
+.ts-dropdown .option:hover {
+    background-color: var(--accent-color);
+    color: var(--button-primary-text); /* Use the primary button text color for contrast */
+}
+
+.ts-dropdown .create.active {
+    color: var(--button-primary-text);
 }

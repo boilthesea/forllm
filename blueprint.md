@@ -105,17 +105,18 @@ graph TD
 
 *   **`static/js/`** (Frontend JavaScript Modules):
     *   **`main.js`**: The main application entry point. Initializes the application, sets up global event listeners (like `DOMContentLoaded`, window events, periodic updates), and orchestrates the loading and interaction of other modules.
-    *   **`personas.js`**: Implements the frontend logic for managing personas, including CRUD operations, version history display, assignment to subforums, and global default persona management.
+    *   **`personas.js`**: Implements the frontend logic for managing personas, including CRUD operations, version history display, assignment to subforums, and global default persona management. Initializes Tom Select for the global default persona dropdown.
     *   **`api.js`**: Contains the `apiRequest` helper function and potentially other utilities for interacting with the backend API.
     *   **`dom.js`**: Centralizes references to key DOM elements used across different modules to avoid repeated `document.getElementById` calls.
+    *   **`ui-helpers.js`**: (NEW) Contains helper functions for common UI tasks, such as initializing custom dropdown components (Tom Select).
     *   **`ui.js`**: Handles general user interface logic. This now includes:
         *   Switching between different content sections (`showSection`).
         *   **Desktop Pane Management:** Logic for the three-pane layout (`openSecondaryPane`, `closeSecondaryPane`) and toggling the primary pane's width (`togglePrimaryPaneExpansion`).
         *   **Mobile UI Management:** Logic for the slide-in main menu (`toggleMobileMenu`) and the "bottom sheet" secondary pane, using `isMobile()` to apply screen-aware behavior.
         *   **Modal Management:** Creates the draggable Theme Creator modal (`openThemeCreator`, `makeDraggable`) and the LLM link warning popup.
-    *   **`forum.js`**: Encapsulates all logic related to the forum features. Includes the hook to call `ui.openSecondaryPane` when a user clicks the "open in new pane" icon on a topic.
+    *   **`forum.js`**: Encapsulates all logic related to the forum features. Includes the hook to call `ui.openSecondaryPane` when a user clicks the "open in new pane" icon on a topic. Initializes Tom Select for the persona override dropdown.
     *   **`schedule.js`**: Manages the scheduling functionality, including loading, rendering, and saving user-defined processing schedules, as well as displaying the next scheduled time and the current processor status.
-    *   **`settings.js`**: Deals with application-wide settings. Handles theme selection and includes the event listener to launch the Theme Creator via `theming.js`.
+    *   **`settings.js`**: Deals with application-wide settings. Handles theme selection and includes the event listener to launch the Theme Creator via `theming.js`. Initializes Tom Select for the model and theme selection dropdowns.
     *   **`theming.js`**: (NEW) Contains the client-side "live theming" engine. It introspects CSS variables from the current theme, dynamically builds the Theme Creator modal's UI, applies style changes in real-time for live preview, and handles exporting the generated CSS.
     *   **`queue.js`**: Manages the display of the LLM processing queue. Fetches and renders the list of queued tasks, showing a summary including the *total prompt tokens*. Clicking a queue item opens a modal displaying the full prompt content and a detailed, formatted token breakdown in a separate metadata pane within the modal.
     *   **`activity.js`**: Contains the frontend JavaScript logic for the Recent Activity Page, including fetching data from the activity API endpoints (recent topics, replies, personas) and rendering it into the respective panels on the activity page. Manages navigation from activity items to their respective content areas.
@@ -123,7 +124,7 @@ graph TD
 
 *   **`static/css/base.css`**: Contains fundamental styles, CSS variables for all themes (e.g., `theme-silvery`, `theme-hc-black`), typography, and resets.
 *   **`static/css/layout.css`**: Handles the main structural layout. Defines styles for the desktop sidebar, the primary and secondary panes, and the rules for the Tripane layout (`#main-container.tripane-active`). Also contains all media queries for the responsive mobile layout, including the mobile top nav and the "bottom sheet" styles for the secondary pane.
-*   **`static/css/components.css`**: Groups styles for reusable UI elements. Defines the new flat design button hierarchy (`.button-primary`, `.button-secondary`, `.button-icon`), form inputs, and the tab-like navigation styles used in the settings page.
+*   **`static/css/components.css`**: Groups styles for reusable UI elements. Defines the new flat design button hierarchy (`.button-primary`, `.button-secondary`, `.button-icon`), form inputs, and the tab-like navigation styles used in the settings page. Includes theme-aware overrides for the Tom Select dropdown library.
 *   **`static/css/modals.css`**: Contains styles for all modal windows. Includes specific, hardcoded styles for the Theme Creator modal to ensure it is always usable, regardless of the live theme being edited.
 *   **`static/css/forum.css`**: Styles specific to the forum content display, including the subtle, icon-only "open in new pane" button.
 *   **`static/css/markdown.css`**: Styles for rendering Markdown elements and Pygments syntax highlighting within posts.
@@ -267,7 +268,7 @@ graph TD
 *   **Progress Indicators:** [TODO] Basic visual feedback in the UI showing which requests are queued or actively being processed by the background worker.
 *   **Search Functionality:** [TODO] Implement basic text search across topics and posts.
 *   **Voting/Ranking (Optional):** [TODO] Simple up/down voting mechanism for posts/replies.
-*   **UI Polish:** [DONE] General improvements to CSS, layout, and responsiveness. Consider a lightweight CSS framework if needed.
+*   **UI Polish:** [DONE] General improvements to CSS, layout, and responsiveness. Replaced native dropdowns with the Tom Select library for theme-compliant, customizable select controls.
 *   **Tripane Layout & UI/UX Overhaul:** [DONE] A comprehensive user experience refactor.
     *   `[DONE] Implemented a flexible three-column ("Tripane") layout for desktop, allowing users to open topics in a secondary pane for side-by-side viewing.`
     *   `[DONE] Modernized the UI with a flat design, removing gradients and establishing a clear visual hierarchy for buttons and interactive elements.`

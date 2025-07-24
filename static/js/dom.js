@@ -28,6 +28,10 @@ export const replyContentInput = document.getElementById('reply-content');
 export const submitReplyBtn = document.getElementById('submit-reply-btn');
 export const cancelReplyBtn = document.getElementById('cancel-reply-btn');
 
+// Persona Elements
+export const llmPersonaSelect = document.getElementById('llm-persona-select');
+export const subforumPersonasBar = document.getElementById('subforum-personas-bar');
+
 // Schedule Elements
 export const scheduleDisplay = document.getElementById('schedule-display'); // For next schedule text
 export const editScheduleBtn = document.getElementById('edit-schedule-btn');

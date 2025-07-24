@@ -1,5 +1,6 @@
 // personas.js - Persona management UI logic
 import { apiRequest } from './api.js';
+import { initializeTomSelect } from './ui-helpers.js';
 
 // Debug helper function
 function debugLog(context, ...args) {
@@ -156,7 +157,13 @@ async function loadPersonasList(container) {
       });
       // Set current global default
       const globalDefault = await safeApiRequest(container, '/api/personas/global-default'); // Pass container
-      select.value = globalDefault.globalDefaultPersonaId;
+      const tsInstance = initializeTomSelect(select, {
+          create: false,
+          controlInput: null // Disables text input completely
+      });
+      if (tsInstance) {
+        tsInstance.setValue(globalDefault.globalDefaultPersonaId, true); // Silently set value
+      }
     }
   } catch (e) {
     listContainer.innerHTML = '<span style="color:red">Failed to load personas.</span>';
