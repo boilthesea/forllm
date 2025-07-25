@@ -22,7 +22,7 @@ let currentMentionState = {
 // --- EasyMDE Configuration ---
 const easyMDEConfigBase = {
     spellChecker: false,
-    status: ["lines", "words"],
+    // status is now handled in createEditorConfig
     toolbar: [
         "bold", "italic", "|",
         "heading-1", "heading-2", "heading-3", "|",
@@ -35,6 +35,23 @@ const easyMDEConfigBase = {
 
 export let newTopicEditor = null;
 export let replyEditor = null;
+
+function createEditorConfig(editorType) {
+    return {
+        ...easyMDEConfigBase,
+        status: [
+            "words",
+            "lines",
+            {
+                className: `token-summary-control ${editorType}-token-summary`,
+                defaultValue: (el) => {
+                    el.innerHTML = ` | <span class="toggle-button" title="Toggle Token Breakdown">[+]</span> Tokens: <span class="total-token-count ${editorType}-statusbar-token-count">~0</span>`;
+                },
+                onUpdate: () => {} // We update this manually via API calls
+            }
+        ]
+    };
+}
 
 function createPersonaSuggestionsUI() {
     if (!personaSuggestionsDiv) {
@@ -259,19 +276,17 @@ function initializeEditorPersonaTagging(editorInstance) {
 
 // Initialize editors
 if (newTopicContentInput) {
-    newTopicEditor = new EasyMDE({
-        ...easyMDEConfigBase,
-        element: newTopicContentInput
-    });
+    const config = createEditorConfig('new-topic');
+    config.element = newTopicContentInput;
+    newTopicEditor = new EasyMDE(config);
     initializeEditorPersonaTagging(newTopicEditor);
     initializeTokenBreakdownDisplay(newTopicEditor, 'new-topic');
 }
 
 if (replyContentInput) {
-     replyEditor = new EasyMDE({
-        ...easyMDEConfigBase,
-        element: replyContentInput
-    });
+    const config = createEditorConfig('reply');
+    config.element = replyContentInput;
+    replyEditor = new EasyMDE(config);
     initializeEditorPersonaTagging(replyEditor);
     initializeTokenBreakdownDisplay(replyEditor, 'reply');
 }
@@ -297,7 +312,6 @@ async function updateTokenBreakdown(editorInstance, editorType) {
         console.error(`Token breakdown container not found for ${editorType}`);
         return;
     }
-    container.style.display = 'block'; // Ensure it's visible
 
     const current_post_text = editorInstance.value();
     let selected_persona_id = null;
@@ -389,6 +403,15 @@ async function updateTokenBreakdown(editorInstance, editorType) {
         document.getElementById(`${editorType}-token-model-context-window`).textContent = data.model_context_window || "N/A";
         document.getElementById(`${editorType}-token-model-name`).textContent = data.model_name || "default";
 
+        // Update the token count in the status bar
+        const easyMDEContainer = editorInstance.element.parentElement;
+        if (easyMDEContainer) {
+            const statusBarTokenCount = easyMDEContainer.querySelector(`.${editorType}-statusbar-token-count`);
+            if (statusBarTokenCount) {
+                statusBarTokenCount.textContent = `~${data.total_estimated_tokens}`;
+            }
+        }
+
         // Update visual bar
         const visualBar = document.getElementById(`${editorType}-token-visual-bar`);
         let percentage = 0;
@@ -425,90 +448,138 @@ function initializeTokenBreakdownDisplay(editorInstance, editorType) {
         console.warn(`Token breakdown container not found for ${editorType}.`);
         return;
     }
-    breakdownContainer.style.display = 'block'; // Make it visible
 
-    // Debounced update function specific to this editor instance
-    const debouncedTokenBreakdownUpdate = debounce(() => {
-        updateTokenBreakdown(editorInstance, editorType);
-    }, 750); // 750ms debounce delay
-
-    // Listen for changes in the editor
-    editorInstance.codemirror.on('change', debouncedTokenBreakdownUpdate);
-
-    // Also listen for changes on persona selector and attachment input
-    const personaSelector = document.getElementById('llm-persona-select');
-    if (personaSelector) {
-        personaSelector.addEventListener('change', () => updateTokenBreakdown(editorInstance, editorType));
+    // The EasyMDEContainer is the parent of both the editor and the status bar.
+    const easyMDEContainer = editorInstance.element.parentElement;
+    if (!easyMDEContainer) {
+        console.error(`Could not find EasyMDEContainer for ${editorType}.`);
+        return;
     }
 
-    const attachmentInputId = editorType === 'new-topic' ? 'new-topic-attachment-input' : 'reply-attachment-input';
-    const attachmentInput = document.getElementById(attachmentInputId);
-    if (attachmentInput) {
-        attachmentInput.addEventListener('change', async () => {
-            // console.log(`Attachment change detected for ${editorType}`);
-            const files = attachmentInput.files;
-            let combinedText = "";
-            let filesHash = ""; // Simple hash: concat names and sizes
+    const setupEventListeners = (statusBar) => {
+        const tokenControl = statusBar.querySelector(`.${editorType}-token-summary`);
+        if (!tokenControl) {
+            console.error(`Token summary control not found in status bar for ${editorType}.`);
+            return;
+        }
 
-            if (files && files.length > 0) {
-                const textFilePromises = [];
-                const fileDetailsForHash = [];
+        // Add click listener to the control
+        tokenControl.addEventListener('click', (event) => {
+            event.stopPropagation(); // Prevent any other editor events from firing
+            const isExpanded = breakdownContainer.classList.toggle('expanded');
+            const toggleButton = tokenControl.querySelector('.toggle-button');
+            if (toggleButton) {
+                toggleButton.textContent = isExpanded ? '[-]' : '[+]';
+            }
+        });
 
-                const plainTextMimeTypes = [
-                    'text/plain', 'text/markdown', 'text/csv', 'application/json', 'application/xml',
-                    'text/html', 'text/css', 'text/javascript', 'application/javascript',
-                    'application/x-javascript', 'text/x-python', 'application/python',
-                    'application/x-python', 'text/x-java-source', 'text/x-csrc', 'text/x-c++src',
-                    'application/rtf', 'text/richtext', 'text/yaml', 'application/yaml', 'text/x-yaml',
-                    'application/x-yaml', 'text/toml', 'application/toml', 'application/ld+json',
-                    'text/calendar', 'text/vcard', 'text/sgml', 'application/sgml', 'text/tab-separated-values',
-                    'application/xhtml+xml', 'application/rss+xml', 'application/atom+xml', 'text/x-script.python'
-                ];
-                const plainTextExtensions = [
-                    '.txt', '.md', '.markdown', '.csv', '.json', '.xml', '.html', '.htm', '.css', '.js',
-                    '.py', '.pyw', '.java', '.c', '.cpp', '.h', '.hpp', '.rtf', '.yaml', '.yml',
-                    '.toml', '.ini', '.cfg', '.conf', '.log', '.text', '.tex', '.tsv', '.jsonld',
-                    '.ical', '.ics', '.vcf', '.vcard', '.sgml', '.sgm', '.xhtml', '.xht', '.rss', '.atom',
-                    '.sh', '.bash', '.ps1', '.bat', '.cmd'
-                ];
+        // Debounced update function specific to this editor instance
+        const debouncedTokenBreakdownUpdate = debounce(() => {
+            updateTokenBreakdown(editorInstance, editorType);
+        }, 750); // 750ms debounce delay
 
-                for (const file of files) {
-                    fileDetailsForHash.push(`${file.name}_${file.size}`);
-                    let isTextFile = false;
-                    if (plainTextMimeTypes.includes(file.type)) {
-                        isTextFile = true;
-                    } else if (file.type === "" || file.type === "application/octet-stream") {
-                        const fileNameLower = file.name.toLowerCase();
-                        for (const ext of plainTextExtensions) {
-                            if (fileNameLower.endsWith(ext)) {
-                                isTextFile = true;
-                                break;
+        // Listen for changes in the editor
+        editorInstance.codemirror.on('change', debouncedTokenBreakdownUpdate);
+
+        // Also listen for changes on persona selector and attachment input
+        const personaSelector = document.getElementById('llm-persona-select');
+        if (personaSelector) {
+            personaSelector.addEventListener('change', () => updateTokenBreakdown(editorInstance, editorType));
+        }
+
+        const attachmentInputId = editorType === 'new-topic' ? 'new-topic-attachment-input' : 'reply-attachment-input';
+        const attachmentInput = document.getElementById(attachmentInputId);
+        if (attachmentInput) {
+            attachmentInput.addEventListener('change', async () => {
+                const files = attachmentInput.files;
+                let combinedText = "";
+                let filesHash = ""; // Simple hash: concat names and sizes
+
+                if (files && files.length > 0) {
+                    const textFilePromises = [];
+                    const fileDetailsForHash = [];
+
+                    const plainTextMimeTypes = [
+                        'text/plain', 'text/markdown', 'text/csv', 'application/json', 'application/xml',
+                        'text/html', 'text/css', 'text/javascript', 'application/javascript',
+                        'application/x-javascript', 'text/x-python', 'application/python',
+                        'application/x-python', 'text/x-java-source', 'text/x-csrc', 'text/x-c++src',
+                        'application/rtf', 'text/richtext', 'text/yaml', 'application/yaml', 'text/x-yaml',
+                        'application/x-yaml', 'text/toml', 'application/toml', 'application/ld+json',
+                        'text/calendar', 'text/vcard', 'text/sgml', 'application/sgml', 'text/tab-separated-values',
+                        'application/xhtml+xml', 'application/rss+xml', 'application/atom+xml', 'text/x-script.python'
+                    ];
+                    const plainTextExtensions = [
+                        '.txt', '.md', '.markdown', '.csv', '.json', '.xml', '.html', '.htm', '.css', '.js',
+                        '.py', '.pyw', '.java', '.c', '.cpp', '.h', '.hpp', '.rtf', '.yaml', '.yml',
+                        '.toml', '.ini', '.cfg', '.conf', '.log', '.text', '.tex', '.tsv', '.jsonld',
+                        '.ical', '.ics', '.vcf', '.vcard', '.sgml', '.sgm', '.xhtml', '.xht', '.rss', '.atom',
+                        '.sh', '.bash', '.ps1', '.bat', '.cmd'
+                    ];
+
+                    for (const file of files) {
+                        fileDetailsForHash.push(`${file.name}_${file.size}`);
+                        let isTextFile = false;
+                        if (plainTextMimeTypes.includes(file.type)) {
+                            isTextFile = true;
+                        } else if (file.type === "" || file.type === "application/octet-stream") {
+                            const fileNameLower = file.name.toLowerCase();
+                            for (const ext of plainTextExtensions) {
+                                if (fileNameLower.endsWith(ext)) {
+                                    isTextFile = true;
+                                    break;
+                                }
                             }
                         }
-                    }
 
-                    if (isTextFile) {
-                        textFilePromises.push(file.text());
+                        if (isTextFile) {
+                            textFilePromises.push(file.text());
+                        }
+                    }
+                    try {
+                        const fileContents = await Promise.all(textFilePromises);
+                        combinedText = fileContents.join("\n\n---\n\n");
+                    } catch (error) {
+                        console.error("Error reading attachment file contents for caching:", error);
+                        combinedText = "[Error reading attachment contents]";
+                    }
+                    filesHash = fileDetailsForHash.join('|');
+                }
+
+                cachedAttachmentsContent[editorType] = { text: combinedText, filesHash: filesHash };
+                updateTokenBreakdown(editorInstance, editorType);
+            });
+        }
+
+        // Initial breakdown update, now that we know the UI is ready
+        updateTokenBreakdown(editorInstance, editorType);
+    };
+
+    // Use a MutationObserver to wait for the status bar to be added to the DOM.
+    const observer = new MutationObserver((mutationsList, obs) => {
+        for (const mutation of mutationsList) {
+            if (mutation.type === 'childList') {
+                for (const node of mutation.addedNodes) {
+                    // The status bar is an element with the class 'editor-statusbar'
+                    if (node.nodeType === Node.ELEMENT_NODE && node.classList.contains('editor-statusbar')) {
+                        // Found it! Now we can set up our event listeners.
+                        setupEventListeners(node);
+                        // We're done, so disconnect the observer.
+                        obs.disconnect();
+                        return;
                     }
                 }
-                try {
-                    const fileContents = await Promise.all(textFilePromises);
-                    combinedText = fileContents.join("\n\n---\n\n");
-                } catch (error) {
-                    console.error("Error reading attachment file contents for caching:", error);
-                    combinedText = "[Error reading attachment contents]";
-                }
-                filesHash = fileDetailsForHash.join('|');
             }
+        }
+    });
 
-            cachedAttachmentsContent[editorType] = { text: combinedText, filesHash: filesHash };
-            // console.log(`Cached attachments for ${editorType}:`, cachedAttachmentsContent[editorType]);
+    // Start observing the EasyMDE container for changes to its direct children.
+    observer.observe(easyMDEContainer, { childList: true, subtree: false });
 
-            updateTokenBreakdown(editorInstance, editorType);
-        });
+    // As a fallback, check if the status bar is already there (e.g., if the script runs late)
+    const existingStatusBar = easyMDEContainer.querySelector('.editor-statusbar');
+    if (existingStatusBar) {
+        setupEventListeners(existingStatusBar);
+        observer.disconnect();
     }
-
-
-    // Initial breakdown update
-    updateTokenBreakdown(editorInstance, editorType);
 }
