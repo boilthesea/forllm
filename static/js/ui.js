@@ -187,13 +187,15 @@ export function openSecondaryPane(htmlContent, title = 'Details') {
 
     // Always ensure the pane has the correct inner structure
     secondaryPane.innerHTML = `
-        <div class="pane-header">
-            <h2>${title}</h2>
-            <div class="pane-header-controls">
-                <button class="close-pane-btn button-icon" title="Close Pane">&times;</button>
+        <div class="pane-content">
+            <div class="pane-header">
+                <h2>${title}</h2>
+                <div class="pane-header-controls">
+                    <button class="close-pane-btn button-icon" title="Close Pane">&times;</button>
+                </div>
             </div>
+            ${htmlContent}
         </div>
-        <div class="pane-content">${htmlContent}</div>
     `;
 
     // Attach event listeners

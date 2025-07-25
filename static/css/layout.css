@@ -87,7 +87,7 @@ hr.sidebar-separator {
 section {
     /* flex: 3; /* This is no longer a direct flex item of main */
     background: var(--section-bg); /* Was #fff */
-    padding: 1rem;
+    padding: 1.5rem;
     border-radius: 5px;
     box-shadow: 0 0 5px rgba(255,255,255,0.1); /* Was rgba(0,0,0,0.1) */
 }
@@ -149,7 +149,7 @@ section {
 #primary-pane > section {
     box-shadow: none;
     border-radius: 0;
-    padding: 0; /* Remove padding from sections if the pane has it */
+    padding: 1.5rem; /* Remove padding from sections if the pane has it */
     background: transparent; /* Make section background transparent */
 }
 .pane-header {
