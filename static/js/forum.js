@@ -271,11 +271,16 @@ function renderPostNode(post, parentElement, depth) {
 
     const metaDiv = document.createElement('div');
     metaDiv.className = 'post-meta';
-    metaDiv.textContent = `Posted by ${post.username} on ${new Date(post.created_at).toLocaleString()}`;
+    
+    // If it's an LLM response and a persona_name is available, use it. Otherwise, fall back to username.
+    const displayName = (post.is_llm_response && post.persona_name) ? post.persona_name : post.username;
+    metaDiv.textContent = `Posted by ${displayName} on ${new Date(post.created_at).toLocaleString()}`;
+
     if (post.is_llm_response) {
         const llmMeta = document.createElement('span');
         llmMeta.className = 'llm-meta';
-        llmMeta.textContent = ` (LLM: ${post.llm_model_id} / Persona: ${post.llm_persona_id})`;
+        // Show the model and Persona ID for clarity, since the name is now the primary identifier.
+        llmMeta.textContent = ` (LLM: ${post.llm_model_id || 'default'} / Persona ID: ${post.llm_persona_id})`;
         metaDiv.appendChild(llmMeta);
     }
 
