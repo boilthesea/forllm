@@ -1,7 +1,7 @@
 // This file will manage the processing queue view.
 
 import { apiRequest } from './api.js';
-import { queuePageContent, fullPromptModal, fullPromptContent, fullPromptClose, fullPromptMetadataPane } from './dom.js'; // Added fullPromptMetadataPane
+import { queuePageContent, fullPromptModal, fullPromptContent, fullPromptClose, fullPromptMetadataPane, queuePaginationContainer } from './dom.js';
 
 // --- Helper function to escape HTML for displaying prompt content safely ---
 // Moved here to be accessible by other functions if needed, or can be kept local
@@ -191,22 +191,88 @@ async function showFullPromptModal(requestId, tokenBreakdownString) { // Added t
 
 
 // --- Queue Loading Function ---
-export async function loadQueueData() {
-    if (!queuePageContent) return; // Ensure element exists
+export async function loadQueueData(page = 1) {
+    if (!queuePageContent) return;
 
-    // Only show loading state if it's the initial load or explicitly requested
-    if (queuePageContent.innerHTML === '' || queuePageContent.innerHTML.includes('Failed to load queue')) {
-         queuePageContent.innerHTML = '<p>Loading queue...</p>'; // Show loading state
+    if (page === 1) {
+        queuePageContent.innerHTML = '<p>Loading queue...</p>';
     }
 
-
     try {
-        const queueData = await apiRequest('/api/queue'); // Fetch from the new endpoint
-        renderQueueList(queueData);
+        const data = await apiRequest(`/api/queue?page=${page}&per_page=10`);
+        renderQueueList(data.items);
+
+        if (queuePaginationContainer) {
+            renderPagination(data.total_pages, data.current_page);
+        }
+
     } catch (error) {
         console.error("Error loading queue data:", error);
         queuePageContent.innerHTML = `<p class="error-message">Failed to load queue: ${error.message}</p>`;
     }
+}
+
+// --- Pagination Rendering ---
+function renderPagination(totalPages, currentPage) {
+    if (!queuePaginationContainer) return;
+    queuePaginationContainer.innerHTML = '';
+
+    if (totalPages <= 1) return;
+
+    const createButton = (text, page, isDisabled = false, isCurrent = false, isGap = false) => {
+        const btn = document.createElement(isCurrent || isGap ? 'span' : 'button');
+        btn.textContent = text;
+        if (isGap) {
+            btn.className = 'page-gap';
+        } else {
+            btn.className = 'page-number';
+            if (isCurrent) btn.classList.add('active');
+            btn.disabled = isDisabled;
+            btn.dataset.page = page;
+            btn.addEventListener('click', () => loadQueueData(page));
+        }
+        return btn;
+    };
+
+    // Previous Button
+    const prevButton = createButton('< Prev', currentPage - 1, currentPage === 1);
+    queuePaginationContainer.appendChild(prevButton);
+
+    // Page Numbers
+    const pagesToShow = [];
+    if (totalPages <= 7) {
+        for (let i = 1; i <= totalPages; i++) {
+            pagesToShow.push(i);
+        }
+    } else {
+        pagesToShow.push(1);
+        if (currentPage > 3) pagesToShow.push('...');
+        
+        let start = Math.max(2, currentPage - 1);
+        let end = Math.min(totalPages - 1, currentPage + 1);
+
+        for (let i = start; i <= end; i++) {
+            pagesToShow.push(i);
+        }
+
+        if (currentPage < totalPages - 2) pagesToShow.push('...');
+        pagesToShow.push(totalPages);
+    }
+
+    const uniquePages = [...new Set(pagesToShow)]; // Remove duplicates
+
+    uniquePages.forEach(p => {
+        if (p === '...') {
+            queuePaginationContainer.appendChild(createButton('...', 0, false, false, true));
+        } else {
+            queuePaginationContainer.appendChild(createButton(p, p, false, p === currentPage));
+        }
+    });
+
+
+    // Next Button
+    const nextButton = createButton('Next >', currentPage + 1, currentPage === totalPages);
+    queuePaginationContainer.appendChild(nextButton);
 }
 
 // --- Modal Close Listener ---

@@ -56,6 +56,7 @@ export const exitSettingsBtn = document.getElementById('exit-settings-btn');
 export const queueBtn = document.getElementById('queue-btn');
 export const queuePageSection = document.getElementById('queue-page-section');
 export const queuePageContent = document.getElementById('queue-page-content');
+export const queuePaginationContainer = document.getElementById('queue-pagination-container');
 export const exitQueueBtn = document.getElementById('exit-queue-btn');
 
 // Full Prompt Modal Elements

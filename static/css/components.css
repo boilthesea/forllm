@@ -346,3 +346,48 @@ input:checked + .slider:before {
 .ts-dropdown .create.active {
     color: var(--button-primary-text);
 }
+
+/* --- Pagination --- */
+.pagination-container {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 1rem 0;
+}
+
+.pagination-container button,
+.pagination-container .page-number,
+.pagination-container .page-gap {
+    margin: 0 4px;
+    padding: 8px 12px;
+    border: 1px solid var(--button-secondary-border, #666);
+    background-color: var(--button-bg, #5a5a5a);
+    color: var(--text-color, #eee);
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background-color 0.2s, border-color 0.2s;
+}
+
+.pagination-container button:hover,
+.pagination-container .page-number:hover {
+    background-color: var(--button-hover-bg, #626262);
+    border-color: #777;
+}
+
+.pagination-container .page-number.active {
+    background-color: var(--button-primary-bg, #3498db);
+    border-color: var(--button-primary-border, #2980b9);
+    color: var(--button-primary-text, white);
+    font-weight: bold;
+}
+
+.pagination-container button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.pagination-container .page-gap {
+    border: none;
+    background: none;
+    cursor: default;
+}
