@@ -78,4 +78,4 @@ if __name__ == '__main__':
     # Host 0.0.0.0 makes it accessible on the network
     # Use_reloader=False is important when running background threads with Flask's dev server
     # to prevent the thread from being started twice.
-    app.run(debug=True, host='0.0.0.0', port=5000, use_reloader=False)
+    app.run(debug=True, host='0.0.0.0', port=4773, use_reloader=False)
