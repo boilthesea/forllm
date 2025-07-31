@@ -159,12 +159,6 @@ window.addEventListener('click', (event) => {
 // Apply dark mode on initial load
 applyDarkMode();
 
-export function togglePrimaryPaneExpansion() {
-    if (primaryPane && mainElement) {
-        const isExpanded = primaryPane.classList.toggle('primary-pane-expanded');
-        mainElement.classList.toggle('pane-expanded-mode', isExpanded);
-    }
-}
 
 // Helper function to check for mobile viewport
 export const isMobile = () => window.matchMedia("(max-width: 768px)").matches;
@@ -227,12 +221,7 @@ export function openSecondaryPane(htmlContent, title = 'Details') {
         // Desktop logic: Activate tripane view.
         // This implementation expands the primary pane to fill the remaining space
         // when the secondary pane is opened, creating a side-by-side view.
-        if (primaryPane && !primaryPane.classList.contains('primary-pane-expanded')) {
-            primaryPane.classList.add('primary-pane-expanded');
-            if (mainElement) {
-                mainElement.classList.add('pane-expanded-mode');
-            }
-        }
+        // The primary pane is now always expanded, so no class toggling is needed.
         mainContainer.classList.add('tripane-active');
     }
 }
@@ -251,13 +240,7 @@ export function closeSecondaryPane() {
         secondaryPane.remove();
         mainContainer.classList.remove('tripane-active');
 
-        // Contract the primary pane back to its default centered state.
-        if (primaryPane && primaryPane.classList.contains('primary-pane-expanded')) {
-            primaryPane.classList.remove('primary-pane-expanded');
-            if (mainElement) {
-                mainElement.classList.remove('pane-expanded-mode');
-            }
-        }
+        // The primary pane is now always expanded, so no class toggling is needed.
     }
 }
 

@@ -1,18 +1,13 @@
 main {
-    display: flex;
-    gap: 1rem;
+    /* display: flex; and gap: 1rem; are removed as nav is now position:fixed */
     padding: 1rem;
-    max-width: 1200px;
-    margin: auto;
-}
-
-/* New rule to allow the main container to expand to full width */
-main.pane-expanded-mode {
-    max-width: none;
+    padding-left: calc(280px + 1rem); /* Accommodate fixed nav width (260px) + original gap */
+    max-width: none; /* Make expanded view the default */
+    margin: 0; /* Remove auto margin to allow full width */
 }
 
 nav#subforum-nav {
-    flex: 0 0 280px; /* Fixed width for the sidebar */
+    width: 260px; /* Explicit width for fixed position */
     background: var(--nav-bg);
     padding: 1.5rem; /* Increased padding */
     border-right: 1px solid var(--post-border); /* Subtle border */
@@ -20,8 +15,9 @@ nav#subforum-nav {
     display: flex;
     flex-direction: column;
     height: 100vh; /* Make sidebar full height */
-    position: sticky;
+    position: fixed;
     top: 0;
+    left: 0;
     overflow-y: auto; /* Allow sidebar to scroll if content overflows */
 }
 
@@ -126,6 +122,7 @@ section {
     display: flex;
     flex-grow: 1;
     justify-content: center; /* Default: Center the primary pane */
+    /* margin-left is removed, handled by main's padding now */
 }
 
 #main-container.tripane-active {
@@ -135,13 +132,8 @@ section {
 #primary-pane {
     flex-basis: 0;
     flex-grow: 1;
-    max-width: 900px; /* Retain max-width for the default centered state */
+    max-width: none; /* Make expanded view the default */
     /* The margin: 0 auto effect is achieved by the parent's justify-content: center */
-}
-
-#primary-pane.primary-pane-expanded {
-    max-width: none; /* Allow it to take up all available space */
-    flex-grow: 1;
 }
 
 /* All sections inside the primary pane should not have their own box-shadow or border-radius,
@@ -302,6 +294,7 @@ section {
 
     /* Adjust main content for fixed header */
     main {
+        padding: 1rem; /* Reset padding for mobile */
         padding-top: 60px; /* 50px nav height + 10px gap */
     }
 

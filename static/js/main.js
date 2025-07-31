@@ -28,7 +28,7 @@ import {
 
 import { loadQueueData } from './queue.js';
 
-import { showSection, lastVisibleSectionId, togglePrimaryPaneExpansion, toggleMobileMenu, isMobile } from './ui.js';
+import { showSection, lastVisibleSectionId, toggleMobileMenu, isMobile } from './ui.js';
 
 import {
     addSubforumBtn,
@@ -101,10 +101,6 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    const primaryPaneToggleBtn = document.getElementById('primary-pane-toggle-btn');
-    if (primaryPaneToggleBtn) {
-        primaryPaneToggleBtn.addEventListener('click', togglePrimaryPaneExpansion);
-    }
 
     const mobileMenuBtn = document.getElementById('mobile-menu-btn');
     if (mobileMenuBtn) {

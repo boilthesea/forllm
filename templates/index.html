@@ -180,41 +180,40 @@
     </nav>
     <!-- End Mobile Top Navigation -->
 
-    <main>
-        <nav id="subforum-nav">
-            <div id="desktop-heading">
-                <h1 style="margin-top: 0;">FORLLM</h1>
-                <div id="processing-status-indicator-container-desktop" class="processing-status-indicator-container" title="Schedule status: Loading..." style="margin-top: 10px;">
-                    <div class="status-dot-background">
-                         <div id="processing-status-dot-desktop" class="status-dot status-loading"></div>
-                    </div>
+    <nav id="subforum-nav">
+        <div id="desktop-heading">
+            <h1 style="margin-top: 0;">FORLLM</h1>
+            <div id="processing-status-indicator-container-desktop" class="processing-status-indicator-container" title="Schedule status: Loading..." style="margin-top: 10px;">
+                <div class="status-dot-background">
+                     <div id="processing-status-dot-desktop" class="status-dot status-loading"></div>
                 </div>
             </div>
-            <p id="site-subtitle">You can just... queue stuff.</p>
-            <div id="schedule-display">
-                Next schedule: Loading...
-            </div>
-            <nav id="main-nav">
-                <ul>
-                    <li><a href="#" id="edit-schedule-btn">Schedules</a></li>
-                    <li><a href="#" id="settings-btn">Settings</a></li>
-                    <li><a href="#" id="queue-btn">Queue</a></li>
-                </ul>
-            </nav>
-            <hr class="sidebar-separator">
-            <h2>Subforums</h2>
-            <ul id="subforum-list">
-                <!-- Subforums will be loaded here -->
-                 {% for subforum in subforums %}
-                    <li><a href="#" data-subforum-id="{{ subforum.subforum_id }}">{{ subforum.name }}</a></li>
-                 {% endfor %}
+        </div>
+        <p id="site-subtitle">You can just... queue stuff.</p>
+        <div id="schedule-display">
+            Next schedule: Loading...
+        </div>
+        <nav id="main-nav">
+            <ul>
+                <li><a href="#" id="edit-schedule-btn">Schedules</a></li>
+                <li><a href="#" id="settings-btn">Settings</a></li>
+                <li><a href="#" id="queue-btn">Queue</a></li>
             </ul>
-            <div class="add-item-form">
-                <input type="text" id="new-subforum-name" placeholder="New subforum name">
-                <button id="add-subforum-btn">Add Subforum</button>
-            </div>
         </nav>
-
+        <hr class="sidebar-separator">
+        <h2>Subforums</h2>
+        <ul id="subforum-list">
+            <!-- Subforums will be loaded here -->
+             {% for subforum in subforums %}
+                <li><a href="#" data-subforum-id="{{ subforum.subforum_id }}">{{ subforum.name }}</a></li>
+             {% endfor %}
+        </ul>
+        <div class="add-item-form">
+            <input type="text" id="new-subforum-name" placeholder="New subforum name">
+            <button id="add-subforum-btn">Add Subforum</button>
+        </div>
+    </nav>
+    <main>
         <div id="main-container">
             <div id="primary-pane" class="main-pane">
                 <section id="topic-list-section" style="display: none;">
@@ -222,7 +221,6 @@
                         <h2 id="current-subforum-name"></h2>
                         <div class="pane-header-controls">
                             <button id="back-to-subforums-btn" class="button-icon" title="Back to Subforums">< Exit</button>
-                            <button id="primary-pane-toggle-btn" class="pane-control-btn button-icon" title="Toggle Expansion">&#x2194;</button> <!-- Expand/Contract Arrow -->
                         </div>
                     </div>
                     <h3>Topics</h3>
