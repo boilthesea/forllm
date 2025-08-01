@@ -315,6 +315,7 @@ section {
         border-left: none;
         border-top: 1px solid var(--post-border);
         z-index: 1001; /* Above top nav */
+        background-color: var(--bg-color); /* Use main background color on mobile */
     }
 
     #secondary-pane.mobile-pane-peek {
@@ -324,7 +325,29 @@ section {
     #secondary-pane.mobile-pane-visible {
         transform: translateY(0);
     }
-
+ 
+    /* Handle for mobile secondary pane */
+    #secondary-pane .pane-header {
+        position: relative; /* Needed for absolute positioning of the arrow */
+        cursor: pointer;
+    }
+ 
+    .mobile-pane-arrow {
+        position: absolute;
+        top: 8px; /* Position arrow near the top */
+        left: 50%;
+        width: 12px;
+        height: 12px;
+        border-left: 2px solid var(--text-color);
+        border-top: 2px solid var(--text-color);
+        transform: translateX(-50%) rotate(45deg); /* Initial state: pointing up */
+        transition: transform 0.3s ease-in-out;
+    }
+ 
+    #secondary-pane.mobile-pane-visible .mobile-pane-arrow {
+        transform: translateX(-50%) rotate(225deg); /* Visible state: pointing down */
+    }
+ 
     /* Hide redundant elements in the mobile slide-in menu */
     nav#subforum-nav > #desktop-heading,
     nav#subforum-nav > #site-subtitle,

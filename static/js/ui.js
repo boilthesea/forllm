@@ -171,18 +171,19 @@ export function toggleMobileMenu() {
 
 export function openSecondaryPane(htmlContent, title = 'Details') {
     if (!mainContainer) return;
-
+ 
     let secondaryPane = document.getElementById('secondary-pane');
     if (!secondaryPane) {
         secondaryPane = document.createElement('div');
         secondaryPane.id = 'secondary-pane';
         mainContainer.appendChild(secondaryPane);
     }
-
+ 
     // Always ensure the pane has the correct inner structure
     secondaryPane.innerHTML = `
         <div class="pane-content">
             <div class="pane-header">
+                <div class="mobile-pane-arrow"></div>
                 <h2>${title}</h2>
                 <div class="pane-header-controls">
                     <button class="close-pane-btn button-icon" title="Close Pane">&times;</button>
@@ -191,10 +192,10 @@ export function openSecondaryPane(htmlContent, title = 'Details') {
             ${htmlContent}
         </div>
     `;
-
+ 
     // Attach event listeners
     secondaryPane.querySelector('.close-pane-btn').addEventListener('click', closeSecondaryPane);
-
+ 
     if (isMobile()) {
         // Mobile logic: show as a "peeking" bottom sheet
         secondaryPane.classList.add('mobile-pane-peek');
