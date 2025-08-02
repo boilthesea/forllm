@@ -9,34 +9,169 @@ body {
     background-color: var(--bg-color);
     color: var(--text-color);
     font-size: 16px; /* Base font size */
+    transition: background-color 0.3s ease, color 0.3s ease;
+}
 
-    /* Dark Mode Styles by default */
-    --bg-color: #222;
-    --text-color: #eee;
-    --header-bg: #111;
-    --header-text: #eee;
-    --nav-bg: #333;
-    --section-bg: #333;
-    --post-bg: #444;
-    --post-border: #555;
-    --post-meta-color: #bbb;
-    --llm-response-bg: #2a3f3c;
+/* --- Theme: Silvery (Default) --- */
+body, body.theme-silvery {
+    --bg-color: #f4f4f9;
+    --text-color: #333;
+    --nav-bg: #e9ecef;
+    --section-bg: #ffffff;
+    --post-bg: #ffffff;
+    --post-bg-lighter: #ffffff;
+    --post-border: #dee2e6;
+    --post-meta-color: #6c757d;
+    --llm-response-bg: #e6f7ff;
+    --llm-response-border: #91d5ff;
+    --llm-meta-color: #0050b3;
+    --link-color: #1abc9c;
+    --input-bg: #ffffff;
+    --input-bg-darker: #f8f9fa;
+    --input-border: #ced4da;
+    --input-text: #495057;
+    --input-focus-border: #e0f7f4; /* #80bdff; */
+    --input-focus-shadow: rgba(26, 188, 152, 0.25);
+    --accent-color: #1abc9c;
+    --modal-bg: #ffffff;
+    --modal-border: #dee2e6;
+    --modal-text: #333;
+    --close-btn-color: #6c757d;
+    --close-btn-hover-color: #000;
+    --schedule-display-color: #6c757d;
+    --schedule-bg-color: #f9f9f9; /* Lighter background for schedule display */
+
+    /* Nav Variables */
+    --nav-text-color: #333;
+    --nav-hover-bg: #e0f7f4;
+    --nav-hover-text-color: #000;
+    --nav-active-bg: #1abc9c;
+    --nav-active-text-color: #fff;
+    --nav-subtitle-color: #6c757d;
+
+    /* Button Variables */
+    --button-bg: #e0f7f4;
+    --button-hover-bg: #1abc9c;
+    --button-active-bg: #1abc9c;
+    --button-primary-bg: #1abc9c;
+    --button-primary-text: #fff;
+    --button-primary-border: #1abc9c;
+    --button-primary-hover-bg: #000;
+    --button-secondary-text: #1abc9c;
+    --button-secondary-border: #1abc9c;
+    --button-secondary-hover-bg: rgba(0, 123, 255, 0.1);
+    --button-secondary-hover-border: #000;
+    --icon-button-color: #6c757d;
+    --icon-button-hover-bg: #e9ecef;
+    --icon-button-hover-color: #000;
+    --toggle-checked-bg: #1abc9c;
+    
+    /* Phase 5 Theme Creator Variables */
+    --status-pending-bg: #f39c12;
+    --status-processing-bg: #3498db;
+    --status-complete-bg: #1abc9c;
+    --status-error-bg: #e74c3c;
+    --status-unknown-bg: #95a5a6;
+    --settings-nav-active-bg: #e0f7f4;
+    --settings-nav-inactive-color: #000000;
+    --settings-nav-active-color: #16a085;
+    --settings-nav-hover-bg: #f4f4f4;
+    --settings-nav-hover-color: #1abc9c;
+    --status-indicator-active-bg: #1abc9c;
+    --status-indicator-inactive-bg: #e74c3c;
+    --status-indicator-loading-bg: #f39c12;
+    --status-indicator-error-bg: #d35400;
+    --persona-tag-bg: #e0eafc;
+    --persona-tag-text: #1abc9c;
+    --button-danger-bg:  #d24d57;
+    --button-danger-text: #fff;
+    --button-danger-hover-bg: #b9404d;
+    --button-success-bg: #1abc9c;
+    --button-success-text: #fff;
+    --button-success-hover-bg: #1abc9c;
+    --notification-badge-bg: #ff3b30;
+    --error-text-color: #e74c3c;
+}
+
+/* --- Theme: High-Contrast Black --- */
+body.theme-hc-black {
+    --bg-color: #000000;
+    --text-color: #f0f0f0;
+    --nav-bg: #1a1a1a;
+    --section-bg: #1a1a1a;
+    --post-bg: #242424;
+    --post-bg-lighter: #2c2c2c;
+    --post-border: #4d4d4d;
+    --post-meta-color: #a0a0a0;
+    --llm-response-bg: #1c2b33;
     --llm-response-border: #1abc9c;
     --llm-meta-color: #1abc9c;
-    --link-color: #5dade2;
-    --button-bg: #5dade2; /* This is now the DARK mode button base color */
-    --button-hover-bg: #3498db; /* This is now the DARK mode button hover color */
-    --input-bg: #555;
-    --input-border: #777;
-    --input-text: #eee;
-    --modal-bg: #444;
-    --modal-border: #666;
-    --modal-text: #eee;
-    --close-btn-color: #ccc;
-    --close-btn-hover-color: #fff;
-    --footer-bg: #111;
-    --footer-text: #ccc;
-    --schedule-display-color: #888;
+    --link-color: #1abc9c;
+    --input-bg: #242424;
+    --input-bg-darker: #1c1c1c;
+    --input-border: #4d4d4d;
+    --input-text: #f0f0f0;
+    --input-focus-border: #1abc9c;
+    --input-focus-shadow: rgba(26, 188, 152, 0.3);
+    --accent-color: #1abc9c;
+    --modal-bg: #242424;
+    --modal-border: #4d4d4d;
+    --modal-text: #f0f0f0;
+    --close-btn-color: #a0a0a0;
+    --close-btn-hover-color: #ffffff;
+    --schedule-display-color: #a0a0a0;
+    --schedule-bg-color: #000000;
+
+    /* Nav Variables */
+    --nav-text-color: #f0f0f0;
+    --nav-hover-bg: #3d3d3d;
+    --nav-hover-text-color: #ffffff;
+    --nav-active-bg: #1abc9c;
+    --nav-active-text-color: #000;
+    --nav-subtitle-color: #a0a0a0;
+
+    /* Button Variables */
+    --button-bg: #3d3d3d;
+    --button-hover-bg: #1abc9c;
+    --button-active-bg: #000000;
+    --button-primary-bg: #1abc9c;
+    --button-primary-text: #000;
+    --button-primary-border: #1abc9c;
+    --button-primary-hover-bg: #02a786;
+    --button-secondary-text: #1abc9c;
+    --button-secondary-border: #1abc9c;
+    --button-secondary-hover-bg: rgba(0, 170, 255, 0.15);
+    --button-secondary-hover-border: #02a786;
+    --icon-button-color: #a0a0a0;
+    --icon-button-hover-bg: #3d3d3d;
+    --icon-button-hover-color: #ffffff;
+    --toggle-checked-bg: #1abc9c;
+
+    /* Phase 5 Theme Creator Variables */
+    --status-pending-bg: #f39c12;
+    --status-processing-bg: #3498db;
+    --status-complete-bg: #1abc9c;
+    --status-error-bg: #e74c3c;
+    --status-unknown-bg: #95a5a6;
+    --settings-nav-active-bg: #222;
+    --settings-nav-inactive-color: #eee;
+    --settings-nav-active-color: #1abc9c;
+    --settings-nav-hover-bg: #333;
+    --settings-nav-hover-color: #1abc9c;
+    --status-indicator-active-bg: #1abc9c;
+    --status-indicator-inactive-bg: #e74c3c;
+    --status-indicator-loading-bg: #f39c12;
+    --status-indicator-error-bg: #d35400;
+    --persona-tag-bg: #3a3a5a;
+    --persona-tag-text: #a8bbf8;
+    --button-danger-bg:  #d24d57;
+    --button-danger-text: #fff;
+    --button-danger-hover-bg: #b9404d;
+    --button-success-bg: #1abc9c;
+    --button-success-text: #fff;
+    --button-success-hover-bg: #1abc9c;
+    --notification-badge-bg: #ff3b30;
+    --error-text-color: #ff4d4d;
 }
 
 /* header styling can be direct if specific dark mode overrides are not needed */

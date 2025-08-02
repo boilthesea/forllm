@@ -2,6 +2,7 @@
 FORLLM_plan.md 
 uploads/
 *.gi.*
+gi/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

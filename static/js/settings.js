@@ -6,7 +6,9 @@ import {
     settingsBtn, // Needed for event listener in main.js
     exitSettingsBtn // Needed for event listener in main.js
 } from './dom.js';
-import { applyDarkMode, showSection, lastVisibleSectionId } from './ui.js'; // Need applyDarkMode, showSection, and lastVisibleSectionId
+import { applyDarkMode, showSection, lastVisibleSectionId, openThemeCreator } from './ui.js'; // Need applyDarkMode, showSection, and lastVisibleSectionId
+import { initThemeCreator } from './theming.js';
+import { initializeTomSelect } from './ui-helpers.js';
 
 // --- State Variables ---
 export let currentSettings = { // Store loaded settings
@@ -14,6 +16,7 @@ export let currentSettings = { // Store loaded settings
     llmLinkSecurity: 'true',
     default_llm_context_window: '4096',
     autoCheckContextWindow: false, // New setting
+    theme: 'theme-silvery', // Add theme setting
     // Add new chat history settings with their string defaults
     ch_max_ambient_posts: '5',
     ch_max_posts_per_sibling_branch: '2',
@@ -83,6 +86,14 @@ export function renderSettingsPage() {
         <label for="default-llm-context-window-input">Default LLM Context Window (tokens):</label>
         <input type="number" id="default-llm-context-window-input" class="number-input" min="0" placeholder="e.g., 4096">
         <p style="font-size: 0.8em; color: #888; margin-top: 3px;">Used if model-specific context window detection fails.</p>
+    </div>
+    <div class="setting-item">
+        <label for="theme-select">Theme:</label>
+        <select id="theme-select">
+            <option value="theme-silvery">Silvery</option>
+            <option value="theme-hc-black">High-Contrast Black</option>
+        </select>
+        <button id="open-theme-creator-btn" class="button-secondary" style="margin-left: 10px;">Theme Creator</button>
     </div>
     <button id="save-settings-btn">Save Settings</button>
     <p id="settings-error" class="error-message"></p>
@@ -209,6 +220,17 @@ export function renderSettingsPage() {
                     contextWindowInput.value = currentSettings.default_llm_context_window;
                 }
 
+                const themeSelect = container.querySelector('#theme-select');
+                if (themeSelect) {
+                    const tsInstance = initializeTomSelect(themeSelect, {
+                        create: false,
+                        controlInput: null // Disables text input completely
+                    });
+                    if (tsInstance) {
+                        tsInstance.setValue(currentSettings.theme, true); // Silently set value on init
+                    }
+                }
+
                 // Populate new chat history settings fields
                 const maxAmbientPostsInput = container.querySelector('#ch-max-ambient-posts');
                 if (maxAmbientPostsInput) {
@@ -226,6 +248,19 @@ export function renderSettingsPage() {
                 const saveButton = container.querySelector('#save-settings-btn');
                 if (saveButton) {
                     saveButton.addEventListener('click', saveSettings);
+                }
+
+                const themeCreatorBtn = container.querySelector('#open-theme-creator-btn');
+                if (themeCreatorBtn) {
+                    themeCreatorBtn.addEventListener('click', () => {
+                        // Check if the theming module is loaded, then open the creator
+                        if (typeof initThemeCreator === 'function') {
+                            initThemeCreator();
+                        } else {
+                            console.error("Theme creator is not available.");
+                            alert("Error: Theme creator module could not be loaded.");
+                        }
+                    });
                 }
             }
         };
@@ -248,24 +283,53 @@ function renderModelOptions(modelSelectElement, models, selectedModel) {
         console.error("renderModelOptions called with no modelSelectElement");
         return;
     }
-    modelSelectElement.innerHTML = '';
-    if (!Array.isArray(models) || models.length === 0) {
-        const option = document.createElement('option');
-        option.value = '';
-        option.textContent = 'No models found or error loading.';
-        option.disabled = true;
-        modelSelectElement.appendChild(option);
+    // Keep track of the TomSelect instance
+    const tsInstance = modelSelectElement.tomselect;
+    if (tsInstance) {
+        tsInstance.clearOptions(); // Start fresh
+    } else {
+        modelSelectElement.innerHTML = ''; // Fallback for non-TomSelect elements
+    }
+
+    if (!Array.isArray(models)) {
+        // If models isn't an array, do nothing further.
         return;
     }
 
     models.forEach(modelName => {
-        const option = document.createElement('option');
-        option.value = modelName;
-        option.textContent = modelName;
-        if (modelName === selectedModel) {
-            option.selected = true;
+        const option = {
+            value: modelName,
+            text: modelName
+        };
+        if (tsInstance) {
+            tsInstance.addOption(option);
+        } else {
+            const optionEl = document.createElement('option');
+            optionEl.value = modelName;
+            optionEl.textContent = modelName;
+            modelSelectElement.appendChild(optionEl);
         }
-        modelSelectElement.appendChild(option);
+    });
+
+    if (tsInstance) {
+        tsInstance.setValue(selectedModel, true); // Silently set value
+    } else {
+        modelSelectElement.value = selectedModel;
+    }
+}
+
+// This is the new, correct block that was missing from the previous attempt
+export function updateAndInitializeAllModelSelects(models, modelToSelect) {
+    document.querySelectorAll('#model-select').forEach(selectEl => {
+        // Initialize first if it doesn't exist
+        if (!selectEl.tomselect) {
+            initializeTomSelect(selectEl, {
+                create: false,
+                controlInput: null // Disables text input completely
+            });
+        }
+        // Now populate it
+        renderModelOptions(selectEl, models, modelToSelect);
     });
 }
 
@@ -278,6 +342,7 @@ export async function loadSettings() {
             llmLinkSecurity: settings.llmLinkSecurity === 'true' ? 'true' : 'false',
             default_llm_context_window: settings.default_llm_context_window || '4096',
             autoCheckContextWindow: settings.autoCheckContextWindow === true || settings.autoCheckContextWindow === 'true', // Ensure boolean
+            theme: settings.theme || 'theme-silvery',
             // Load new chat history settings, using defaults if missing from backend response
             ch_max_ambient_posts: settings.ch_max_ambient_posts || '5',
             ch_max_posts_per_sibling_branch: settings.ch_max_posts_per_sibling_branch || '2',
@@ -287,8 +352,7 @@ export async function loadSettings() {
         if (currentSettings.llmLinkSecurity === undefined) currentSettings.llmLinkSecurity = 'true';
         if (currentSettings.autoCheckContextWindow === undefined) currentSettings.autoCheckContextWindow = false;
 
-
-        applyDarkMode(true); // Apply dark mode immediately
+        applyTheme(currentSettings.theme);
 
         // Update UI elements if they exist (they might be created later by renderSettingsPage)
         // This part is somewhat redundant if renderSettingsPage correctly populates fields
@@ -334,9 +398,17 @@ export async function loadOllamaModels() {
     // } // REMOVED
 
 
-    // Set loading state
-    modelSelectElement.innerHTML = '<option value="">Loading models...</option>';
-    modelSelectElement.disabled = true;
+    // Set loading state for all instances
+    document.querySelectorAll('#model-select').forEach(el => {
+        const ts = el.tomselect || initializeTomSelect(el, { create: false, controlInput: null });
+        if (ts) {
+            ts.clear(); // Clear selected items
+            ts.clearOptions(); // Clear all options
+            ts.addOption({ value: '', text: 'Loading models...' });
+            ts.setValue('', true); // Select the loading message
+            ts.disable();
+        }
+    });
     if(settingsErrorElement) settingsErrorElement.textContent = ""; // Clear previous errors
 
     try {
@@ -369,7 +441,14 @@ export async function loadOllamaModels() {
         }
 
 
-        renderModelOptions(modelSelectElement, models, modelToSelect);
+        // Before adding new models, clear the placeholder
+        document.querySelectorAll('#model-select').forEach(el => {
+            if (el.tomselect) {
+                el.tomselect.clearOptions(); // Attempt to clear all
+                el.tomselect.removeOption('');  // Explicitly remove the placeholder
+            }
+        });
+        updateAndInitializeAllModelSelects(models, modelToSelect);
 
         // if (selectedOllamaModelDisplay) { // REMOVED
         //     selectedOllamaModelDisplay.textContent = modelToSelect || 'None'; // REMOVED
@@ -390,7 +469,7 @@ export async function loadOllamaModels() {
 
     } catch (error) {
         console.error("Error fetching Ollama models:", error);
-        renderModelOptions(modelSelectElement, currentSettings.selectedModel ? [currentSettings.selectedModel] : [], currentSettings.selectedModel);
+        updateAndInitializeAllModelSelects(currentSettings.selectedModel ? [currentSettings.selectedModel] : [], currentSettings.selectedModel);
         if(settingsErrorElement) settingsErrorElement.textContent = `Could not fetch models: ${error.message}`;
         // if (selectedOllamaModelDisplay) { // REMOVED
         //     selectedOllamaModelDisplay.textContent = currentSettings.selectedModel || 'Error'; // REMOVED
@@ -400,7 +479,12 @@ export async function loadOllamaModels() {
             await fetchAndDisplayModelContextWindow(currentSettings.selectedModel, false); // Explicitly false
         }
     } finally {
-         if (modelSelectElement) modelSelectElement.disabled = false;
+        // Re-enable all instances
+        document.querySelectorAll('#model-select').forEach(el => {
+            if (el.tomselect) {
+                el.tomselect.enable();
+            }
+        });
     }
 }
 
@@ -489,6 +573,11 @@ async function fetchAndDisplayModelContextWindow(modelName, isForcedRefresh = fa
     }
 }
 
+function applyTheme(themeName) {
+    document.body.classList.remove('theme-silvery', 'theme-hc-black');
+    document.body.classList.add(themeName);
+}
+
 // --- Settings Actions ---
 export async function saveSettings() {
     // Get elements from within the settings page content
@@ -496,6 +585,7 @@ export async function saveSettings() {
     const autoCheckToggleInput = settingsPageContent.querySelector('#auto-check-context-window-toggle'); // New
     const linkSecurityToggleInput = settingsPageContent.querySelector('#llm-link-security-toggle');
     const contextWindowInput = settingsPageContent.querySelector('#default-llm-context-window-input');
+    const themeSelect = settingsPageContent.querySelector('#theme-select');
     // New chat history inputs
     const chMaxAmbientPostsInput = settingsPageContent.querySelector('#ch-max-ambient-posts');
     const chMaxPostsPerSiblingBranchInput = settingsPageContent.querySelector('#ch-max-posts-per-sibling-branch');
@@ -504,7 +594,7 @@ export async function saveSettings() {
     const saveButton = settingsPageContent.querySelector('#save-settings-btn');
     const settingsErrorElement = settingsPageContent.querySelector('#settings-error');
 
-    if (!modelSelectElement || !autoCheckToggleInput || !linkSecurityToggleInput || !contextWindowInput ||
+    if (!modelSelectElement || !autoCheckToggleInput || !linkSecurityToggleInput || !contextWindowInput || !themeSelect ||
         !chMaxAmbientPostsInput || !chMaxPostsPerSiblingBranchInput || !chPrimaryHistoryBudgetRatioInput ||
         !saveButton || !settingsErrorElement) {
         console.error("Settings elements not found for saving.");
@@ -513,6 +603,7 @@ export async function saveSettings() {
         if (!autoCheckToggleInput) console.error("Missing: autoCheckToggleInput");
         if (!linkSecurityToggleInput) console.error("Missing: linkSecurityToggleInput");
         if (!contextWindowInput) console.error("Missing: contextWindowInput");
+        if (!themeSelect) console.error("Missing: themeSelect");
         if (!chMaxAmbientPostsInput) console.error("Missing: chMaxAmbientPostsInput");
         if (!chMaxPostsPerSiblingBranchInput) console.error("Missing: chMaxPostsPerSiblingBranchInput");
         if (!chPrimaryHistoryBudgetRatioInput) console.error("Missing: chPrimaryHistoryBudgetRatioInput");
@@ -527,6 +618,7 @@ export async function saveSettings() {
     const newAutoCheckContextWindow = autoCheckToggleInput.checked; // New
     const newLlmLinkSecurity = linkSecurityToggleInput.checked;
     const newDefaultContextWindow = contextWindowInput.value;
+    const newTheme = themeSelect.value;
     // Get values from new fields
     const chMaxAmbientPosts = chMaxAmbientPostsInput.value;
     const chMaxPostsPerSiblingBranch = chMaxPostsPerSiblingBranchInput.value;
@@ -566,6 +658,7 @@ export async function saveSettings() {
         autoCheckContextWindow: newAutoCheckContextWindow, // New
         llmLinkSecurity: newLlmLinkSecurity.toString(),
         default_llm_context_window: parseInt(newDefaultContextWindow, 10).toString(),
+        theme: newTheme,
         // Add new settings to payload
         ch_max_ambient_posts: chMaxAmbientPosts,
         ch_max_posts_per_sibling_branch: chMaxPostsPerSiblingBranch,
@@ -585,13 +678,21 @@ export async function saveSettings() {
         currentSettings.autoCheckContextWindow = settingsToSave.autoCheckContextWindow; // New
         currentSettings.llmLinkSecurity = settingsToSave.llmLinkSecurity;
         currentSettings.default_llm_context_window = settingsToSave.default_llm_context_window;
+        currentSettings.theme = settingsToSave.theme;
         // Update local state for new settings
         currentSettings.ch_max_ambient_posts = settingsToSave.ch_max_ambient_posts;
         currentSettings.ch_max_posts_per_sibling_branch = settingsToSave.ch_max_posts_per_sibling_branch;
         currentSettings.ch_primary_history_budget_ratio = settingsToSave.ch_primary_history_budget_ratio;
 
         // Update UI (redundant if page isn't re-rendered, but good practice for consistency)
-        applyDarkMode(true);
+        applyTheme(currentSettings.theme);
+
+        // Explicitly update the TomSelect instance for the theme
+        const themeSelectElement = settingsPageContent.querySelector('#theme-select');
+        if (themeSelectElement && themeSelectElement.tomselect) {
+            themeSelectElement.tomselect.setValue(currentSettings.theme, true); // Silently update after save
+        }
+
         if(autoCheckToggleInput) autoCheckToggleInput.checked = currentSettings.autoCheckContextWindow; // New
         if(linkSecurityToggleInput) linkSecurityToggleInput.checked = currentSettings.llmLinkSecurity === 'true';
         if (contextWindowInput) contextWindowInput.value = currentSettings.default_llm_context_window;
@@ -600,15 +701,10 @@ export async function saveSettings() {
         if (chMaxPostsPerSiblingBranchInput) chMaxPostsPerSiblingBranchInput.value = currentSettings.ch_max_posts_per_sibling_branch;
         if (chPrimaryHistoryBudgetRatioInput) chPrimaryHistoryBudgetRatioInput.value = currentSettings.ch_primary_history_budget_ratio;
 
-        // Re-render model options to ensure the saved one is selected
-        // (though it should already be selected from the user's choice)
-        if (modelSelectElement) {
-            renderModelOptions(
-                modelSelectElement,
-                Array.from(modelSelectElement.options).map(opt => opt.value).filter(value => value !== ""), // Exclude "Loading..." or error options
-                currentSettings.selectedModel
-            );
-        }
+        // Instead of trying to re-render the options in place, which can corrupt
+        // the TomSelect instance, just re-trigger the full model loading process.
+        // This is more robust and ensures the dropdown is always in a correct state.
+        await loadOllamaModels();
 
         // Optionally provide feedback to the user
         // settingsErrorElement.textContent = "Settings saved successfully!";

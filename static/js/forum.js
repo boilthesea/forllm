@@ -15,10 +15,13 @@ import {
     replyFormContainer,
     replyToPostIdSpan,
     replyContentInput,
-    settingsPageContent // Needed for link security check in postList event listener
+    settingsPageContent, // Needed for link security check in postList event listener
+    llmPersonaSelect,
+    subforumPersonasBar
 } from './dom.js';
-import { showSection, showLinkWarningPopup } from './ui.js';
+import { showSection, showLinkWarningPopup, openSecondaryPane, isMobile, toggleMobileMenu } from './ui.js';
 import { newTopicEditor, replyEditor } from './editor.js'; // Import editor instances
+import { initializeTomSelect } from './ui-helpers.js';
 
 // --- State Variables ---
 let currentSubforumId = null;
@@ -37,6 +40,8 @@ let nextStagedAttachmentId = 0; // Counter for unique IDs for staged attachments
 
 // --- Rendering Functions ---
 
+import { subforumNav } from './dom.js';
+
 export function renderSubforumList(subforums) {
     subforumList.innerHTML = '';
     if (!Array.isArray(subforums)) {
@@ -53,6 +58,10 @@ export function renderSubforumList(subforums) {
         a.addEventListener('click', (e) => {
             e.preventDefault();
             loadTopics(subforum.subforum_id, subforum.name);
+            // If on mobile and the menu is open, close it
+            if (isMobile() && subforumNav.classList.contains('mobile-menu-visible')) {
+                toggleMobileMenu();
+            }
         });
         li.appendChild(a);
 
@@ -87,10 +96,61 @@ export function renderTopicList(topics) {
             loadPosts(topic.topic_id, topic.title);
         });
 
+        const openInPaneBtn = document.createElement('span');
+        openInPaneBtn.className = 'topic-action-icon button-icon';
+        openInPaneBtn.title = 'Open in new pane';
+        openInPaneBtn.innerHTML = '&#x2924;'; // Symbol for "Open in new window"
+        openInPaneBtn.addEventListener('click', async (e) => {
+            e.preventDefault();
+            e.stopPropagation(); // Prevent the topic link's click event
+            
+            try {
+                // Fetch the raw post data for the topic
+                const posts = await apiRequest(`/api/topics/${topic.topic_id}/posts`);
+                if (posts && posts.length > 0) {
+                    // Create the same structure as the primary pane to ensure CSS rules apply
+                    const tempSection = document.createElement('section');
+                    tempSection.id = 'topic-view-section'; // Use the same ID to match styles
+
+                    const tempPostList = document.createElement('div');
+                    tempPostList.id = 'post-list';
+
+                    // Reuse the existing post rendering logic to build the HTML
+                    const postsById = posts.reduce((map, post) => {
+                        map[post.post_id] = { ...post, children: [] };
+                        return map;
+                    }, {});
+
+                    const rootPosts = [];
+                    posts.forEach(post => {
+                        if (post.parent_post_id && postsById[post.parent_post_id]) {
+                            postsById[post.parent_post_id].children.push(postsById[post.post_id]);
+                        } else if (!post.parent_post_id) {
+                            rootPosts.push(postsById[post.post_id]);
+                        }
+                    });
+
+                    rootPosts.sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+                    rootPosts.forEach(post => renderPostNode(post, tempPostList, 0));
+
+                    tempSection.appendChild(tempPostList);
+
+                    // Pass the generated HTML to openSecondaryPane
+                    openSecondaryPane(tempSection.innerHTML, topic.title);
+                } else {
+                    openSecondaryPane('<p>This topic has no posts.</p>', topic.title);
+                }
+            } catch (error) {
+                console.error('Failed to load topic for secondary pane:', error);
+                openSecondaryPane('<p>Error loading topic content.</p>', 'Error');
+            }
+        });
+
         const meta = document.createElement('div');
         meta.className = 'topic-meta';
         meta.textContent = `Started by ${topic.username} | Posts: ${topic.post_count} | Last post: ${new Date(topic.last_post_at).toLocaleString()}`;
         li.appendChild(a);
+        li.appendChild(openInPaneBtn);
         li.appendChild(meta);
 
         // Add notification badge for topic
@@ -211,11 +271,16 @@ function renderPostNode(post, parentElement, depth) {
 
     const metaDiv = document.createElement('div');
     metaDiv.className = 'post-meta';
-    metaDiv.textContent = `Posted by ${post.username} on ${new Date(post.created_at).toLocaleString()}`;
+    
+    // If it's an LLM response and a persona_name is available, use it. Otherwise, fall back to username.
+    const displayName = (post.is_llm_response && post.persona_name) ? post.persona_name : post.username;
+    metaDiv.textContent = `Posted by ${displayName} on ${new Date(post.created_at).toLocaleString()}`;
+
     if (post.is_llm_response) {
         const llmMeta = document.createElement('span');
         llmMeta.className = 'llm-meta';
-        llmMeta.textContent = ` (LLM: ${post.llm_model_id} / Persona: ${post.llm_persona_id})`;
+        // Show the model and Persona ID for clarity, since the name is now the primary identifier.
+        llmMeta.textContent = ` (LLM: ${post.llm_model_id || 'default'} / Persona ID: ${post.llm_persona_id})`;
         metaDiv.appendChild(llmMeta);
     }
 
@@ -383,8 +448,23 @@ export async function loadSubforumPersonas(subforumId) {
     });
     if (personas.length > 0) {
         subforumPersonasBar.style.display = '';
-        llmPersonaSelect.value = currentPersonaId;
-        llmPersonaCurrentLabel.textContent = 'Current: ' + personas.find(p => p.persona_id == currentPersonaId)?.name;
+        const tsInstance = initializeTomSelect(llmPersonaSelect, {
+            create: false,
+            controlInput: null, // Disables text input completely
+            onChange: (value) => {
+                currentPersonaId = value;
+                const llmPersonaCurrentLabel = document.getElementById('llm-persona-current-label');
+                if (llmPersonaCurrentLabel) {
+                    const selectedPersona = personas.find(p => p.persona_id == value);
+                    llmPersonaCurrentLabel.textContent = 'Current: ' + (selectedPersona ? selectedPersona.name : 'None');
+                }
+            }
+        });
+        if (tsInstance) {
+            tsInstance.setValue(currentPersonaId, true); // Silently set value
+        }
+        const llmPersonaCurrentLabel = document.getElementById('llm-persona-current-label');
+        if(llmPersonaCurrentLabel) llmPersonaCurrentLabel.textContent = 'Current: ' + personas.find(p => p.persona_id == currentPersonaId)?.name;
     } else {
         subforumPersonasBar.style.display = 'none';
     }
@@ -641,7 +721,7 @@ function renderAttachmentItem(attachmentData, containerElement, postId) {
 
     const deleteButton = document.createElement('button');
     deleteButton.className = 'delete-attachment-btn btn btn-danger btn-small';
-    deleteButton.textContent = 'Delete';
+    deleteButton.textContent = '🗑';
     deleteButton.addEventListener('click', async () => {
         if (confirm(`Are you sure you want to delete attachment "${attachmentData.filename}"?`)) {
             try {

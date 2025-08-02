@@ -19,6 +19,7 @@ def close_db(error=None): # Added error=None to match Flask's teardown_appcontex
 def init_db():
     """Initializes the database and creates tables if they don't exist."""
     db = sqlite3.connect(DATABASE)
+    db.row_factory = sqlite3.Row  # Use dictionary-like rows for this connection
     cursor = db.cursor()
 
     # Check if users table exists (as a proxy for initial setup)
@@ -411,7 +412,7 @@ def init_db():
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS personas (
             persona_id INTEGER PRIMARY KEY AUTOINCREMENT,
-            name TEXT NOT NULL,
+            name TEXT NOT NULL UNIQUE,
             prompt_instructions TEXT NOT NULL,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -423,6 +424,7 @@ def init_db():
             FOREIGN KEY (created_by_user) REFERENCES users(user_id)
         )
     ''')
+    cursor.execute("CREATE UNIQUE INDEX IF NOT EXISTS ix_personas_name_unique ON personas (name)")
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS persona_versions (
             version_id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -599,23 +601,32 @@ def create_persona(name, prompt_instructions, created_by_user):
     db = get_db()
     cursor = db.cursor()
     try:
+        # Check if a persona with the same name already exists (case-insensitive)
+        cursor.execute("SELECT persona_id FROM personas WHERE name = ? COLLATE NOCASE", (name,))
+        existing = cursor.fetchone()
+        if existing:
+            # Return a specific indicator that the persona exists, e.g., a tuple (status, value)
+            return (False, f"A persona named '{name}' already exists.")
+
         cursor.execute('''
             INSERT INTO personas (name, prompt_instructions, created_by_user, is_active)
             VALUES (?, ?, ?, 1)
         ''', (name, prompt_instructions, created_by_user))
         persona_id = cursor.lastrowid
+        
         # Save initial version
         cursor.execute('''
             INSERT INTO persona_versions (persona_id, name, prompt_instructions, updated_by_user, version)
             VALUES (?, ?, ?, ?, 1)
         ''', (persona_id, name, prompt_instructions, created_by_user))
+        
         db.commit()
-        return persona_id
+        return (True, persona_id) # Return success and the new ID
     except sqlite3.Error as e:
         print(f"Database error in create_persona: {e}")
         if db:
             db.rollback()
-        return None
+        return (False, "A database error occurred.")
 
 # ------------------- POST ANCESTOR LOGIC -------------------
 
@@ -1313,6 +1324,24 @@ def set_global_default_persona_id(persona_id):
         print(f"Database error in set_global_default_persona_id: {e}")
         if db:
             db.rollback()
+        return False
+
+def update_setting(key, value):
+    """
+    Updates a specific setting in the settings table.
+    Uses INSERT OR REPLACE to handle both new and existing settings.
+    """
+    db = get_db()
+    try:
+        db.execute(
+            "INSERT OR REPLACE INTO settings (setting_key, setting_value) VALUES (?, ?)",
+            (key, value),
+        )
+        db.commit()
+        return True
+    except sqlite3.Error as e:
+        print(f"Database error in update_setting for key {key}: {e}")
+        db.rollback()
         return False
 
 def get_effective_persona_for_subforum(subforum_id, override_persona_id=None):

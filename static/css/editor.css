@@ -116,3 +116,35 @@
     /* Ensure it doesn't interfere with editor's resizability or layout */
     clear: both; /* If editor container is floated or uses flex that might be affected */
 }
+/* --- Token Summary Control in Status Bar --- */
+.token-summary-control {
+    cursor: pointer;
+    user-select: none;
+}
+
+.token-summary-control .toggle-button {
+    font-weight: bold;
+    margin-right: 5px;
+    display: inline-block;
+    width: 16px; /* Fixed width for alignment */
+    text-align: center;
+}
+
+.editor-statusbar .token-summary-control {
+    float: right;
+}
+
+/* Adjust the main token breakdown container to be hidden by default */
+#new-topic-token-breakdown-container,
+#reply-token-breakdown-container {
+    display: none; /* Hidden by default */
+    margin-top: 10px;
+    padding: 10px;
+    border: 1px solid var(--input-border, #777);
+    background-color: var(--input-bg, #555);
+}
+
+#new-topic-token-breakdown-container.expanded,
+#reply-token-breakdown-container.expanded {
+    display: block; /* Shown when expanded */
+}

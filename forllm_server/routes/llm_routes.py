@@ -1,5 +1,6 @@
 import sqlite3
 import requests
+import math # Import math for ceiling function
 from flask import Blueprint, request, jsonify, current_app # Added current_app
 from ..database import get_db, get_effective_persona_for_subforum, get_persona # Import get_persona
 from ..config import OLLAMA_TAGS_URL, DEFAULT_MODEL, CURRENT_USER_ID # Added CURRENT_USER_ID
@@ -104,7 +105,18 @@ def get_llm_model_context_window_route(model_name):
 def get_queue():
     db = get_db()
     cursor = db.cursor()
-    # Fetch llm_requests, joining with posts to get a snippet of the original post
+
+    # --- Pagination Logic ---
+    page = request.args.get('page', 1, type=int)
+    per_page = request.args.get('per_page', 10, type=int)
+    offset = (page - 1) * per_page
+
+    # Get total number of items for pagination
+    cursor.execute("SELECT COUNT(request_id) FROM llm_requests")
+    total_items = cursor.fetchone()[0]
+    total_pages = math.ceil(total_items / per_page)
+
+    # Fetch paginated llm_requests, joining with posts and personas
     cursor.execute("""
         SELECT
             lr.request_id,
@@ -113,20 +125,25 @@ def get_queue():
             lr.status,
             lr.llm_model,
             lr.llm_persona, -- This is the persona_id
-            lr.prompt_token_breakdown, -- <<< ADDED THIS LINE
+            lr.prompt_token_breakdown,
             p_orig.content AS post_snippet,
             pers.name AS persona_name -- Fetch persona name
         FROM llm_requests lr
         JOIN posts p_orig ON lr.post_id_to_respond_to = p_orig.post_id
-        LEFT JOIN personas pers ON lr.llm_persona = pers.persona_id -- Use LEFT JOIN in case persona is null or ID is invalid
+        LEFT JOIN personas pers ON lr.llm_persona = pers.persona_id
         ORDER BY lr.requested_at DESC
-    """)
-    queue_items = cursor.fetchall() # fetchall returns a list of Row objects (like dicts)
+        LIMIT ? OFFSET ?
+    """, (per_page, offset))
+    queue_items = cursor.fetchall()
 
-    # Convert Row objects to dictionaries for jsonify
+    # Convert Row objects to dictionaries
     queue_list = [dict(item) for item in queue_items]
 
-    return jsonify(queue_list)
+    return jsonify({
+        'items': queue_list,
+        'total_pages': total_pages,
+        'current_page': page
+    })
 
 # New route to get the full prompt for a specific queued request
 @llm_api_bp.route('/queue/<int:request_id>/prompt', methods=['GET'])

@@ -18,7 +18,7 @@
     color: var(--modal-text); /* Added from dark mode */
     width: 80%;
     max-width: 500px; /* Default max-width */
-    border-radius: 5px;
+    border-radius: 6px;
     position: fixed; /* Changed for transform centering */
     left: 50%;
     top: 50%;
@@ -79,7 +79,7 @@
 }
 
 .error-message {
-    color: red;
+    color: var(--error-text-color);
     font-size: 0.9em;
     margin-top: 0.5rem;
 }
@@ -89,7 +89,7 @@
     color: var(--schedule-display-color); /* Was #555 */
     margin-bottom: 1em;
     padding: 0.5em;
-    background-color: #2e2e2e; /* Darker background for schedule display - Was #f9f9f9 */
+    background-color: var(--schedule-bg-color);/* #2e2e2e;  Darker background for schedule display - Was #f9f9f9 */
     border-radius: 4px;
     border: 1px solid var(--post-border); /* Was #eee */
 }
@@ -201,32 +201,23 @@
     font-weight: bold;
 }
 
-#persona-name-input {
+#persona-name-input,
+#persona-instructions-input {
+    /* These will now inherit styles from components.css */
+    /* We can add specific overrides here if needed, e.g., width */
     width: 100%;
-    padding: 0.5rem;
-    border: 1px solid #444; /* Was #ddd */
-    border-radius: 4px;
-    margin-bottom: 1rem;
-    background-color: #1f1f1f; /* Added from dark mode */
-    color: #e0e0e0; /* Added from dark mode */
+    box-sizing: border-box; /* Ensure padding doesn't make it overflow */
 }
 
 #persona-instructions-input {
-    width: 100%;
     min-height: 150px;
-    padding: 0.5rem;
-    border: 1px solid #444; /* Was #ddd */
-    border-radius: 4px;
     resize: vertical;
-    margin-bottom: 1rem;
-    background-color: #1f1f1f; /* Added from dark mode */
-    color: #e0e0e0; /* Added from dark mode */
 }
 
 #persona-prompt-preview {
     margin: 1rem 0;
     padding: 1rem;
-    background-color: #1f1f1f; /* Was #f5f5f5 */
+    background-color: #4e4e4e; /* Was #f5f5f5 */
     border: 1px solid #444; /* Was #ddd */
     border-radius: 4px;
     white-space: pre-wrap;
@@ -235,7 +226,7 @@
 
 /* Specific styling for #persona-modal .modal-content for dark theme */
 #persona-modal .modal-content {
-    background-color: #2d2d2d; /* from html[data-theme="dark"] */
+    background-color: var(--bg-color); /* from html[data-theme="dark"] */
     color: #e0e0e0; /* from html[data-theme="dark"] */
     border-color: #444; /* from html[data-theme="dark"] */
 }
@@ -246,3 +237,156 @@
     background-color: #2d2d2d;
     border-color: #444;
 } */
+
+/* --- Theme Creator Modal --- */
+#theme-creator-modal {
+    /* Use hardcoded values to ensure visibility regardless of theme */
+    background-color: rgba(10, 10, 10, 0.6);
+    z-index: 1050; /* Higher than other modals */
+}
+
+#theme-creator-modal .modal-content {
+    /* Overriding default modal-content for this specific modal */
+    position: absolute; /* Important for dragging */
+    top: 100px; /* Initial position */
+    left: 100px;
+    transform: none; /* Disable the translate centering */
+    width: 350px; /* A good starting width */
+    max-width: 90vw;
+    max-height: 80vh;
+    background-color: #ffffff;
+    color: #111111;
+    border: 1px solid #000000;
+    box-shadow: 0 5px 15px rgba(0,0,0,0.5);
+    display: flex;
+    flex-direction: column;
+}
+
+#theme-creator-header {
+    padding: 10px 15px;
+    background-color: #333;
+    color: #fff;
+    cursor: move; /* Indicate it's draggable */
+    border-bottom: 1px solid #000;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+#theme-creator-header h4 {
+    margin: 0;
+    color: #fff;
+    font-size: 1.1em;
+}
+
+#theme-creator-content {
+    padding: 0; /* Remove padding to allow children to control it */
+    overflow-y: hidden; /* Hide overflow, scrolling is handled by a child */
+    flex-grow: 1;
+    display: flex;
+    flex-direction: column;
+}
+
+#theme-creator-modal .close-btn {
+    position: static; /* Override absolute positioning from default .close-btn */
+    float: none;
+    font-size: 24px;
+    color: #ccc;
+    padding: 0 5px;
+}
+
+#theme-creator-modal .close-btn:hover {
+    color: #fff;
+}
+
+.theme-variable-grid-scroll-container {
+    overflow-y: auto;
+    padding: 15px;
+    flex-grow: 1;
+}
+
+.theme-variable-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+    gap: 15px;
+}
+
+.theme-variable-item {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+}
+
+.theme-variable-item label {
+    font-weight: bold;
+    font-size: 0.9em;
+    color: #555;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.color-input-wrapper {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.color-input-wrapper input[type="color"] {
+    width: 40px;
+    height: 30px;
+    border: 1px solid #ccc;
+    padding: 0;
+    cursor: pointer;
+}
+
+.color-input-wrapper .color-text-input {
+    width: 100px;
+    height: 30px;
+    padding: 0 5px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    font-family: monospace;
+}
+
+#theme-creator-footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    padding: 10px 15px;
+    border-top: 1px solid #ccc;
+    background-color: #f0f0f0;
+}
+
+#in-use-colors-container {
+    padding: 10px 15px;
+    background-color: #f0f0f0;
+    border-top: 1px solid #ccc;
+    flex-shrink: 0; /* Prevent this container from shrinking */
+}
+
+#in-use-colors-container h4 {
+    margin: 0 0 10px 0;
+    font-size: 1em;
+    color: #333;
+}
+
+#in-use-colors-palette {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.color-swatch {
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    border: 1px solid #ccc;
+    cursor: pointer;
+    transition: transform 0.1s ease;
+}
+
+.color-swatch:hover {
+    transform: scale(1.1);
+    border-color: #000;
+}

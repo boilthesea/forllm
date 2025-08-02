@@ -255,20 +255,24 @@ def handle_posts(topic_id):
                 SELECT
                     p.post_id, p.topic_id, p.user_id, u.username, p.parent_post_id, p.content, p.created_at,
                     p.is_llm_response, p.llm_model_id, p.llm_persona_id,
+                    per.name AS persona_name,
                     CAST(p.created_at AS TEXT) AS sort_key,
                     0 AS depth
                 FROM posts p
                 JOIN users u ON p.user_id = u.user_id
+                LEFT JOIN personas per ON CAST(p.llm_persona_id AS INTEGER) = per.persona_id
                 WHERE p.topic_id = ? AND p.parent_post_id IS NULL
                 UNION ALL
                 SELECT
                     p2.post_id, p2.topic_id, p2.user_id, u2.username, p2.parent_post_id, p2.content, p2.created_at,
                     p2.is_llm_response, p2.llm_model_id, p2.llm_persona_id,
+                    per2.name AS persona_name,
                     cte.sort_key || '_' || CAST(p2.created_at AS TEXT),
                     cte.depth + 1
                 FROM posts p2
                 JOIN users u2 ON p2.user_id = u2.user_id
                 JOIN ThreadCTE cte ON p2.parent_post_id = cte.post_id
+                LEFT JOIN personas per2 ON CAST(p2.llm_persona_id AS INTEGER) = per2.persona_id
                 WHERE p2.topic_id = ?
             )
             SELECT * FROM ThreadCTE ORDER BY sort_key;

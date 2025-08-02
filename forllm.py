@@ -1,12 +1,12 @@
 import os
 import threading
-import os
-import threading
+import argparse
 from flask import Flask
+from waitress import serve
 
 # Import functionalities from the new forllm_server package
-from forllm_server.config import DATABASE, UPLOAD_FOLDER # Import UPLOAD_FOLDER
-from forllm_server.database import init_db, close_db
+from forllm_server.config import DATABASE, UPLOAD_FOLDER
+from forllm_server.database import init_db, close_db, update_setting
 from forllm_server.llm_queue import llm_worker
 
 # Import Blueprints
@@ -40,8 +40,25 @@ app.register_blueprint(utility_bp) # Added for utility routes
 def teardown_db(error):
     close_db(error)
 
+# --- Helper Functions ---
+def reset_theme_to_default():
+    """Resets the theme setting in the database to the default."""
+    with app.app_context():
+        print("Resetting theme to default 'theme-silvery'...")
+        update_setting('theme', 'theme-silvery')
+        print("Theme has been reset.")
+
 # --- Main Execution ---
 if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description="Run the forllm server.")
+    parser.add_argument('--reset-theme', action='store_true', help="Reset the application theme to the default 'silvery' and exit.")
+    parser.add_argument('--debug', action='store_true', help="Run the application in Flask's debug mode.")
+    args = parser.parse_args()
+
+    if args.reset_theme:
+        reset_theme_to_default()
+        exit()
+        
     # Create upload folder if it doesn't exist
     try:
         os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
@@ -59,8 +76,12 @@ if __name__ == '__main__':
     worker_thread = threading.Thread(target=llm_worker, args=(app,), daemon=True)
     worker_thread.start()
 
-    print("Starting Flask server...")
-    # Host 0.0.0.0 makes it accessible on the network
-    # Use_reloader=False is important when running background threads with Flask's dev server
-    # to prevent the thread from being started twice.
-    app.run(debug=True, host='0.0.0.0', port=5000, use_reloader=False)
+    if args.debug:
+        print("Starting Flask development server in debug mode...")
+        # Host 0.0.0.0 makes it accessible on the network
+        # use_reloader=False is important for background threads
+        app.run(debug=True, host='0.0.0.0', port=4773, use_reloader=False)
+    else:
+        print("Starting production server with Waitress...")
+        # Host 0.0.0.0 makes it accessible on the network
+        serve(app, host='0.0.0.0', port=4773)

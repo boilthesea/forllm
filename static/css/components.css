@@ -6,7 +6,7 @@ nav#subforum-nav button { /* Specificity for buttons inside the nav if needed */
 button,
 input[type="submit"],
 input[type="button"] {
-    background: linear-gradient(to bottom, #5a5a5a 0%, #484848 100%); /* Dark silver gradient */
+    background-color: var(--button-bg, #5a5a5a);
     color: var(--text-color, #eee);
     border: 1px solid #666;
     padding: 0.6rem 1.2rem; /* Increased padding */
@@ -15,29 +15,60 @@ input[type="button"] {
     margin-top: 0.5rem;
     font-size: 0.95em;
     font-weight: 500;
-    transition: background 0.2s ease, box-shadow 0.2s ease, transform 0.1s ease;
-    box-shadow: 0 1px 2px rgba(0,0,0,0.3);
+    transition: background-color 0.2s ease, border-color 0.2s ease, transform 0.1s ease;
 }
 
 button:hover,
 input[type="submit"]:hover,
 input[type="button"]:hover {
-    background: linear-gradient(to bottom, #626262 0%, #505050 100%);
+    background-color: var(--button-hover-bg, #626262);
     border-color: #777;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.4);
 }
 
 button:active,
 input[type="submit"]:active,
 input[type="button"]:active {
-    background: linear-gradient(to bottom, #454545 0%, #383838 100%);
-    box-shadow: inset 0 1px 2px rgba(0,0,0,0.5);
-    border-color: #555; /* Added from dark mode active styles */
+    background-color: var(--button-active-bg, #454545);
+    border-color: #555;
     transform: translateY(1px);
 }
 
 /* Specific button types that should retain brand color or semantic colors */
 /* Example: A primary action button could be styled differently if needed */
+/* --- Button Hierarchy --- */
+.button-primary {
+    background-color: var(--button-primary-bg, #3498db);
+    color: var(--button-primary-text, white);
+    border: 1px solid var(--button-primary-border, #2980b9);
+}
+
+.button-primary:hover {
+    background-color: var(--button-primary-hover-bg, #2980b9);
+}
+
+.button-secondary {
+    background-color: transparent;
+    color: var(--button-secondary-text, #eee);
+    border: 1px solid var(--button-secondary-border, #666);
+}
+
+.button-secondary:hover {
+    background-color: var(--button-secondary-hover-bg, rgba(255, 255, 255, 0.1));
+    border-color: var(--button-secondary-hover-border, #888);
+}
+
+.button-icon {
+    background: none;
+    border: none;
+    padding: 0.4rem;
+    border-radius: 50%;
+    color: var(--icon-button-color, #ccc);
+}
+
+.button-icon:hover {
+    background-color: var(--icon-button-hover-bg, rgba(255, 255, 255, 0.1));
+    color: var(--icon-button-hover-color, #fff);
+}
 /* .button-primary { background: #3498db; color: white; ... } */
 
 /* Delete/Remove buttons (like in schedule modal) */
@@ -49,41 +80,51 @@ input[type="button"]:active {
 /* Re-styling for delete/add to ensure they stand out if desired */
 .schedule-row .delete-schedule-btn,
 #add-schedule-row-btn {
-    background: #c0392b; /* Darker Red */
-    color: white;
-    border: 1px solid #a03021;
+    background-color: var(--button-danger-bg);
+    color: var(--button-danger-text);
+    border: 1px solid var(--button-danger-hover-bg);
 }
 .schedule-row .delete-schedule-btn:hover {
-    background: #a03021;
+    background-color: var(--button-danger-hover-bg);
 }
 #add-schedule-row-btn {
-    background: #27ae60; /* Darker Green */
-    color: white;
-    border: 1px solid #1f8a4c;
+    background-color: var(--button-success-bg);
+    color: var(--button-success-text);
+    border: 1px solid var(--button-success-hover-bg);
 }
 #add-schedule-row-btn:hover {
-    background: #1f8a4c;
+    background-color: var(--button-success-hover-bg);
 }
 
 /* Exit buttons for new sections */
-.exit-section-btn {
-    margin-bottom: 1rem;
-    /* Uses general button styling */
-}
+/* .exit-section-btn is now handled by .pane-header-controls */
 
 input[type="text"], textarea, select /* Style select dropdown too */ {
     width: calc(100% - 22px); /* Account for padding/border */
     padding: 0.5rem;
     margin-bottom: 0.5rem;
     border: 1px solid var(--input-border, #777);
-    border-radius: 3px;
+    border-radius: 6px;
     background-color: var(--input-bg, #555);
     color: var(--input-text, #eee);
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+input[type="text"]:focus,
+textarea:focus,
+select:focus {
+    outline: none;
+    border-color: var(--input-focus-border, #007bff);
+    box-shadow: 0 0 0 2px var(--input-focus-shadow, rgba(0, 123, 255, 0.25));
 }
 
 textarea {
     min-height: 80px;
     resize: vertical;
+}
+
+input[type="checkbox"] {
+    accent-color: var(--accent-color);
 }
 
 /* Toggle Switch for Enabled/Disabled */
@@ -126,11 +167,11 @@ textarea {
 }
 
 input:checked + .slider {
-    background-color: var(--button-bg, #5dade2); /* Was #2196F3 */
+    background-color: var(--toggle-checked-bg, #1abc9c);
 }
 
 input:focus + .slider {
-    box-shadow: 0 0 1px var(--button-bg, #5dade2); /* Was #2196F3 */
+    box-shadow: 0 0 1px var(--toggle-checked-bg, #1abc9c);
 }
 
 input:checked + .slider:before {
@@ -151,10 +192,10 @@ input:checked + .slider:before {
 #add-schedule-row-btn {
     padding: 0.3rem 0.6rem;
     font-size: 0.9em;
-    background-color: #c0392b; /* Darker Red */
+    background-color: var(--button-danger-bg);
 }
 #add-schedule-row-btn {
-    background-color: #27ae60; /* Darker Green */
+    background-color: var(--button-success-bg);
     margin-top: 0.5rem;
     margin-bottom: 1rem;
     display: block; /* Make it full width or center it */
@@ -163,10 +204,10 @@ input:checked + .slider:before {
 }
 
 .schedule-row .delete-schedule-btn:hover {
-    background-color: #a03021;
+    background-color: var(--button-danger-hover-bg);
 }
 #add-schedule-row-btn:hover {
-    background-color: #1f8a4c;
+    background-color: var(--button-success-hover-bg);
 }
 
 #save-schedules-btn { /* Style for the main save button */
@@ -181,6 +222,10 @@ input:checked + .slider:before {
     display: flex;
     align-items: center;
     gap: 0.5rem;
+}
+
+.setting-item .ts-wrapper {
+    flex-grow: 1;
 }
 
 .setting-item label {
@@ -221,36 +266,36 @@ input:checked + .slider:before {
     border: none;
     border-radius: 6px 6px 0 0;
     font-weight: 500;
-    color: #eee; /* Was #333 */
+    color: var(--settings-nav-inactive-color);
     transition: background 0.2s, color 0.2s;
     margin-bottom: -2px;
     border-bottom: 2px solid transparent; /* Always reserve space for border */
 }
 
 #settings-nav li.active {
-    background: #222; /* Was #e0f7f4 */
-    color: #1abc9c;
-    border-bottom: 2px solid #1abc9c;
+    background: var(--settings-nav-active-bg);
+    color: var(--settings-nav-active-color);
+    border-bottom: 2px solid var(--settings-nav-active-color);
     font-weight: 700;
-    box-shadow: 0 -2px 8px rgba(26,188,156,0.12); /* Was rgba(26,188,156,0.08) */
+    box-shadow: 0 -2px 8px rgba(26,188,156,0.12); /* This shadow is subtle and might not need a variable yet */
     z-index: 1;
 }
 
 /* --- Increased specificity for settings tab active state --- */
 /* This rule is identical to the one above, can be removed if not needed for override purposes */
 #settings-nav > ul > li.active {
-    background: #222; /* Was #e0f7f4 */
-    color: #1abc9c;
-    border-bottom: 2px solid #1abc9c;
+    background: var(--settings-nav-active-bg);
+    color: var(--settings-nav-active-color);
+    border-bottom: 2px solid var(--settings-nav-active-color);
     font-weight: 700;
-    box-shadow: 0 -2px 8px rgba(26,188,156,0.12); /* Was rgba(26,188,156,0.08) */
+    box-shadow: 0 -2px 8px rgba(26,188,156,0.12);
     z-index: 1;
 }
 
 #settings-nav li:hover {
-    background: #333; /* Was #f4f4f4 */
-    color: #1abc9c;
-    border-bottom: 2px solid #1abc9c;
+    background: var(--settings-nav-hover-bg);
+    color: var(--settings-nav-hover-color);
+    border-bottom: 2px solid var(--settings-nav-hover-color);
 }
 
 /* nav#subforum-nav button styling is inherited from general button styles */
@@ -259,8 +304,90 @@ input:checked + .slider:before {
     display: inline-block;
     width: 10px;
     height: 10px;
-    background-color: #ff3b30; /* A noticeable red color */
+    background-color: var(--notification-badge-bg);
     border-radius: 50%;
     margin-left: 8px;
     vertical-align: middle; /* Or adjust as needed */
+}
+/* --- Tom Select Theme Overrides --- */
+
+.ts-control {
+    background-color: var(--input-bg);
+    border-color: var(--input-border);
+    color: var(--input-text);
+    border-radius: 4px;
+    padding: 8px 12px;
+    width: 100%;
+    box-sizing: border-box; /* Ensures padding doesn't add to the width */
+}
+
+.ts-control.focus {
+    border-color: var(--input-focus-border);
+    box-shadow: 0 0 0 0.2rem var(--input-focus-shadow);
+}
+
+.ts-dropdown {
+    background-color: var(--section-bg);
+    border-color: var(--modal-border);
+    color: var(--input-text);
+}
+
+.ts-dropdown .option {
+    padding: 8px 12px;
+}
+
+/* This is the key style for the selection highlight */
+.ts-dropdown .option.active,
+.ts-dropdown .option:hover {
+    background-color: var(--accent-color);
+    color: var(--button-primary-text); /* Use the primary button text color for contrast */
+}
+
+.ts-dropdown .create.active {
+    color: var(--button-primary-text);
+}
+
+/* --- Pagination --- */
+.pagination-container {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 1rem 0;
+}
+
+.pagination-container button,
+.pagination-container .page-number,
+.pagination-container .page-gap {
+    margin: 0 4px;
+    padding: 8px 12px;
+    border: 1px solid var(--button-secondary-border, #666);
+    background-color: var(--button-bg, #5a5a5a);
+    color: var(--text-color, #eee);
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background-color 0.2s, border-color 0.2s;
+}
+
+.pagination-container button:hover,
+.pagination-container .page-number:hover {
+    background-color: var(--button-hover-bg, #626262);
+    border-color: #777;
+}
+
+.pagination-container .page-number.active {
+    background-color: var(--button-primary-bg, #3498db);
+    border-color: var(--button-primary-border, #2980b9);
+    color: var(--button-primary-text, white);
+    font-weight: bold;
+}
+
+.pagination-container button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.pagination-container .page-gap {
+    border: none;
+    background: none;
+    cursor: default;
 }

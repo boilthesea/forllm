@@ -1,5 +1,9 @@
 // This file will centralize DOM element references.
 
+export const mainElement = document.querySelector('main');
+export const mainContainer = document.getElementById('main-container');
+export const primaryPane = document.getElementById('primary-pane');
+
 export const subforumNav = document.getElementById('subforum-nav');
 export const subforumList = document.getElementById('subforum-list');
 export const addSubforumBtn = document.getElementById('add-subforum-btn');
@@ -24,6 +28,10 @@ export const replyContentInput = document.getElementById('reply-content');
 export const submitReplyBtn = document.getElementById('submit-reply-btn');
 export const cancelReplyBtn = document.getElementById('cancel-reply-btn');
 
+// Persona Elements
+export const llmPersonaSelect = document.getElementById('llm-persona-select');
+export const subforumPersonasBar = document.getElementById('subforum-personas-bar');
+
 // Schedule Elements
 export const scheduleDisplay = document.getElementById('schedule-display'); // For next schedule text
 export const editScheduleBtn = document.getElementById('edit-schedule-btn');
@@ -33,8 +41,8 @@ export const scheduleListContainer = document.getElementById('schedule-list-cont
 export const addScheduleRowBtn = document.getElementById('add-schedule-row-btn');
 export const saveSchedulesBtn = document.getElementById('save-schedules-btn'); // Renamed save button
 export const scheduleError = document.getElementById('schedule-error');
-export const statusIndicatorContainer = document.getElementById('processing-status-indicator-container');
-export const statusDot = document.getElementById('processing-status-dot');
+export const statusIndicatorContainers = document.querySelectorAll('.processing-status-indicator-container');
+export const statusDots = document.querySelectorAll('.status-dot');
 
 // Settings Modal Elements
 export const settingsBtn = document.getElementById('settings-btn');
@@ -48,6 +56,7 @@ export const exitSettingsBtn = document.getElementById('exit-settings-btn');
 export const queueBtn = document.getElementById('queue-btn');
 export const queuePageSection = document.getElementById('queue-page-section');
 export const queuePageContent = document.getElementById('queue-page-content');
+export const queuePaginationContainer = document.getElementById('queue-pagination-container');
 export const exitQueueBtn = document.getElementById('exit-queue-btn');
 
 // Full Prompt Modal Elements
@@ -62,3 +71,8 @@ export const exitActivityBtn = document.getElementById('exit-activity-btn');
 export const activityNewTopicsList = document.getElementById('activity-new-topics-list');
 export const activityNewRepliesList = document.getElementById('activity-new-replies-list');
 export const activityNewPersonasList = document.getElementById('activity-new-personas-list');
+
+// Mobile Nav Buttons
+export const mobileScheduleBtn = document.getElementById('mobile-schedule-btn');
+export const mobileQueueBtn = document.getElementById('mobile-queue-btn');
+export const mobileSettingsBtn = document.getElementById('mobile-settings-btn');

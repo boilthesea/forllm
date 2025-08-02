@@ -1,23 +1,24 @@
 main {
-    display: flex;
-    gap: 1rem;
+    /* display: flex; and gap: 1rem; are removed as nav is now position:fixed */
     padding: 1rem;
-    max-width: 1200px;
-    margin: auto;
+    padding-left: calc(280px + 1rem); /* Accommodate fixed nav width (260px) + original gap */
+    max-width: none; /* Make expanded view the default */
+    margin: 0; /* Remove auto margin to allow full width */
 }
 
 nav#subforum-nav {
-    flex: 0 0 280px; /* Fixed width for the sidebar */
+    width: 260px; /* Explicit width for fixed position */
     background: var(--nav-bg);
     padding: 1.5rem; /* Increased padding */
     border-right: 1px solid var(--post-border); /* Subtle border */
     box-shadow: 0 0 5px rgba(255,255,255,0.1); /* Softer shadow */
     display: flex;
     flex-direction: column;
-    min-height: 100vh; /* Make sidebar full height */
-    max-height: 100vh; /* Ensure it doesn't exceed viewport */
+    height: 100vh; /* Make sidebar full height */
+    position: fixed;
+    top: 0;
+    left: 0;
     overflow-y: auto; /* Allow sidebar to scroll if content overflows */
-    /* position: relative; /* For positioning status indicator - no longer needed here */
 }
 
 nav#subforum-nav h1 {
@@ -28,9 +29,49 @@ nav#subforum-nav h1 {
 
 #site-subtitle {
     font-size: 0.65em; /* Reduced font size */
-    color: #bbb; /* Was #666, assuming this should be lighter on dark bg */
+    color: var(--nav-subtitle-color); /* this should be lighter on dark bg */
     margin-top: -0.5em;
     margin-bottom: 1.5em;
+}
+
+#desktop-heading {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+}
+
+#main-nav {
+    margin-bottom: 1.5rem;
+}
+
+#main-nav ul {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+#main-nav li a {
+    display: block;
+    padding: 0.75rem 1.25rem;
+    text-decoration: none;
+    color: var(--nav-text-color);
+    border-radius: 6px;
+    transition: background-color 0.2s ease, color 0.2s ease;
+    font-weight: 500;
+}
+
+#main-nav li a:hover {
+    background-color: var(--nav-hover-bg);
+    color: var(--nav-hover-text-color);
+}
+
+#main-nav li a.active {
+    background-color: var(--nav-active-bg);
+    color: var(--nav-active-text-color);
+    font-weight: 700;
 }
 
 hr.sidebar-separator {
@@ -40,9 +81,9 @@ hr.sidebar-separator {
 }
 
 section {
-    flex: 3;
-    background: var(--nav-bg); /* Was #fff */
-    padding: 1rem;
+    /* flex: 3; /* This is no longer a direct flex item of main */
+    background: var(--section-bg); /* Was #fff */
+    padding: 1.5rem;
     border-radius: 5px;
     box-shadow: 0 0 5px rgba(255,255,255,0.1); /* Was rgba(0,0,0,0.1) */
 }
@@ -75,4 +116,243 @@ section {
     background-color: var(--nav-bg);
     border-color: var(--input-border);
     /* Assuming some padding/margin might be needed, but will stick to original instruction for now */
+}
+/* New Tripane Layout Styles */
+#main-container {
+    display: flex;
+    flex-grow: 1;
+    justify-content: center; /* Default: Center the primary pane */
+    /* margin-left is removed, handled by main's padding now */
+}
+
+#main-container.tripane-active {
+    justify-content: flex-start; /* Left-align panes when tripane is active */
+}
+
+#primary-pane {
+    flex-basis: 0;
+    flex-grow: 1;
+    max-width: none; /* Make expanded view the default */
+    /* The margin: 0 auto effect is achieved by the parent's justify-content: center */
+}
+
+/* All sections inside the primary pane should not have their own box-shadow or border-radius,
+   as the pane itself provides the container styling. */
+#primary-pane > section {
+    box-shadow: none;
+    border-radius: 0;
+    padding: 1.5rem; /* Remove padding from sections if the pane has it */
+    background: transparent; /* Make section background transparent */
+}
+.pane-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1rem; /* Space below the header */
+    border-bottom: 1px solid var(--post-border);
+    padding-bottom: 0.75rem;
+}
+
+.pane-header h2 {
+    margin: 0; /* Remove default margins from h2 */
+}
+
+.pane-header-controls {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem; /* Space between buttons */
+}
+
+.pane-header-controls .button-icon {
+    margin: 0; /* Reset any default margins */
+}
+
+#secondary-pane {
+    /* Styles for the dynamically created secondary pane */
+    flex-basis: 0;
+    flex-grow: 1;
+    background: transparent;
+    border-left: 1px solid var(--post-border);
+    box-shadow: -2px 0 5px rgba(0,0,0,0.1);
+    display: flex;
+    flex-direction: column;
+}
+
+#secondary-pane .pane-content {
+    padding: 1.5rem;
+    overflow-y: auto;
+    flex-grow: 1;
+}
+
+/* Hide mobile nav by default */
+#mobile-top-nav {
+    display: none;
+}
+
+/* Phase 3: Mobile Responsive Styles */
+@media (max-width: 768px) {
+    /* Hide desktop sidebar and repurpose as slide-in menu */
+    nav#subforum-nav {
+        display: flex; /* Keep it as a flex container for content alignment */
+        position: fixed;
+        top: 50px; /* Start below the mobile top nav */
+        left: 0;
+        width: 100%;
+        height: calc(100vh - 50px); /* Fill remaining height */
+        transform: translateX(-100%);
+        transition: transform 0.3s ease-in-out;
+        z-index: 999;
+        /* Override sticky positioning from desktop */
+        position: fixed;
+        box-sizing: border-box; /* Ensure padding is included in the width */
+        border-right: none; /* Remove desktop border */
+    }
+
+    nav#subforum-nav.mobile-menu-visible {
+        transform: translateX(0);
+    }
+
+    /* Show and style mobile top nav */
+    #mobile-top-nav {
+        display: flex;
+        justify-content: space-between;
+        gap: 1rem; /* Add some gap between elements */
+        align-items: center;
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 50px; /* As per plan */
+        background: var(--nav-bg);
+        border-bottom: 1px solid var(--post-border);
+        padding: 0 1rem;
+        z-index: 1000;
+    }
+
+    #mobile-menu-btn {
+        background: none;
+        border: none;
+        cursor: pointer;
+        padding: 0;
+        display: flex; /* Use flex to center the logo content */
+        align-items: center;
+        justify-content: center;
+    }
+
+    .mobile-logo {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 2px;
+    }
+
+    .logo-bar {
+        height: 3px;
+        width: 100%;
+        min-width: 40px; /* Give the logo a minimum width */
+        background-color: var(--text-color);
+    }
+
+    .logo-text-container {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        line-height: 1;
+    }
+
+    .logo-text {
+        font-weight: bold;
+        color: var(--text-color);
+        font-size: 0.8rem;
+    }
+
+    .mobile-nav-icons {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+    }
+
+    /* Ensure the logo and status indicator don't grow, but the icons container does, pushing it to the right */
+    #mobile-top-nav > #mobile-menu-btn {
+        flex-shrink: 0;
+    }
+    #mobile-top-nav > .processing-status-indicator-container {
+        flex-shrink: 0;
+    }
+    #mobile-top-nav > .mobile-nav-icons {
+        flex-grow: 1;
+        justify-content: flex-end;
+    }
+
+    .mobile-nav-icons button {
+        background: none;
+        border: none;
+        color: var(--text-color);
+        font-size: 1.5rem;
+        cursor: pointer;
+    }
+
+    /* Adjust main content for fixed header */
+    main {
+        padding: 1rem; /* Reset padding for mobile */
+        padding-top: 60px; /* 50px nav height + 10px gap */
+    }
+
+    #primary-pane {
+        width: 100%;
+        max-width: 100%; /* Override desktop max-width */
+    }
+
+    /* Secondary Pane "Bottom Sheet" Styles */
+    #secondary-pane {
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        width: 100%;
+        height: 75%;
+        transform: translateY(100%);
+        transition: transform 0.3s ease-in-out;
+        border-left: none;
+        border-top: 1px solid var(--post-border);
+        z-index: 1001; /* Above top nav */
+        background-color: var(--bg-color); /* Use main background color on mobile */
+    }
+
+    #secondary-pane.mobile-pane-peek {
+        transform: translateY(calc(100% - 60px)); /* 60px 'peek' height */
+    }
+
+    #secondary-pane.mobile-pane-visible {
+        transform: translateY(0);
+    }
+ 
+    /* Handle for mobile secondary pane */
+    #secondary-pane .pane-header {
+        position: relative; /* Needed for absolute positioning of the arrow */
+        cursor: pointer;
+    }
+ 
+    .mobile-pane-arrow {
+        position: absolute;
+        top: 8px; /* Position arrow near the top */
+        left: 50%;
+        width: 12px;
+        height: 12px;
+        border-left: 2px solid var(--text-color);
+        border-top: 2px solid var(--text-color);
+        transform: translateX(-50%) rotate(45deg); /* Initial state: pointing up */
+        transition: transform 0.3s ease-in-out;
+    }
+ 
+    #secondary-pane.mobile-pane-visible .mobile-pane-arrow {
+        transform: translateX(-50%) rotate(225deg); /* Visible state: pointing down */
+    }
+ 
+    /* Hide redundant elements in the mobile slide-in menu */
+    nav#subforum-nav > #desktop-heading,
+    nav#subforum-nav > #site-subtitle,
+    nav#subforum-nav > #main-nav,
+    nav#subforum-nav > .sidebar-separator {
+        display: none;
+    }
 }

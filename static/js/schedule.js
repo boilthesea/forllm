@@ -5,8 +5,8 @@ import {
     scheduleListContainer,
     scheduleError,
     scheduleDisplay,
-    statusDot,
-    statusIndicatorContainer,
+    statusDots,
+    statusIndicatorContainers,
     scheduleModal, // Needed for saving schedules
     saveSchedulesBtn // Needed for saving schedules
 } from './dom.js';
@@ -91,7 +91,7 @@ function createScheduleRowElement(schedule = {}) {
 
     const deleteButton = document.createElement('button');
     deleteButton.className = 'delete-schedule-btn';
-    deleteButton.textContent = 'Delete';
+    deleteButton.textContent = '🗑';
     deleteButton.title = 'Delete this schedule';
     if (!scheduleId) {
          deleteButton.textContent = 'Remove';
@@ -142,18 +142,27 @@ export function renderNextSchedule(nextScheduleInfo) {
 
 export function renderCurrentStatus(statusInfo) {
     const isActive = statusInfo && statusInfo.active;
-    statusDot.classList.remove('status-active', 'status-inactive', 'status-loading', 'status-error');
 
-    if (isActive === true) {
-        statusDot.classList.add('status-active');
-        statusIndicatorContainer.title = 'Schedule active';
-    } else if (isActive === false) {
-        statusDot.classList.add('status-inactive');
-        statusIndicatorContainer.title = 'No schedule active';
-    } else {
-        statusDot.classList.add('status-error');
-        statusIndicatorContainer.title = 'Schedule status: Unknown';
-    }
+    statusDots.forEach(dot => {
+        dot.classList.remove('status-active', 'status-inactive', 'status-loading', 'status-error');
+        if (isActive === true) {
+            dot.classList.add('status-active');
+        } else if (isActive === false) {
+            dot.classList.add('status-inactive');
+        } else {
+            dot.classList.add('status-error');
+        }
+    });
+
+    statusIndicatorContainers.forEach(container => {
+        if (isActive === true) {
+            container.title = 'Schedule active';
+        } else if (isActive === false) {
+            container.title = 'No schedule active';
+        } else {
+            container.title = 'Schedule status: Unknown';
+        }
+    });
 }
 
 // --- Loading Functions ---
