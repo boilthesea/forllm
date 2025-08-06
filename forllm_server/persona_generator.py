@@ -144,34 +144,33 @@ def generate_persona_from_details(request_details, flask_app):
     
     # === Parsing Final Output ===
     parsed_persona_name_successfully = False
-    persona_name_to_save = target_persona_name_override  # Highest priority
+    # New name selection logic
+    persona_name_to_save = target_persona_name_override  # 1. Highest priority: override
 
-    if not persona_name_to_save: # If no override
+    if not persona_name_to_save: # If no override, try hint
+        persona_name_to_save = name_hint # 2. Next priority: user-provided hint
+
+    if not persona_name_to_save: # If still no name, try parsing from LLM
         if "## Persona Name:" in final_instructions_text:
             try:
                 name_section_and_rest = final_instructions_text.split("## Persona Name:", 1)[1]
                 parsed_name_from_llm = name_section_and_rest.split("##", 1)[0].strip().splitlines()[0].strip()
                 if parsed_name_from_llm:
                     persona_name_to_save = parsed_name_from_llm
-                    parsed_persona_name_successfully = True 
+                    parsed_persona_name_successfully = True
             except IndexError:
                 print("Warning: Parsing '## Persona Name:' failed during name extraction.")
-        
-        if not persona_name_to_save: # Still no name, try hint
-            persona_name_to_save = name_hint
-        
-        if not persona_name_to_save and generation_type == "subforum_expert" and subforum_name:
-            persona_name_to_save = f"{subforum_name} Expert" # Fallback for subforum expert type
 
-    if not persona_name_to_save: # Absolute fallback
+    if not persona_name_to_save and generation_type == "subforum_expert" and subforum_name:
+        persona_name_to_save = f"{subforum_name} Expert" # 4. Fallback for subforum expert type
+
+    if not persona_name_to_save: # 5. Absolute fallback
         persona_name_to_save = "Generated Persona"
 
     prompt_instructions_to_save = final_instructions_text
-    if parsed_persona_name_successfully and not target_persona_name_override:
-        # Attempt to remove the "## Persona Name: ..." line from instructions if it was parsed and not overridden
+    # If the name was parsed from the LLM output, we should still strip the "## Persona Name:" line
+    if parsed_persona_name_successfully and not target_persona_name_override and not name_hint:
         try:
-            # More robust way to split: find first "## Persona Name:", then find the end of that line.
-            # Then, find the start of the next "##" heading.
             lines = final_instructions_text.splitlines()
             name_line_index = -1
             for i, line in enumerate(lines):
@@ -180,26 +179,28 @@ def generate_persona_from_details(request_details, flask_app):
                     break
             
             if name_line_index != -1:
-                # Find where the actual instructions start (next heading or significant content)
                 instructions_start_index = -1
                 for i in range(name_line_index + 1, len(lines)):
-                    if lines[i].strip().startswith("## ") or lines[i].strip(): # Next heading or any non-empty line
+                    if lines[i].strip().startswith("## ") or lines[i].strip():
                         instructions_start_index = i
                         break
                 if instructions_start_index != -1:
                     prompt_instructions_to_save = "\n".join(lines[instructions_start_index:])
-                else: # Only name was generated, or no content after name
-                    prompt_instructions_to_save = "" 
-            # If "## Persona Name:" was not found or structure is unexpected, prompt_instructions_to_save remains final_instructions_text
+                else:
+                    prompt_instructions_to_save = ""
         except Exception as e:
             print(f"Minor error trying to strip parsed name from instructions: {e}")
-            # Fallback: prompt_instructions_to_save remains final_instructions_text
 
-    print(f"Final Persona Name: '{persona_name_to_save}', Instructions (start): '{prompt_instructions_to_save[:100]}...'")
+    # Add the static instruction to the top
+    final_persona_name = persona_name_to_save.strip()
+    static_instruction = f"Always respond as {final_persona_name}, using the style, tone and personality explained below."
+    final_instructions_with_header = f"{static_instruction}\n\n---\n\n{prompt_instructions_to_save.strip()}"
+
+    print(f"Final Persona Name: '{final_persona_name}', Instructions (start): '{final_instructions_with_header[:150]}...'")
 
     return {
-        "persona_name": persona_name_to_save.strip(),
-        "prompt_instructions": prompt_instructions_to_save.strip(),
+        "persona_name": final_persona_name,
+        "prompt_instructions": final_instructions_with_header,
         "status": "success"
     }
 

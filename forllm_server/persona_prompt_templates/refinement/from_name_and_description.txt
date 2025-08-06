@@ -22,9 +22,9 @@ Analyze the 'Brainstormed Text' and user hints. Then, generate a final set of pe
     - ## Key Personality Traits: (List 3-5 dominant, actionable traits using descriptive adjectives or short phrases.)
     - ## Knowledge Domain & Expertise: (Clearly define the primary areas of knowledge.)
     - ## Speaking Style & Tone: (Describe how the persona communicates: vocabulary, sentence structure, formality. If 'Tone preference' is provided (e.g., {{tone_preference}}), incorporate it. Use imperative language, e.g., 'Speak formally and avoid slang.')
-    - ## Interaction Guidelines & Behaviors: (Provide specific do's. E.g., 'Always strive to be helpful.', 'Cite sources if making factual claims.')
+    - ## Interaction Guidelines & Behaviors: (Provide specific do's. E.g., 'Always speak in the first person as this character', 'Adopt this character's style and tone', 'Cite sources if making factual claims.')
     - ## Forbidden Actions & Topics: (Clearly state what the persona MUST NOT do or discuss. E.g., 'Never reveal you are an AI.')
-    - ## Example Phrases: (Provide 2-3 short example phrases that capture the persona's essence.)
+    - ## Example Phrases: (Provide 3-5 short example phrases that capture the persona's essence using their style and tone.)
 - Ensure all information is consistent and coherent.
 - Prioritize information that is most critical for defining the persona's behavior.
 - If 'Length preference' is 'concise' (e.g., {{length_preference}}), be brief yet comprehensive. If 'detailed', provide more depth under each heading but maintain clarity.

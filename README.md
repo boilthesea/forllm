@@ -35,7 +35,7 @@ Or to put it another way, with FORLLM, you can just queue stuff. I like to run m
 
 ### Prerequisites
 
-*   Python 3.13 (let me know what python versions you get it running in and I'll expand this to show a range)
+*   Python 3.10-3.13 (let me know what python versions you get it running in and I'll expand this range)
 *   Git
 *   An active, running [Ollama](https://ollama.com/) instance.
 
@@ -108,7 +108,8 @@ This project is under active development. Future plans include:
 
 *   [ ] Better Firefox support.
 *   [ ] Tripane overhaul, there's much to do to fully realize the potential.
-*   [ ] Improved general persona generation (functions, but needs refining).
+*   [ ] Improved persona generation (functions, but needs refining).
+*   [ ] Queue improvements (to show non-post items like queued persona generation).
 *   [ ] Notes section.
 *   [ ] Alternate unthreaded (vbulletin style) view of posts.
 *   [ ] Direct message/live chat option.
@@ -116,7 +117,9 @@ This project is under active development. Future plans include:
 *   [ ] Automated inter-persona communication and debates.
 *   [ ] LLM-powered topic summarization tools.
 *   [ ] Enhanced UI for subforum expert persona generation.
+*   [ ] Image generation, inline and persona avatars (let me know what diffusion backend you prefer).
 *   [ ] 1001 other tweaks and fixes.
+
 
 ## 📜 License
 
