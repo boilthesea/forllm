@@ -744,8 +744,27 @@ def process_llm_request(request_details, flask_app): # Added flask_app parameter
 
             # 4. Update the status in llm_requests table to 'complete'
             cursor.execute("UPDATE llm_requests SET status = 'complete', processed_at = CURRENT_TIMESTAMP WHERE request_id = ?", (request_id,))
+            
+            # --- Handle Dependent Requests ---
+            # Find requests that are dependent on the one just completed.
+            # Update their status from 'pending_dependency' to 'pending'
+            # and set their post_id_to_respond_to to the newly created post's ID.
+            print(f"Request {request_id}: Checking for dependent requests.")
+            cursor.execute("""
+                UPDATE llm_requests
+                SET status = 'pending',
+                    post_id_to_respond_to = ?
+                WHERE parent_request_id = ? AND status = 'pending_dependency'
+            """, (new_post_id, request_id))
+            
+            updated_rows = cursor.rowcount
+            if updated_rows > 0:
+                print(f"Request {request_id}: Activated {updated_rows} dependent request(s), setting their target post to {new_post_id}.")
+            else:
+                print(f"Request {request_id}: No dependent requests found or they were not in 'pending_dependency' state.")
+
             db.commit()
-            print(f"Request {request_id} marked as complete.")
+            print(f"Request {request_id} marked as complete and dependent requests updated.")
 
         except (ConnectionError, requests.exceptions.Timeout) as e: # Combined ConnectionError and Timeout
             print(f"Ollama connection failed or timed out: {type(e).__name__}. Using dummy LLM processor for request {request_id}.")

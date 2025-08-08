@@ -18,7 +18,7 @@ from ..config import CURRENT_USER_ID, DEFAULT_MODEL
 forum_api_bp = Blueprint('forum_api', __name__, url_prefix='/api')
 
 # Regex for parsing persona tags: @[Persona Name](persona_id)
-PERSONA_TAG_REGEX = r'@\[([^\]]+)\]\((\d+)\)'
+PERSONA_TAG_REGEX = r'@\[([^\]]+)\]\((\d+)\)(?::@\[([^\]]+)\]\((\d+)\))?'
 
 # Helper function to check for plain text
 def is_plain_text(file_stream):
@@ -106,13 +106,27 @@ def handle_topics(subforum_id):
             return jsonify({'error': 'Title and content are required for a new topic'}), 400
         
         # --- Persona Tagging Logic ---
-        tagged_persona_ids = []
+        all_tagged_persona_ids = []
+        llm_requests_to_create = []
         if content:
             matches = re.findall(PERSONA_TAG_REGEX, content)
-            # Extract unique persona IDs (group 2 of the regex match is the ID)
-            tagged_persona_ids = sorted(list(set([int(match[1]) for match in matches])))
-        
-        tagged_personas_json = json.dumps(tagged_persona_ids)
+            for match in matches:
+                p1_id = int(match[1])
+                p2_id_str = match[3]
+
+                all_tagged_persona_ids.append(p1_id)
+                if p2_id_str:
+                    p2_id = int(p2_id_str)
+                    all_tagged_persona_ids.append(p2_id)
+                    # Chained tag: @p1:@p2
+                    llm_requests_to_create.append({'p_id': p1_id, 'status': 'pending', 'parent_id': None})
+                    llm_requests_to_create.append({'p_id': p2_id, 'status': 'pending_dependency', 'parent_id': p1_id})
+                else:
+                    # Single tag: @p1
+                    llm_requests_to_create.append({'p_id': p1_id, 'status': 'pending', 'parent_id': None})
+
+        unique_tagged_persona_ids = sorted(list(set(all_tagged_persona_ids)))
+        tagged_personas_json = json.dumps(unique_tagged_persona_ids)
         # --- End Persona Tagging Logic ---
 
         try:
@@ -120,34 +134,41 @@ def handle_topics(subforum_id):
                            (subforum_id, CURRENT_USER_ID, title))
             topic_id = cursor.lastrowid
             
-            # Insert post with tagged persona IDs
             cursor.execute('INSERT INTO posts (topic_id, user_id, content, tagged_personas_in_content) VALUES (?, ?, ?, ?)',
                            (topic_id, CURRENT_USER_ID, content, tagged_personas_json))
             post_id = cursor.lastrowid
 
             # --- Create LLM Requests for tagged personas ---
-            if tagged_persona_ids:
-                for p_id in tagged_persona_ids:
-                    # Validate persona ID before creating LLM request
-                    # get_persona uses its own db context (via get_db()) so it's safe to call here
-                    persona_check = get_persona(p_id, active_only=True) 
-                    if not persona_check:
-                        current_app.logger.warning(
-                            f"Persona ID {p_id} tagged in content for new topic (post {post_id}) "
-                            f"not found or not active. Skipping LLM request for this tag."
-                        )
-                        continue # Skip to the next persona_id
+            parent_request_id_map = {} # Maps persona_id to its created llm_request_id
+            for req_info in llm_requests_to_create:
+                p_id = req_info['p_id']
+                status = req_info['status']
+                parent_p_id = req_info['parent_id']
+                
+                persona_check = get_persona(p_id, active_only=True)
+                if not persona_check:
+                    current_app.logger.warning(f"Persona ID {p_id} not found or not active. Skipping LLM request.")
+                    continue
 
-                    cursor.execute("""
-                        INSERT INTO llm_requests 
-                        (post_id_to_respond_to, llm_persona, requested_by_user_id, request_type, status, llm_model)
-                        VALUES (?, ?, ?, ?, ?, ?)
-                    """, (post_id, p_id, CURRENT_USER_ID, 'respond_to_post_tag', 'pending', None)) 
-                    # Using None for llm_model, worker can determine based on persona.
+                parent_request_id = None
+                if parent_p_id:
+                    parent_request_id = parent_request_id_map.get(parent_p_id)
+                    if not parent_request_id:
+                        current_app.logger.error(f"Could not find parent request for chained tag with child {p_id}. Skipping.")
+                        continue
+                
+                cursor.execute("""
+                    INSERT INTO llm_requests
+                    (post_id_to_respond_to, llm_persona, requested_by_user_id, request_type, status, llm_model, parent_request_id)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                """, (post_id, p_id, CURRENT_USER_ID, 'respond_to_post_tag', status, None, parent_request_id))
+                
+                if not parent_p_id: # This is a primary request
+                    parent_request_id_map[p_id] = cursor.lastrowid
             # --- End LLM Requests ---
 
             db.commit()
-            return jsonify({'topic_id': topic_id, 'title': title, 'initial_post_id': post_id, 'tagged_personas': tagged_persona_ids}), 201
+            return jsonify({'topic_id': topic_id, 'title': title, 'initial_post_id': post_id, 'tagged_personas': unique_tagged_persona_ids}), 201
         except Exception as e:
             db.rollback()
             current_app.logger.error(f"Error creating topic or LLM requests: {e}")
@@ -192,57 +213,72 @@ def handle_posts(topic_id):
             return jsonify({'error': 'Parent post not found in this topic'}), 404
 
         # --- Persona Tagging Logic ---
-        tagged_persona_ids = []
+        all_tagged_persona_ids = []
+        llm_requests_to_create = []
         if content:
             matches = re.findall(PERSONA_TAG_REGEX, content)
-            tagged_persona_ids = sorted(list(set([int(match[1]) for match in matches])))
+            for match in matches:
+                p1_id = int(match[1])
+                p2_id_str = match[3]
+
+                all_tagged_persona_ids.append(p1_id)
+                if p2_id_str:
+                    p2_id = int(p2_id_str)
+                    all_tagged_persona_ids.append(p2_id)
+                    llm_requests_to_create.append({'p_id': p1_id, 'status': 'pending', 'parent_id': None})
+                    llm_requests_to_create.append({'p_id': p2_id, 'status': 'pending_dependency', 'parent_id': p1_id})
+                else:
+                    llm_requests_to_create.append({'p_id': p1_id, 'status': 'pending', 'parent_id': None})
         
-        tagged_personas_json = json.dumps(tagged_persona_ids)
+        unique_tagged_persona_ids = sorted(list(set(all_tagged_persona_ids)))
+        tagged_personas_json = json.dumps(unique_tagged_persona_ids)
         # --- End Persona Tagging Logic ---
 
         try:
-            # Insert post with tagged persona IDs
             cursor.execute('INSERT INTO posts (topic_id, user_id, parent_post_id, content, tagged_personas_in_content) VALUES (?, ?, ?, ?, ?)',
                            (topic_id, CURRENT_USER_ID, parent_post_id, content, tagged_personas_json))
             post_id = cursor.lastrowid
 
             # --- Create LLM Requests for tagged personas ---
-            if tagged_persona_ids:
-                for p_id in tagged_persona_ids:
-                    # Validate persona ID before creating LLM request
-                    persona_check = get_persona(p_id, active_only=True)
-                    if not persona_check:
-                        current_app.logger.warning(
-                            f"Persona ID {p_id} tagged in content for reply to post {parent_post_id} (new post {post_id}) "
-                            f"not found or not active. Skipping LLM request for this tag."
-                        )
-                        continue # Skip to the next persona_id
-                        
-                    cursor.execute("""
-                        INSERT INTO llm_requests 
-                        (post_id_to_respond_to, llm_persona, requested_by_user_id, request_type, status, llm_model)
-                        VALUES (?, ?, ?, ?, ?, ?)
-                    """, (post_id, p_id, CURRENT_USER_ID, 'respond_to_post_tag', 'pending', None))
+            parent_request_id_map = {}
+            for req_info in llm_requests_to_create:
+                p_id = req_info['p_id']
+                status = req_info['status']
+                parent_p_id = req_info['parent_id']
+
+                persona_check = get_persona(p_id, active_only=True)
+                if not persona_check:
+                    current_app.logger.warning(f"Persona ID {p_id} not found or not active. Skipping LLM request.")
+                    continue
+
+                parent_request_id = None
+                if parent_p_id:
+                    parent_request_id = parent_request_id_map.get(parent_p_id)
+                    if not parent_request_id:
+                        current_app.logger.error(f"Could not find parent request for chained tag with child {p_id}. Skipping.")
+                        continue
+                
+                cursor.execute("""
+                    INSERT INTO llm_requests
+                    (post_id_to_respond_to, llm_persona, requested_by_user_id, request_type, status, llm_model, parent_request_id)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                """, (post_id, p_id, CURRENT_USER_ID, 'respond_to_post_tag', status, None, parent_request_id))
+                
+                if not parent_p_id:
+                    parent_request_id_map[p_id] = cursor.lastrowid
             # --- End LLM Requests ---
             
             db.commit()
             
-            # Fetch the newly created post to return in the response
-            cursor.execute("""
-                SELECT p.*, u.username 
-                FROM posts p 
-                JOIN users u ON p.user_id = u.user_id 
-                WHERE p.post_id = ?
-            """, (post_id,))
+            cursor.execute("SELECT p.*, u.username FROM posts p JOIN users u ON p.user_id = u.user_id WHERE p.post_id = ?", (post_id,))
             new_post_row = cursor.fetchone()
             
-            if not new_post_row: # Should not happen if insert was successful
-                db.rollback() # Should be redundant if commit succeeded, but for safety.
+            if not new_post_row:
+                db.rollback()
                 return jsonify({'error': 'Failed to retrieve newly created post after insert.'}), 500
 
             new_post_dict = dict(new_post_row)
-            # Add tagged persona IDs to the response for clarity
-            new_post_dict['tagged_personas_explicitly_in_content'] = tagged_persona_ids
+            new_post_dict['tagged_personas_explicitly_in_content'] = unique_tagged_persona_ids
             
             return jsonify(new_post_dict), 201
         except Exception as e:

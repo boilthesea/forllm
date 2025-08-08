@@ -98,7 +98,7 @@ def init_db():
                 request_id INTEGER PRIMARY KEY AUTOINCREMENT,
                 post_id_to_respond_to INTEGER, -- Made nullable
                 requested_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                status TEXT NOT NULL DEFAULT 'pending', -- pending, processing, complete, error
+                status TEXT NOT NULL DEFAULT 'pending', -- pending, processing, complete, error, pending_dependency
                 llm_model TEXT,
                 llm_persona TEXT,
                 processed_at TIMESTAMP,
@@ -111,31 +111,6 @@ def init_db():
                 FOREIGN KEY (requested_by_user_id) REFERENCES users(user_id)
             )
         ''')
-        # Add 'requested_by_user_id' to 'llm_requests' if it doesn't exist (for existing databases)
-        cursor.execute("PRAGMA table_info(llm_requests)")
-        columns = [col[1] for col in cursor.fetchall()]
-        if 'requested_by_user_id' not in columns:
-            print("Updating llm_requests table: Adding 'requested_by_user_id' column...")
-            try:
-                cursor.execute("ALTER TABLE llm_requests ADD COLUMN requested_by_user_id INTEGER REFERENCES users(user_id)")
-                db.commit()
-                print("'requested_by_user_id' column added to llm_requests.")
-            except Exception as e:
-                print(f"Error adding 'requested_by_user_id' column to llm_requests: {e}")
-                db.rollback()
-
-        # Add 'prompt_token_breakdown' to 'llm_requests' if it doesn't exist
-        cursor.execute("PRAGMA table_info(llm_requests)")
-        columns = [col[1] for col in cursor.fetchall()]
-        if 'prompt_token_breakdown' not in columns:
-            print("Updating llm_requests table: Adding 'prompt_token_breakdown' column...")
-            try:
-                cursor.execute("ALTER TABLE llm_requests ADD COLUMN prompt_token_breakdown TEXT")
-                db.commit()
-                print("'prompt_token_breakdown' column added to llm_requests.")
-            except Exception as e:
-                print(f"Error adding 'prompt_token_breakdown' column to llm_requests: {e}")
-                db.rollback()
 
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS attachments (
@@ -407,6 +382,18 @@ def init_db():
         except Exception as e:
             print(f"Error adding 'prompt_token_breakdown' column to llm_requests (post-initial check): {e}")
             db.rollback()
+            
+    # --- Check and add 'parent_request_id' to 'llm_requests' if it doesn't exist ---
+    if 'parent_request_id' not in columns:
+        print("Updating llm_requests table: Adding 'parent_request_id' column...")
+        try:
+            cursor.execute("ALTER TABLE llm_requests ADD COLUMN parent_request_id INTEGER REFERENCES llm_requests(request_id)")
+            db.commit()
+            print("'parent_request_id' column added to llm_requests.")
+        except Exception as e:
+            print(f"Error adding 'parent_request_id' column to llm_requests: {e}")
+            db.rollback()
+
 
     print("Verifying/Creating Persona management tables and defaults...")
     cursor.execute('''

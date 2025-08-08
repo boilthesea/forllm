@@ -128,31 +128,51 @@ export function renderQueueList(queueItems) {
                 personaDisplay = `ID: ${item.llm_persona} (Name not found)`;
             }
         }
-        const snippet = item.post_snippet ? escapeHTML(item.post_snippet.substring(0, 150) + '...') : 'No snippet available';
+        
+        let snippet;
+        let summaryContent;
 
-        // Get total tokens for summary display
-        let totalTokensDisplay = "N/A";
-        if (item.prompt_token_breakdown) {
-            try {
-                const breakdown = JSON.parse(item.prompt_token_breakdown);
-                if (breakdown.total_prompt_tokens !== undefined) {
-                    totalTokensDisplay = breakdown.total_prompt_tokens;
+        if (status === 'pending_dependency' && item.parent_request_id) {
+            li.classList.add('chained-request');
+            snippet = `This is a chained reply, waiting for response to request <span class="parent-request-link">#${item.parent_request_id}</span>.`;
+            summaryContent = `
+                <strong>Request ID: ${item.request_id}</strong><br>
+                Status: <span class="queue-status status-${status}">Pending Dependency</span><br>
+                Model: ${model}, Persona: ${personaDisplay}<br>
+                Queued: <span class="queue-meta">${queuedAt}</span>
+            `;
+        } else {
+            snippet = item.post_snippet ? escapeHTML(item.post_snippet.substring(0, 150) + '...') : 'No snippet available';
+            snippet = `Original Post Snippet: "${snippet}"`;
+
+            // Get total tokens for summary display
+            let totalTokensDisplay = "N/A";
+            if (item.prompt_token_breakdown) {
+                try {
+                    const breakdown = JSON.parse(item.prompt_token_breakdown);
+                    if (breakdown.total_prompt_tokens !== undefined) {
+                        totalTokensDisplay = breakdown.total_prompt_tokens;
+                    }
+                } catch (e) {
+                    console.warn(`Could not parse token breakdown for item ${item.request_id} in summary.`);
                 }
-            } catch (e) {
-                console.warn(`Could not parse token breakdown for item ${item.request_id} in summary.`);
             }
+            summaryContent = `
+                <strong>Request ID: ${item.request_id}</strong><br>
+                Status: <span class="queue-status status-${status}">${status}</span><br>
+                Model: ${model}, Persona: ${personaDisplay}<br>
+                Queued: <span class="queue-meta">${queuedAt}</span><br>
+                Total Tokens: <span class="queue-meta">${totalTokensDisplay}</span>
+            `;
         }
+
 
         li.innerHTML = `
             <div class="queue-item-summary">
-                <strong>Request ID: ${item.request_id}</strong><br>
-                Status: <span class="queue-status status-${status}">${status}</span><br>
-                Model: ${model}, Persona: ${personaDisplay}<br> 
-                Queued: <span class="queue-meta">${queuedAt}</span><br>
-                Total Tokens: <span class="queue-meta">${totalTokensDisplay}</span>
+                ${summaryContent}
             </div>
             <div class="queue-item-snippet">
-                Original Post Snippet: "${snippet}"
+                ${snippet}
             </div>
         `;
 

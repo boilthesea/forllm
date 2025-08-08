@@ -391,3 +391,17 @@ input:checked + .slider:before {
     background: none;
     cursor: default;
 }
+
+/* --- Chained Request Styling --- */
+.chained-request {
+    border-left: 4px solid var(--accent-color, #1abc9c);
+    padding-left: 1rem;
+    margin-left: -1rem; /* Counteract the padding for alignment */
+}
+
+.parent-request-link {
+    color: var(--accent-color, #1abc9c);
+    font-weight: bold;
+    cursor: pointer;
+    text-decoration: underline;
+}

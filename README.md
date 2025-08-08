@@ -106,6 +106,7 @@ In the `Settings` modal, you can define blocks of time for each day of the week 
 
 This project is under active development. Future plans include:
 
+*   [x] Chained tagging @Persona1:@Persona2, persona1 replies to you, persona2 replies to persona1.
 *   [ ] Better Firefox support.
 *   [ ] Tripane overhaul, there's much to do to fully realize the potential.
 *   [ ] Improved persona generation (functions, but needs refining).
