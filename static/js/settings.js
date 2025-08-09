@@ -15,9 +15,8 @@ export let currentSettings = { // Store loaded settings
     selectedModel: null,
     llmLinkSecurity: 'true',
     default_llm_context_window: '4096',
-    autoCheckContextWindow: false, // New setting
-    theme: 'theme-silvery', // Add theme setting
-    // Add new chat history settings with their string defaults
+    autoCheckContextWindow: false,
+    theme: 'theme-silvery',
     ch_max_ambient_posts: '5',
     ch_max_posts_per_sibling_branch: '2',
     ch_primary_history_budget_ratio: '0.7'
@@ -28,33 +27,194 @@ document.addEventListener('click', (e) => {
   console.debug('[Global] Click at', e.target);
 });
 
+// --- NEW DATA FETCHING LOGIC ---
+
+/**
+ * Fetches application settings from the server.
+ * @returns {Promise<object>} A promise that resolves to the settings object.
+ */
+async function fetchSettings() {
+    return apiRequest('/api/settings');
+}
+
+/**
+ * Fetches the list of available Ollama models from the server.
+ * @returns {Promise<object>} A promise that resolves to the models data structure from the API.
+ */
+async function fetchOllamaModels() {
+    // This API call is set to be silent on errors, returning the error object for processing.
+    return apiRequest('/api/ollama/models', 'GET', null, false, true);
+}
+
+/**
+ * The main entry point for initializing the settings system.
+ * Fetches all required data concurrently and then renders the UI.
+ */
+export async function initializeSettings() {
+    // Ensure the settings page HTML is rendered first.
+    renderSettingsPage();
+
+    // Set a loading state for all model dropdowns
+    document.querySelectorAll('#model-select').forEach(el => {
+        const ts = el.tomselect || initializeTomSelect(el, { create: false, controlInput: null });
+        if (ts) {
+            ts.clear();
+            ts.clearOptions();
+            ts.addOption({ value: '', text: 'Loading...' });
+            ts.setValue('', true);
+            ts.disable();
+        }
+    });
+
+    try {
+        // Step 1: Fetch settings and models in parallel
+        const [settings, modelsResult] = await Promise.all([
+            fetchSettings(),
+            fetchOllamaModels()
+        ]);
+
+        // Step 2: Process the fetched settings and update the global state
+        currentSettings = {
+            selectedModel: settings.selectedModel || null,
+            llmLinkSecurity: settings.llmLinkSecurity === 'true' ? 'true' : 'false',
+            default_llm_context_window: settings.default_llm_context_window || '4096',
+            autoCheckContextWindow: settings.autoCheckContextWindow === true || settings.autoCheckContextWindow === 'true',
+            theme: settings.theme || 'theme-silvery',
+            ch_max_ambient_posts: settings.ch_max_ambient_posts || '5',
+            ch_max_posts_per_sibling_branch: settings.ch_max_posts_per_sibling_branch || '2',
+            ch_primary_history_budget_ratio: settings.ch_primary_history_budget_ratio || '0.7'
+        };
+        applyTheme(currentSettings.theme);
+
+        // Step 3: Process the fetched models
+        let models = [];
+        const settingsErrorElement = document.querySelector('#settings-page-content #settings-error') || document.querySelector('#settings-modal #settings-error');
+
+        if (Array.isArray(modelsResult)) {
+            models = modelsResult;
+        } else if (modelsResult && Array.isArray(modelsResult.models)) {
+            models = modelsResult.models;
+            if (modelsResult.error && settingsErrorElement) {
+                console.warn("Ollama connection issue reported by backend:", modelsResult.error);
+                settingsErrorElement.textContent = "Warning: Ollama connection issue. Displaying default models.";
+            }
+        } else {
+            console.error("Unexpected format or error fetching Ollama models:", modelsResult);
+            models = currentSettings.selectedModel ? [currentSettings.selectedModel] : [];
+            if (settingsErrorElement) {
+                settingsErrorElement.textContent = "Error fetching models. Using current selection if available.";
+            }
+        }
+
+        // Step 4: Determine the correct model to select (now that we have settings)
+        const defaultModelFromBackend = models.length > 0 ? models[0] : null;
+        let modelToSelect = currentSettings.selectedModel || defaultModelFromBackend;
+
+        if (models.length > 0 && !models.includes(modelToSelect)) {
+            modelToSelect = models[0]; // The saved model is not in the available list
+        }
+        currentSettings.selectedModel = modelToSelect; // Update state
+
+        // Step 5: Populate the model dropdown with the correct data and selection
+        updateAndInitializeAllModelSelects(models, modelToSelect);
+
+        // Add event listener for changes to the model select dropdown
+        document.querySelectorAll('#model-select').forEach(selectEl => {
+            selectEl.removeEventListener('change', handleModelSelectionChange);
+            selectEl.addEventListener('change', handleModelSelectionChange);
+        });
+
+        // Step 6: Update all other UI elements with the final, correct settings
+        updateSettingsUI();
+
+        // Step 7: Fetch context window for the selected model if needed
+        const contextDisplay = document.querySelector('#settings-page-content #selected-model-context-window-display') || document.querySelector('#settings-modal #selected-model-context-window-display');
+        if (modelToSelect && modelToSelect !== 'None' && currentSettings.autoCheckContextWindow) {
+            await fetchAndDisplayModelContextWindow(modelToSelect, false);
+        } else if (contextDisplay) {
+            contextDisplay.textContent = '';
+        }
+
+    } catch (error) {
+        console.error("Error initializing settings:", error);
+        const settingsErrorElement = document.querySelector('#settings-page-content #settings-error') || document.querySelector('#settings-modal #settings-error');
+        if (settingsErrorElement) {
+            settingsErrorElement.textContent = `Could not load settings: ${error.message}`;
+        }
+        applyTheme('theme-silvery'); // Fallback theme
+    } finally {
+        // Re-enable model dropdowns regardless of outcome
+        document.querySelectorAll('#model-select').forEach(el => {
+            if (el.tomselect) {
+                el.tomselect.enable();
+            }
+        });
+    }
+}
+
+/**
+ * Helper function to update all settings UI elements from the global `currentSettings`.
+ * This should be called after `currentSettings` is confirmed to be up-to-date.
+ */
+function updateSettingsUI() {
+    // This function can update elements in both the modal and the page view.
+    const containers = [document.getElementById('settings-modal'), document.getElementById('settings-page-section')];
+    containers.forEach(container => {
+        if (!container) return;
+
+        const autoCheckToggleInput = container.querySelector('#auto-check-context-window-toggle');
+        if (autoCheckToggleInput) autoCheckToggleInput.checked = currentSettings.autoCheckContextWindow;
+
+        const linkSecurityToggleInput = container.querySelector('#llm-link-security-toggle');
+        if (linkSecurityToggleInput) linkSecurityToggleInput.checked = currentSettings.llmLinkSecurity === 'true';
+
+        const contextWindowInput = container.querySelector('#default-llm-context-window-input');
+        if (contextWindowInput) contextWindowInput.value = currentSettings.default_llm_context_window;
+
+        const themeSelect = container.querySelector('#theme-select');
+        if (themeSelect && themeSelect.tomselect) {
+            themeSelect.tomselect.setValue(currentSettings.theme, true);
+        }
+
+        const maxAmbientPostsInput = container.querySelector('#ch-max-ambient-posts');
+        if (maxAmbientPostsInput) maxAmbientPostsInput.value = currentSettings.ch_max_ambient_posts;
+
+        const maxPostsPerSiblingInput = container.querySelector('#ch-max-posts-per-sibling-branch');
+        if (maxPostsPerSiblingInput) maxPostsPerSiblingInput.value = currentSettings.ch_max_posts_per_sibling_branch;
+
+        const primaryRatioInput = container.querySelector('#ch-primary-history-budget-ratio');
+        if (primaryRatioInput) primaryRatioInput.value = currentSettings.ch_primary_history_budget_ratio;
+    });
+}
+
+
 // --- Settings Page Rendering ---
 export function renderSettingsPage() {
     console.debug('[Settings] Starting renderSettingsPage()');
-    // Only render HTML if not already present
-    let firstRender = false;
     // Get both possible settings containers
     const modalContent = document.querySelector('#settings-modal .modal-content');
-    console.debug('[Settings] Found modal content:', modalContent);
     const pageContent = document.querySelector('#settings-page-section #settings-page-content');
-    console.debug('[Settings] Found page content:', pageContent);    // Import personas module right away to ensure it's loaded
-    console.debug('[Settings] Loading personas module...');
+
     import('./personas.js').then(module => {
-        console.debug('[Settings] Loaded personas module.'); // Removed "calling attachHandlers"
-        // Store personas module for later use
+        console.debug('[Settings] Loaded personas module.');
         window.personasModule = module.default;
-        // Continue with rendering
-        renderContainers();
+        if (modalContent) renderContainerHTML(modalContent);
+        if (pageContent) renderContainerHTML(pageContent);
     }).catch(err => {
         console.error('[Settings] Failed to load personas module:', err);
+        // Still try to render if personas fail
+        if (modalContent) renderContainerHTML(modalContent);
+        if (pageContent) renderContainerHTML(pageContent);
     });
+}
 
-    function renderContainers() {
-        // Function to render settings content into a container
-        const renderIntoContainer = (container) => {
-            console.debug('[Settings] Rendering into container:', container);
-            if (!container.querySelector('#settings-nav')) {
-                container.innerHTML = `
+function renderContainerHTML(container) {
+    if (!container || container.querySelector('#settings-nav')) {
+        // If container is invalid or already rendered, do nothing.
+        return;
+    }
+    console.debug('[Settings] Rendering HTML into container:', container);
+    container.innerHTML = `
 <nav id="settings-nav">
   <ul>
     <li id="settings-nav-general">General</li>
@@ -67,7 +227,7 @@ export function renderSettingsPage() {
     <div class="setting-item">
         <label for="model-select">Select LLM Model:</label>
         <select id="model-select">
-            <option value="">Loading models...</option>
+            <option value="">Loading...</option>
         </select>
         <p style="margin-top: 5px;" id="model-info-display">
            <span id="selected-model-context-window-display" style="font-size: 0.9em; color: #aaa;"></span>
@@ -123,8 +283,6 @@ export function renderSettingsPage() {
     <h2>Personas</h2>
     <button id="add-persona-btn">Add Persona</button>
     <div id="personas-list-container"></div>
-
-    <!-- New Section for Generating Personas -->
     <hr class="modal-hr">
     <h4>Generate New Persona (MVP)</h4>
     <div class="setting-item">
@@ -137,587 +295,216 @@ export function renderSettingsPage() {
     </div>
     <button id="generate-persona-btn" class="button-primary">Generate Persona</button>
     <p id="persona-gen-message" class="message-area" style="display: none;"></p>
-    <!-- End New Section -->
-
     <hr class="modal-hr">
     <h3>Global Default Persona</h3>
     <select id="global-default-persona-select"></select>
     <button id="save-global-default-persona-btn">Save Global Default</button>
 </div>
 `;
-                firstRender = true;
-            }
-
-            // Set up tab navigation within this container
-            const settingsNav = container.querySelector('#settings-nav');
-            if (settingsNav) {
-                const navLis = settingsNav.querySelectorAll('li');
-                navLis.forEach(li => console.debug('[Settings] Nav item in container:', li.id, li.textContent, 'display:', getComputedStyle(li).display));
-                
-                // Attach click handler to each li
-                navLis.forEach(li => {
-                    li.onclick = (e) => {
-                        console.debug('[Settings] Nav click in container:', e.target.id);
-                        // Remove active class from all tabs in THIS container
-                        container.querySelectorAll('#settings-nav li').forEach(li2 => li2.classList.remove('active'));
-                        e.target.classList.add('active');
-                        
-                        const tabId = e.target.id.replace('settings-nav-', 'settings-') + '-section';
-                        console.debug('[Settings] Looking for tab section:', tabId, 'in container:', container);
-                        
-                        // Only toggle tabs in THIS container
-                        container.querySelectorAll('.settings-tab-section').forEach(tab => {
-                            const shouldShow = tab.id === tabId;
-                            tab.style.display = shouldShow ? '' : 'none';
-                            if (shouldShow) {
-                                console.debug('[Settings] Showing tab section:', tab.id, 'in container:', container);                                if (tab.id === 'settings-personas-section') {
-                                    console.debug('[Settings] Loading personas list...');
-                                    if (window.personasModule && window.personasModule.loadPersonasList) {
-                                        window.personasModule.loadPersonasList(container); // Pass container
-                                    } else {
-                                        console.error('[Settings] Personas module not loaded or missing loadPersonasList function');
-                                    }
-                                }
-                            }
-                        });
-                    };
-                });
-
-                // Attach persona handlers for this container
-                if (window.personasModule && window.personasModule.attachHandlers) {
-                    console.debug('[Settings] Attaching persona handlers for container:', container);
-                    window.personasModule.attachHandlers(container);
-                } else {
-                    console.error('[Settings] Personas module or attachHandlers not available for container:', container);
-                }
-
-                // Set initial active tab
-                const generalTab = settingsNav.querySelector('#settings-nav-general');
-                if (generalTab) {
-                    console.debug('[Settings] Setting initial active tab in container');
-                    navLis.forEach(li => li.classList.remove('active'));
-                    generalTab.classList.add('active');
-                    
-                    // Show general section, hide others in THIS container
-                    container.querySelectorAll('.settings-tab-section').forEach(tab => {
-                        tab.style.display = (tab.id === 'settings-general-section') ? '' : 'none';
-                    });
-                }
-
-                // Re-attach listeners for this container
-                const autoCheckToggleInput = container.querySelector('#auto-check-context-window-toggle');
-                if (autoCheckToggleInput) {
-                    autoCheckToggleInput.checked = currentSettings.autoCheckContextWindow;
-                }
-
-                const linkSecurityToggleInput = container.querySelector('#llm-link-security-toggle');
-                if (linkSecurityToggleInput) {
-                    linkSecurityToggleInput.checked = currentSettings.llmLinkSecurity === 'true';
-                }
-
-                const contextWindowInput = container.querySelector('#default-llm-context-window-input');
-                if (contextWindowInput) {
-                    contextWindowInput.value = currentSettings.default_llm_context_window;
-                }
-
-                const themeSelect = container.querySelector('#theme-select');
-                if (themeSelect) {
-                    const tsInstance = initializeTomSelect(themeSelect, {
-                        create: false,
-                        controlInput: null // Disables text input completely
-                    });
-                    if (tsInstance) {
-                        tsInstance.setValue(currentSettings.theme, true); // Silently set value on init
-                    }
-                }
-
-                // Populate new chat history settings fields
-                const maxAmbientPostsInput = container.querySelector('#ch-max-ambient-posts');
-                if (maxAmbientPostsInput) {
-                    maxAmbientPostsInput.value = currentSettings.ch_max_ambient_posts || '5';
-                }
-                const maxPostsPerSiblingInput = container.querySelector('#ch-max-posts-per-sibling-branch');
-                if (maxPostsPerSiblingInput) {
-                    maxPostsPerSiblingInput.value = currentSettings.ch_max_posts_per_sibling_branch || '2';
-                }
-                const primaryRatioInput = container.querySelector('#ch-primary-history-budget-ratio');
-                if (primaryRatioInput) {
-                    primaryRatioInput.value = currentSettings.ch_primary_history_budget_ratio || '0.7';
-                }
-                
-                const saveButton = container.querySelector('#save-settings-btn');
-                if (saveButton) {
-                    saveButton.addEventListener('click', saveSettings);
-                }
-
-                const themeCreatorBtn = container.querySelector('#open-theme-creator-btn');
-                if (themeCreatorBtn) {
-                    themeCreatorBtn.addEventListener('click', () => {
-                        // Check if the theming module is loaded, then open the creator
-                        if (typeof initThemeCreator === 'function') {
-                            initThemeCreator();
-                        } else {
-                            console.error("Theme creator is not available.");
-                            alert("Error: Theme creator module could not be loaded.");
-                        }
-                    });
-                }
-            }
-        };
-
-        // Render in both places if they exist
-        if (modalContent) {
-            renderIntoContainer(modalContent);
-        }
-        if (pageContent) {
-            renderIntoContainer(pageContent);
-        }
-        
-        // Trigger model loading
-        loadOllamaModels();
-    }
+    // Attach all event handlers and initialize components for this container
+    attachContainerEventHandlers(container);
 }
 
-function renderModelOptions(modelSelectElement, models, selectedModel) {
-    if (!modelSelectElement) {
-        console.error("renderModelOptions called with no modelSelectElement");
-        return;
-    }
-    // Keep track of the TomSelect instance
-    const tsInstance = modelSelectElement.tomselect;
-    if (tsInstance) {
-        tsInstance.clearOptions(); // Start fresh
-    } else {
-        modelSelectElement.innerHTML = ''; // Fallback for non-TomSelect elements
+function attachContainerEventHandlers(container) {
+    // Tab Navigation
+    const settingsNav = container.querySelector('#settings-nav');
+    if (settingsNav) {
+        settingsNav.querySelectorAll('li').forEach(li => {
+            li.onclick = (e) => {
+                container.querySelectorAll('#settings-nav li').forEach(li2 => li2.classList.remove('active'));
+                e.target.classList.add('active');
+                const tabId = e.target.id.replace('settings-nav-', 'settings-') + '-section';
+                container.querySelectorAll('.settings-tab-section').forEach(tab => {
+                    tab.style.display = (tab.id === tabId) ? '' : 'none';
+                    if (tab.id === tabId && tab.id === 'settings-personas-section') {
+                        if (window.personasModule && window.personasModule.loadPersonasList) {
+                            window.personasModule.loadPersonasList(container);
+                        }
+                    }
+                });
+            };
+        });
+        // Set initial active tab
+        const generalTab = settingsNav.querySelector('#settings-nav-general');
+        if (generalTab) {
+            generalTab.classList.add('active');
+            container.querySelectorAll('.settings-tab-section').forEach(tab => {
+                tab.style.display = (tab.id === 'settings-general-section') ? '' : 'none';
+            });
+        }
     }
 
-    if (!Array.isArray(models)) {
-        // If models isn't an array, do nothing further.
-        return;
+    // Persona Handlers
+    if (window.personasModule && window.personasModule.attachHandlers) {
+        window.personasModule.attachHandlers(container);
     }
 
-    models.forEach(modelName => {
-        const option = {
-            value: modelName,
-            text: modelName
-        };
-        if (tsInstance) {
-            tsInstance.addOption(option);
+    // General Settings Handlers
+    initializeTomSelect(container.querySelector('#theme-select'), { create: false, controlInput: null });
+    container.querySelector('#save-settings-btn')?.addEventListener('click', () => saveSettings(container));
+    container.querySelector('#open-theme-creator-btn')?.addEventListener('click', () => {
+        if (typeof initThemeCreator === 'function') {
+            initThemeCreator();
         } else {
-            const optionEl = document.createElement('option');
-            optionEl.value = modelName;
-            optionEl.textContent = modelName;
-            modelSelectElement.appendChild(optionEl);
+            console.error("Theme creator is not available.");
+            alert("Error: Theme creator module could not be loaded.");
         }
     });
 
-    if (tsInstance) {
-        tsInstance.setValue(selectedModel, true); // Silently set value
-    } else {
-        modelSelectElement.value = selectedModel;
-    }
+    // Populate UI fields from the current state
+    updateSettingsUI();
 }
 
-// This is the new, correct block that was missing from the previous attempt
+function renderModelOptions(modelSelectElement, models, selectedModel) {
+    if (!modelSelectElement) return;
+    const tsInstance = modelSelectElement.tomselect;
+    if (!tsInstance) return;
+
+    tsInstance.clearOptions();
+    if (!Array.isArray(models)) return;
+
+    models.forEach(modelName => tsInstance.addOption({ value: modelName, text: modelName }));
+    tsInstance.setValue(selectedModel, true); // Silently set value
+}
+
 export function updateAndInitializeAllModelSelects(models, modelToSelect) {
     document.querySelectorAll('#model-select').forEach(selectEl => {
-        // Initialize first if it doesn't exist
         if (!selectEl.tomselect) {
-            initializeTomSelect(selectEl, {
-                create: false,
-                controlInput: null // Disables text input completely
-            });
+            initializeTomSelect(selectEl, { create: false, controlInput: null });
         }
-        // Now populate it
         renderModelOptions(selectEl, models, modelToSelect);
     });
 }
 
-// --- Loading Functions ---
-export async function loadSettings() {
-    try {
-        const settings = await apiRequest('/api/settings');
-        currentSettings = {
-            selectedModel: settings.selectedModel || null,
-            llmLinkSecurity: settings.llmLinkSecurity === 'true' ? 'true' : 'false',
-            default_llm_context_window: settings.default_llm_context_window || '4096',
-            autoCheckContextWindow: settings.autoCheckContextWindow === true || settings.autoCheckContextWindow === 'true', // Ensure boolean
-            theme: settings.theme || 'theme-silvery',
-            // Load new chat history settings, using defaults if missing from backend response
-            ch_max_ambient_posts: settings.ch_max_ambient_posts || '5',
-            ch_max_posts_per_sibling_branch: settings.ch_max_posts_per_sibling_branch || '2',
-            ch_primary_history_budget_ratio: settings.ch_primary_history_budget_ratio || '0.7'
-        };
-        // Ensure boolean-like strings are strictly 'true' or 'false'
-        if (currentSettings.llmLinkSecurity === undefined) currentSettings.llmLinkSecurity = 'true';
-        if (currentSettings.autoCheckContextWindow === undefined) currentSettings.autoCheckContextWindow = false;
-
-        applyTheme(currentSettings.theme);
-
-        // Update UI elements if they exist (they might be created later by renderSettingsPage)
-        // This part is somewhat redundant if renderSettingsPage correctly populates fields
-        // based on currentSettings during its execution.
-        const autoCheckToggleInput = settingsPageContent.querySelector('#auto-check-context-window-toggle');
-        if (autoCheckToggleInput) autoCheckToggleInput.checked = currentSettings.autoCheckContextWindow;
-
-        const linkSecurityToggleInput = settingsPageContent.querySelector('#llm-link-security-toggle');
-        if (linkSecurityToggleInput) linkSecurityToggleInput.checked = currentSettings.llmLinkSecurity === 'true';
-
-        const contextWindowInput = settingsPageContent.querySelector('#default-llm-context-window-input');
-        if (contextWindowInput) contextWindowInput.value = currentSettings.default_llm_context_window;
-
-        const maxAmbientPostsInput = settingsPageContent.querySelector('#ch-max-ambient-posts');
-        if (maxAmbientPostsInput) maxAmbientPostsInput.value = currentSettings.ch_max_ambient_posts;
-
-        const maxPostsPerSiblingInput = settingsPageContent.querySelector('#ch-max-posts-per-sibling-branch');
-        if (maxPostsPerSiblingInput) maxPostsPerSiblingInput.value = currentSettings.ch_max_posts_per_sibling_branch;
-
-        const primaryRatioInput = settingsPageContent.querySelector('#ch-primary-history-budget-ratio');
-        if (primaryRatioInput) primaryRatioInput.value = currentSettings.ch_primary_history_budget_ratio;
-
-    } catch (error) {
-        console.error("Error loading settings:", error);
-        // Apply default settings on error (currentSettings already holds defaults from its definition)
-        applyDarkMode(true);
-    }
-}
-
-export async function loadOllamaModels() {
-    const modelSelectElement = settingsPageContent.querySelector('#model-select');
-    const settingsErrorElement = settingsPageContent.querySelector('#settings-error');
-    // const selectedOllamaModelDisplay = settingsPageContent.querySelector('#selected-ollama-model-display'); // REMOVED
-    const contextWindowInput = settingsPageContent.querySelector('#default-llm-context-window-input'); // Added for fetchAndDisplayModelContextWindow
-
-    // Ensure the select element exists before proceeding
-    if (!modelSelectElement) {
-         console.warn("Model select element not found yet in settings page.");
-         return;
-    }
-    // if (!selectedOllamaModelDisplay) { // REMOVED
-    //     console.warn("Selected Ollama model display element not found."); // REMOVED
-    // } // REMOVED
-
-
-    // Set loading state for all instances
-    document.querySelectorAll('#model-select').forEach(el => {
-        const ts = el.tomselect || initializeTomSelect(el, { create: false, controlInput: null });
-        if (ts) {
-            ts.clear(); // Clear selected items
-            ts.clearOptions(); // Clear all options
-            ts.addOption({ value: '', text: 'Loading models...' });
-            ts.setValue('', true); // Select the loading message
-            ts.disable();
-        }
-    });
-    if(settingsErrorElement) settingsErrorElement.textContent = ""; // Clear previous errors
-
-    try {
-        const modelsResult = await apiRequest('/api/ollama/models', 'GET', null, false, true); // Added silentError = true
-        let models = [];
-        let defaultModelFromBackend = modelsResult && modelsResult.models && modelsResult.models.length > 0 ? modelsResult.models[0] : null;
-
-        if (Array.isArray(modelsResult)) { // Direct array of model names
-            models = modelsResult;
-            defaultModelFromBackend = models.length > 0 ? models[0] : null;
-        } else if (modelsResult && Array.isArray(modelsResult.models)) { // Object with models array and possibly error
-            models = modelsResult.models;
-            if (modelsResult.error) {
-                console.warn("Ollama connection issue reported by backend, using default model list:", modelsResult.error);
-                if(settingsErrorElement) settingsErrorElement.textContent = "Warning: Ollama connection issue. Displaying default models.";
-            }
-        } else {
-             console.error("Unexpected format or error fetching Ollama models:", modelsResult);
-             models = currentSettings.selectedModel ? [currentSettings.selectedModel] : [];
-             if(settingsErrorElement) settingsErrorElement.textContent = "Error fetching models. Using current selection if available.";
-        }
-
-        // Determine the model to select: current setting, or first from list, or null
-        let modelToSelect = currentSettings.selectedModel || defaultModelFromBackend;
-        if (models.length === 0 && !currentSettings.selectedModel) {
-            modelToSelect = null; // No models, no selection
-        } else if (models.length > 0 && !models.includes(modelToSelect) && !currentSettings.selectedModel) {
-            // If currentSettings.selectedModel was null, and modelToSelect (first from backend) isn't in the (possibly filtered) list
-            modelToSelect = models[0]; // Fallback to the first model in the processed list
-        }
-
-
-        // Before adding new models, clear the placeholder
-        document.querySelectorAll('#model-select').forEach(el => {
-            if (el.tomselect) {
-                el.tomselect.clearOptions(); // Attempt to clear all
-                el.tomselect.removeOption('');  // Explicitly remove the placeholder
-            }
-        });
-        updateAndInitializeAllModelSelects(models, modelToSelect);
-
-        // if (selectedOllamaModelDisplay) { // REMOVED
-        //     selectedOllamaModelDisplay.textContent = modelToSelect || 'None'; // REMOVED
-        // } // REMOVED
-        currentSettings.selectedModel = modelToSelect; // Update current setting state
-
-        const autoCheckToggle = settingsPageContent.querySelector('#auto-check-context-window-toggle');
-        if (modelToSelect && modelToSelect !== 'None' && autoCheckToggle && autoCheckToggle.checked) {
-            await fetchAndDisplayModelContextWindow(modelToSelect, false);
-        } else {
-            const contextDisplay = settingsPageContent.querySelector('#selected-model-context-window-display');
-            if (contextDisplay) contextDisplay.textContent = '';
-        }
-
-        // Add/Update event listener for changes
-        modelSelectElement.removeEventListener('change', handleModelSelectionChange); // Remove previous if any
-        modelSelectElement.addEventListener('change', handleModelSelectionChange);
-
-    } catch (error) {
-        console.error("Error fetching Ollama models:", error);
-        updateAndInitializeAllModelSelects(currentSettings.selectedModel ? [currentSettings.selectedModel] : [], currentSettings.selectedModel);
-        if(settingsErrorElement) settingsErrorElement.textContent = `Could not fetch models: ${error.message}`;
-        // if (selectedOllamaModelDisplay) { // REMOVED
-        //     selectedOllamaModelDisplay.textContent = currentSettings.selectedModel || 'Error'; // REMOVED
-        // } // REMOVED
-         // Attempt to show context for a previously selected model if list fails to load
-        if (currentSettings.selectedModel) {
-            await fetchAndDisplayModelContextWindow(currentSettings.selectedModel, false); // Explicitly false
-        }
-    } finally {
-        // Re-enable all instances
-        document.querySelectorAll('#model-select').forEach(el => {
-            if (el.tomselect) {
-                el.tomselect.enable();
-            }
-        });
-    }
-}
-
 async function handleModelSelectionChange(event) {
     const selectedModel = event.target.value;
-    // const selectedOllamaModelDisplay = settingsPageContent.querySelector('#selected-ollama-model-display'); // REMOVED
-    // if (selectedOllamaModelDisplay) { // REMOVED
-    //     selectedOllamaModelDisplay.textContent = selectedModel; // REMOVED
-    // } // REMOVED
     currentSettings.selectedModel = selectedModel;
-    const autoCheckToggle = settingsPageContent.querySelector('#auto-check-context-window-toggle');
 
+    // Update the UI in both possible views
+    updateSettingsUI();
+
+    const autoCheckToggle = document.querySelector('#settings-page-content #auto-check-context-window-toggle') || document.querySelector('#settings-modal #auto-check-context-window-toggle');
     if (autoCheckToggle && autoCheckToggle.checked) {
         await fetchAndDisplayModelContextWindow(selectedModel, false);
     } else {
-        const contextDisplay = settingsPageContent.querySelector('#selected-model-context-window-display');
+        const contextDisplay = document.querySelector('#settings-page-content #selected-model-context-window-display') || document.querySelector('#settings-modal #selected-model-context-window-display');
         if (contextDisplay) contextDisplay.textContent = '';
     }
 }
 
-// New function to fetch and display context window
 async function fetchAndDisplayModelContextWindow(modelName, isForcedRefresh = false) {
-    const displayElement = settingsPageContent.querySelector('#selected-model-context-window-display');
-    if (!displayElement) {
-        console.error("Context window display element not found");
-        return;
-    }
+    const displayElement = document.querySelector('#settings-page-content #selected-model-context-window-display') || document.querySelector('#settings-modal #selected-model-context-window-display');
+    if (!displayElement) return;
 
-    // If !modelName || modelName === 'None', set textContent to '' and no refresh icon.
     if (!modelName || modelName === 'None') {
         displayElement.textContent = '';
         return;
     }
 
-    const autoCheckToggle = settingsPageContent.querySelector('#auto-check-context-window-toggle');
-    if (!autoCheckToggle || !autoCheckToggle.checked) {
-        // If the auto-check is off, ensure the display is clear, unless we are force refreshing (e.g. user clicked refresh icon)
-        if (!isForcedRefresh) {
-             displayElement.textContent = '';
-             return;
-        }
-        // If it IS a forced refresh, proceed even if the main checkbox is off.
+    const autoCheckToggle = document.querySelector('#settings-page-content #auto-check-context-window-toggle') || document.querySelector('#settings-modal #auto-check-context-window-toggle');
+    if (!autoCheckToggle || (!autoCheckToggle.checked && !isForcedRefresh)) {
+        displayElement.textContent = '';
+        return;
     }
 
-
-    displayElement.innerHTML = ''; // Clear previous content, including any refresh icon
-    displayElement.textContent = ' (Context: Loading...)'; // Temporary text
+    displayElement.innerHTML = ' (Context: Loading...)';
 
     const showErrorState = () => {
-        displayElement.innerHTML = ''; // Clear loading text
-        displayElement.textContent = 'context limit unavailable '; // 3. Set text content
-
-        const refreshSpan = document.createElement('span'); // 3. Create span
-        refreshSpan.textContent = '🔄'; // 3. Set textContent
-        refreshSpan.style.cursor = 'pointer'; // 3. Style cursor
-        refreshSpan.style.marginLeft = '5px'; // 3. Style margin
-        refreshSpan.title = 'Refresh context window'; // 3. Add title (aria-label is also good)
+        displayElement.innerHTML = ' context limit unavailable ';
+        const refreshSpan = document.createElement('span');
+        refreshSpan.textContent = '🔄';
+        refreshSpan.style.cursor = 'pointer';
+        refreshSpan.style.marginLeft = '5px';
+        refreshSpan.title = 'Refresh context window';
         refreshSpan.setAttribute('aria-label', 'Refresh context window');
-
-        refreshSpan.addEventListener('click', (event) => { // 3. Attach event listener
-            event.preventDefault(); // 3. Prevent default
-            fetchAndDisplayModelContextWindow(modelName, true); // 3. Call self, with force refresh
+        refreshSpan.addEventListener('click', (event) => {
+            event.preventDefault();
+            fetchAndDisplayModelContextWindow(modelName, true);
         });
-        displayElement.appendChild(refreshSpan); // 3. Append span
+        displayElement.appendChild(refreshSpan);
     };
 
     try {
-        let apiUrl = `/api/llm/models/${encodeURIComponent(modelName)}/context_window`;
-        if (isForcedRefresh) {
-            apiUrl += '?refresh=true';
-        }
-        const data = await apiRequest(apiUrl, 'GET', null, false, true); // Added silentError = true
+        let apiUrl = `/api/llm/models/${encodeURIComponent(modelName)}/context_window?refresh=${isForcedRefresh}`;
+        const data = await apiRequest(apiUrl, 'GET', null, false, true);
 
-        // 2. API call successful and data.context_window is available
         if (data && data.context_window !== undefined && data.context_window !== null) {
             displayElement.textContent = ` (Context: ${data.context_window} tokens)`;
         } else {
-            // API call was successful but context_window is null/undefined (e.g. API returned 404, which apiRequest might turn into a resolved promise with specific data structure)
-            // Or data object itself is not as expected.
-            console.warn(`Context window data not available for ${modelName}, or API response structure unexpected. Data:`, data);
-            showErrorState(); // 3. Call error/unavailable state handler
+            showErrorState();
         }
-    } catch (error) { // API call failed (e.g. network error, 5xx, or apiRequest threw an error)
+    } catch (error) {
         console.error(`Exception fetching context window for ${modelName}:`, error);
-        showErrorState(); // 3. Call error/unavailable state handler
+        showErrorState();
     }
 }
 
 function applyTheme(themeName) {
     document.body.classList.remove('theme-silvery', 'theme-hc-black');
-    document.body.classList.add(themeName);
+    if (themeName) {
+        document.body.classList.add(themeName);
+    }
 }
 
-// --- Settings Actions ---
-export async function saveSettings() {
-    // Get elements from within the settings page content
-    const modelSelectElement = settingsPageContent.querySelector('#model-select');
-    const autoCheckToggleInput = settingsPageContent.querySelector('#auto-check-context-window-toggle'); // New
-    const linkSecurityToggleInput = settingsPageContent.querySelector('#llm-link-security-toggle');
-    const contextWindowInput = settingsPageContent.querySelector('#default-llm-context-window-input');
-    const themeSelect = settingsPageContent.querySelector('#theme-select');
-    // New chat history inputs
-    const chMaxAmbientPostsInput = settingsPageContent.querySelector('#ch-max-ambient-posts');
-    const chMaxPostsPerSiblingBranchInput = settingsPageContent.querySelector('#ch-max-posts-per-sibling-branch');
-    const chPrimaryHistoryBudgetRatioInput = settingsPageContent.querySelector('#ch-primary-history-budget-ratio');
-
-    const saveButton = settingsPageContent.querySelector('#save-settings-btn');
-    const settingsErrorElement = settingsPageContent.querySelector('#settings-error');
-
-    if (!modelSelectElement || !autoCheckToggleInput || !linkSecurityToggleInput || !contextWindowInput || !themeSelect ||
-        !chMaxAmbientPostsInput || !chMaxPostsPerSiblingBranchInput || !chPrimaryHistoryBudgetRatioInput ||
-        !saveButton || !settingsErrorElement) {
-        console.error("Settings elements not found for saving.");
-        // More detailed logging for missing elements
-        if (!modelSelectElement) console.error("Missing: modelSelectElement");
-        if (!autoCheckToggleInput) console.error("Missing: autoCheckToggleInput");
-        if (!linkSecurityToggleInput) console.error("Missing: linkSecurityToggleInput");
-        if (!contextWindowInput) console.error("Missing: contextWindowInput");
-        if (!themeSelect) console.error("Missing: themeSelect");
-        if (!chMaxAmbientPostsInput) console.error("Missing: chMaxAmbientPostsInput");
-        if (!chMaxPostsPerSiblingBranchInput) console.error("Missing: chMaxPostsPerSiblingBranchInput");
-        if (!chPrimaryHistoryBudgetRatioInput) console.error("Missing: chPrimaryHistoryBudgetRatioInput");
-        if (!saveButton) console.error("Missing: saveButton");
-        if (!settingsErrorElement) console.error("Missing: settingsErrorElement");
-
-        settingsErrorElement.textContent = "An error occurred. Could not save settings. Required elements missing.";
+export async function saveSettings(container) {
+    if (!container) {
+        console.error("Save settings called without a valid container context.");
         return;
     }
 
-    const newSelectedModel = modelSelectElement.value;
-    const newAutoCheckContextWindow = autoCheckToggleInput.checked; // New
-    const newLlmLinkSecurity = linkSecurityToggleInput.checked;
-    const newDefaultContextWindow = contextWindowInput.value;
-    const newTheme = themeSelect.value;
-    // Get values from new fields
-    const chMaxAmbientPosts = chMaxAmbientPostsInput.value;
-    const chMaxPostsPerSiblingBranch = chMaxPostsPerSiblingBranchInput.value;
-    const chPrimaryHistoryBudgetRatio = chPrimaryHistoryBudgetRatioInput.value;
+    const modelSelectElement = container.querySelector('#model-select');
+    const autoCheckToggleInput = container.querySelector('#auto-check-context-window-toggle');
+    const linkSecurityToggleInput = container.querySelector('#llm-link-security-toggle');
+    const contextWindowInput = container.querySelector('#default-llm-context-window-input');
+    const themeSelect = container.querySelector('#theme-select');
+    const chMaxAmbientPostsInput = container.querySelector('#ch-max-ambient-posts');
+    const chMaxPostsPerSiblingBranchInput = container.querySelector('#ch-max-posts-per-sibling-branch');
+    const chPrimaryHistoryBudgetRatioInput = container.querySelector('#ch-primary-history-budget-ratio');
+    const saveButton = container.querySelector('#save-settings-btn');
+    const settingsErrorElement = container.querySelector('#settings-error');
 
-    settingsErrorElement.textContent = ""; // Clear previous errors
-
-    // Basic Client-side Validations (Backend will also validate)
-    if (!newSelectedModel) {
-        settingsErrorElement.textContent = "Please select a model.";
-        modelSelectElement.focus();
-        return;
-    }
-    if (!newDefaultContextWindow || isNaN(parseInt(newDefaultContextWindow, 10)) || parseInt(newDefaultContextWindow, 10) < 0) {
-        settingsErrorElement.textContent = "Default LLM Context Window must be a non-negative number.";
-        contextWindowInput.focus();
-        return;
-    }
-    if (isNaN(parseInt(chMaxAmbientPosts, 10)) || parseInt(chMaxAmbientPosts, 10) < 0) {
-        settingsErrorElement.textContent = "Max Ambient Posts must be a non-negative number.";
-        chMaxAmbientPostsInput.focus();
-        return;
-    }
-    if (isNaN(parseInt(chMaxPostsPerSiblingBranch, 10)) || parseInt(chMaxPostsPerSiblingBranch, 10) < 0) {
-        settingsErrorElement.textContent = "Max Posts Per Sibling Branch must be a non-negative number.";
-        chMaxPostsPerSiblingBranchInput.focus();
-        return;
-    }
-    if (isNaN(parseFloat(chPrimaryHistoryBudgetRatio)) || parseFloat(chPrimaryHistoryBudgetRatio) < 0.0 || parseFloat(chPrimaryHistoryBudgetRatio) > 1.0) {
-        settingsErrorElement.textContent = "Primary History Budget Ratio must be between 0.0 and 1.0.";
-        chPrimaryHistoryBudgetRatioInput.focus();
+    // Simple validation check
+    if (!modelSelectElement || !saveButton || !settingsErrorElement) {
+        console.error("Required settings elements not found in the container for saving.");
         return;
     }
 
     const settingsToSave = {
-        selectedModel: newSelectedModel,
-        autoCheckContextWindow: newAutoCheckContextWindow, // New
-        llmLinkSecurity: newLlmLinkSecurity.toString(),
-        default_llm_context_window: parseInt(newDefaultContextWindow, 10).toString(),
-        theme: newTheme,
-        // Add new settings to payload
-        ch_max_ambient_posts: chMaxAmbientPosts,
-        ch_max_posts_per_sibling_branch: chMaxPostsPerSiblingBranch,
-        ch_primary_history_budget_ratio: chPrimaryHistoryBudgetRatio
+        selectedModel: modelSelectElement.value,
+        autoCheckContextWindow: autoCheckToggleInput.checked,
+        llmLinkSecurity: linkSecurityToggleInput.checked.toString(),
+        default_llm_context_window: contextWindowInput.value,
+        theme: themeSelect.value,
+        ch_max_ambient_posts: chMaxAmbientPostsInput.value,
+        ch_max_posts_per_sibling_branch: chMaxPostsPerSiblingBranchInput.value,
+        ch_primary_history_budget_ratio: chPrimaryHistoryBudgetRatioInput.value
     };
+
+    // Further validation can be added here...
 
     saveButton.disabled = true;
     saveButton.textContent = 'Saving...';
+    settingsErrorElement.textContent = "";
 
     try {
-        // Use PUT request to update settings
-        const updatedSettings = await apiRequest('/api/settings', 'PUT', settingsToSave, false, true); // Added silentError = true
+        await apiRequest('/api/settings', 'PUT', settingsToSave);
+        // After a successful save, re-initialize everything to ensure UI is consistent
+        // with the newly saved state. This is the most robust approach.
+        await initializeSettings();
 
-        // Update local state immediately based on what was sent,
-        // assuming the backend confirms or handles potential discrepancies.
-        currentSettings.selectedModel = settingsToSave.selectedModel;
-        currentSettings.autoCheckContextWindow = settingsToSave.autoCheckContextWindow; // New
-        currentSettings.llmLinkSecurity = settingsToSave.llmLinkSecurity;
-        currentSettings.default_llm_context_window = settingsToSave.default_llm_context_window;
-        currentSettings.theme = settingsToSave.theme;
-        // Update local state for new settings
-        currentSettings.ch_max_ambient_posts = settingsToSave.ch_max_ambient_posts;
-        currentSettings.ch_max_posts_per_sibling_branch = settingsToSave.ch_max_posts_per_sibling_branch;
-        currentSettings.ch_primary_history_budget_ratio = settingsToSave.ch_primary_history_budget_ratio;
-
-        // Update UI (redundant if page isn't re-rendered, but good practice for consistency)
-        applyTheme(currentSettings.theme);
-
-        // Explicitly update the TomSelect instance for the theme
-        const themeSelectElement = settingsPageContent.querySelector('#theme-select');
-        if (themeSelectElement && themeSelectElement.tomselect) {
-            themeSelectElement.tomselect.setValue(currentSettings.theme, true); // Silently update after save
+        // Optional: Show a temporary success message
+        if (settingsErrorElement) {
+            settingsErrorElement.textContent = "Settings saved successfully!";
+            setTimeout(() => { settingsErrorElement.textContent = ""; }, 3000);
         }
 
-        if(autoCheckToggleInput) autoCheckToggleInput.checked = currentSettings.autoCheckContextWindow; // New
-        if(linkSecurityToggleInput) linkSecurityToggleInput.checked = currentSettings.llmLinkSecurity === 'true';
-        if (contextWindowInput) contextWindowInput.value = currentSettings.default_llm_context_window;
-        // Update new fields in UI
-        if (chMaxAmbientPostsInput) chMaxAmbientPostsInput.value = currentSettings.ch_max_ambient_posts;
-        if (chMaxPostsPerSiblingBranchInput) chMaxPostsPerSiblingBranchInput.value = currentSettings.ch_max_posts_per_sibling_branch;
-        if (chPrimaryHistoryBudgetRatioInput) chPrimaryHistoryBudgetRatioInput.value = currentSettings.ch_primary_history_budget_ratio;
-
-        // Instead of trying to re-render the options in place, which can corrupt
-        // the TomSelect instance, just re-trigger the full model loading process.
-        // This is more robust and ensures the dropdown is always in a correct state.
-        await loadOllamaModels();
-
-        // Optionally provide feedback to the user
-        // settingsErrorElement.textContent = "Settings saved successfully!";
-        // setTimeout(() => { settingsErrorElement.textContent = ""; }, 3000);
-
-        // Decide whether to close the settings page or not. Let's keep it open.
-        // showSection(lastVisibleSectionId);
-
     } catch (error) {
-        settingsErrorElement.textContent = `Error saving settings: ${error.message}`;
+        if (settingsErrorElement) {
+            settingsErrorElement.textContent = `Error saving settings: ${error.message}`;
+        }
         console.error("Error saving settings:", error);
     } finally {
-        if (saveButton) { // Check if saveButton exists before modifying
+        if (saveButton) {
             saveButton.disabled = false;
             saveButton.textContent = 'Save Settings';
         }
@@ -725,55 +512,39 @@ export async function saveSettings() {
 }
 
 export function showSettingsPage(navigateToPersonasTab = false) {
-    console.debug('[Settings] showSettingsPage called. Navigate to Personas:', navigateToPersonasTab);
     renderSettingsPage(); // Ensure content is created/updated
     showSection('settings-page-section');
+    initializeSettings(); // Initialize data every time the page is shown
 
     if (navigateToPersonasTab) {
         const pageContent = document.getElementById('settings-page-content');
         if (pageContent) {
             const personasNavTab = pageContent.querySelector('#settings-nav-personas');
-            if (personasNavTab) {
-                console.debug('[Settings] Programmatically clicking Personas tab.');
-                personasNavTab.click(); // This should trigger loading personas list if not already loaded
-            } else {
-                console.error('[Settings] Personas navigation tab not found.');
-            }
-        } else {
-            console.error('[Settings] Settings page content container not found.');
+            personasNavTab?.click();
         }
     }
 }
 
-
 export function openPersonaForEditing(personaId) {
-    console.debug(`[Settings] openPersonaForEditing called for ID: ${personaId}`);
-    showSettingsPage(true); // Show settings page and navigate to personas tab
-
-    // The settings page content container
-    const settingsContentContainer = document.getElementById('settings-page-content');
-    if (!settingsContentContainer) {
-        console.error('[Settings:openPersonaForEditing] Settings page content container not found.');
-        return;
-    }
-    
-    // The specific container for the personas tab content, used as context for openPersonaInModal
-    const personasTabContentContainer = settingsContentContainer.querySelector('#settings-personas-section');
-    if (!personasTabContentContainer) {
-        console.error('[Settings:openPersonaForEditing] Personas tab content container not found.');
-        return;
-    }
-
-    // Wait for personasModule to be loaded and tab switch to potentially complete UI updates.
-    // personasModule is loaded by renderSettingsPage, and tab click might have async aspects.
+    showSettingsPage(true);
     setTimeout(() => {
-        if (window.personasModule && typeof window.personasModule.openPersonaInModal === 'function') {
-            console.debug(`[Settings:openPersonaForEditing] Calling personasModule.openPersonaInModal for ID: ${personaId}`);
+        const settingsContentContainer = document.getElementById('settings-page-content');
+        const personasTabContentContainer = settingsContentContainer?.querySelector('#settings-personas-section');
+        if (window.personasModule?.openPersonaInModal && personasTabContentContainer) {
             window.personasModule.openPersonaInModal(personaId, personasTabContentContainer);
         } else {
-            console.error('[Settings:openPersonaForEditing] personasModule or openPersonaInModal is not available.');
-            // Optionally, provide user feedback here if the modal can't be opened.
-            alert('Error: Could not open persona editor. Personas module not ready.');
+            console.error('[Settings] Could not open persona for editing.');
+            alert('Error: Could not open persona editor.');
         }
-    }, 150); // Increased timeout slightly to allow tab switch and potential async ops within it.
+    }, 150);
+}
+
+// DEPRECATED FUNCTIONS
+export async function loadSettings() {
+    console.warn("loadSettings() is deprecated. Use initializeSettings().");
+    return initializeSettings();
+}
+export async function loadOllamaModels() {
+    console.warn("loadOllamaModels() is deprecated and should not be called directly.");
+    // This function is now a no-op because initializeSettings handles it.
 }
