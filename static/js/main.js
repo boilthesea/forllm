@@ -21,9 +21,8 @@ import {
 } from './schedule.js';
 
 import {
-    loadSettings,
-    renderSettingsPage,
-    saveSettings // Although saveSettings is called internally by renderSettingsPage, keep import for clarity
+    initializeSettings,
+    renderSettingsPage
 } from './settings.js';
 
 import { loadQueueData } from './queue.js';
@@ -63,7 +62,7 @@ function initialLoad() {
         // After subforums load, show the default section (now activity page via showSection(null))
         showSection(null);
     });
-    loadSettings(); // Loads settings (which includes dark mode and model list trigger)
+    initializeSettings(); // Loads settings, models, and renders the settings UI
     loadCurrentStatus();
     loadNextSchedule();
     setInterval(loadCurrentStatus, 30000); // Update status every 30 seconds
