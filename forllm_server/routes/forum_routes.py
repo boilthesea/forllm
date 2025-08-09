@@ -17,9 +17,6 @@ from ..config import CURRENT_USER_ID, DEFAULT_MODEL
 
 forum_api_bp = Blueprint('forum_api', __name__, url_prefix='/api')
 
-# Regex for parsing persona tags: @[Persona Name](persona_id)
-PERSONA_TAG_REGEX = r'@\[([^\]]+)\]\((\d+)\)(?::@\[([^\]]+)\]\((\d+)\))?'
-
 # Helper function to check for plain text
 def is_plain_text(file_stream):
     """
@@ -109,21 +106,46 @@ def handle_topics(subforum_id):
         all_tagged_persona_ids = []
         llm_requests_to_create = []
         if content:
-            matches = re.findall(PERSONA_TAG_REGEX, content)
-            for match in matches:
-                p1_id = int(match[1])
-                p2_id_str = match[3]
+            # Regex to find all full chains of one or more colon-separated persona tags.
+            # e.g., "@[p1](1)" or "@[p1](1):@[p2](2):@[p3](3)"
+            chain_regex = re.compile(r'@\[[^\]]+\]\(\d+\)(?::@\[[^\]]+\]\(\d+\))*')
 
-                all_tagged_persona_ids.append(p1_id)
-                if p2_id_str:
-                    p2_id = int(p2_id_str)
-                    all_tagged_persona_ids.append(p2_id)
-                    # Chained tag: @p1:@p2
-                    llm_requests_to_create.append({'p_id': p1_id, 'status': 'pending', 'parent_id': None})
-                    llm_requests_to_create.append({'p_id': p2_id, 'status': 'pending_dependency', 'parent_id': p1_id})
-                else:
-                    # Single tag: @p1
-                    llm_requests_to_create.append({'p_id': p1_id, 'status': 'pending', 'parent_id': None})
+            # Regex to parse a single tag and extract its ID.
+            persona_id_regex = re.compile(r'@\[[^\]]+\]\((\d+)\)')
+
+            # Find all chains in the content.
+            all_chains = chain_regex.findall(content)
+
+            for chain_str in all_chains:
+                # Split the found chain string into individual tags.
+                chain_tags = chain_str.split(':')
+
+                # Keep track of the previous persona's ID in this specific chain.
+                last_persona_id_in_chain = None
+
+                for i, tag_str in enumerate(chain_tags):
+                    match = persona_id_regex.match(tag_str.strip())
+                    if match:
+                        persona_id = int(match.group(1))
+                        all_tagged_persona_ids.append(persona_id)
+
+                        if i == 0:
+                            # First persona in the chain (or a single tag)
+                            llm_requests_to_create.append({
+                                'p_id': persona_id,
+                                'status': 'pending',
+                                'parent_id': None
+                            })
+                        else:
+                            # Subsequent persona in the chain, dependent on the previous one.
+                            llm_requests_to_create.append({
+                                'p_id': persona_id,
+                                'status': 'pending_dependency',
+                                'parent_id': last_persona_id_in_chain
+                            })
+
+                        # Update the last persona ID for the next iteration in this chain.
+                        last_persona_id_in_chain = persona_id
 
         unique_tagged_persona_ids = sorted(list(set(all_tagged_persona_ids)))
         tagged_personas_json = json.dumps(unique_tagged_persona_ids)
@@ -216,19 +238,46 @@ def handle_posts(topic_id):
         all_tagged_persona_ids = []
         llm_requests_to_create = []
         if content:
-            matches = re.findall(PERSONA_TAG_REGEX, content)
-            for match in matches:
-                p1_id = int(match[1])
-                p2_id_str = match[3]
+            # Regex to find all full chains of one or more colon-separated persona tags.
+            # e.g., "@[p1](1)" or "@[p1](1):@[p2](2):@[p3](3)"
+            chain_regex = re.compile(r'@\[[^\]]+\]\(\d+\)(?::@\[[^\]]+\]\(\d+\))*')
 
-                all_tagged_persona_ids.append(p1_id)
-                if p2_id_str:
-                    p2_id = int(p2_id_str)
-                    all_tagged_persona_ids.append(p2_id)
-                    llm_requests_to_create.append({'p_id': p1_id, 'status': 'pending', 'parent_id': None})
-                    llm_requests_to_create.append({'p_id': p2_id, 'status': 'pending_dependency', 'parent_id': p1_id})
-                else:
-                    llm_requests_to_create.append({'p_id': p1_id, 'status': 'pending', 'parent_id': None})
+            # Regex to parse a single tag and extract its ID.
+            persona_id_regex = re.compile(r'@\[[^\]]+\]\((\d+)\)')
+
+            # Find all chains in the content.
+            all_chains = chain_regex.findall(content)
+
+            for chain_str in all_chains:
+                # Split the found chain string into individual tags.
+                chain_tags = chain_str.split(':')
+
+                # Keep track of the previous persona's ID in this specific chain.
+                last_persona_id_in_chain = None
+
+                for i, tag_str in enumerate(chain_tags):
+                    match = persona_id_regex.match(tag_str.strip())
+                    if match:
+                        persona_id = int(match.group(1))
+                        all_tagged_persona_ids.append(persona_id)
+
+                        if i == 0:
+                            # First persona in the chain (or a single tag)
+                            llm_requests_to_create.append({
+                                'p_id': persona_id,
+                                'status': 'pending',
+                                'parent_id': None
+                            })
+                        else:
+                            # Subsequent persona in the chain, dependent on the previous one.
+                            llm_requests_to_create.append({
+                                'p_id': persona_id,
+                                'status': 'pending_dependency',
+                                'parent_id': last_persona_id_in_chain
+                            })
+
+                        # Update the last persona ID for the next iteration in this chain.
+                        last_persona_id_in_chain = persona_id
         
         unique_tagged_persona_ids = sorted(list(set(all_tagged_persona_ids)))
         tagged_personas_json = json.dumps(unique_tagged_persona_ids)
