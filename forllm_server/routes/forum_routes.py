@@ -185,8 +185,9 @@ def handle_topics(subforum_id):
                     VALUES (?, ?, ?, ?, ?, ?, ?)
                 """, (post_id, p_id, CURRENT_USER_ID, 'respond_to_post_tag', status, None, parent_request_id))
                 
-                if not parent_p_id: # This is a primary request
-                    parent_request_id_map[p_id] = cursor.lastrowid
+                # Always map the persona_id to the newly created request_id
+                # so it can be found by subsequent children in the same chain.
+                parent_request_id_map[p_id] = cursor.lastrowid
             # --- End LLM Requests ---
 
             db.commit()
@@ -313,8 +314,9 @@ def handle_posts(topic_id):
                     VALUES (?, ?, ?, ?, ?, ?, ?)
                 """, (post_id, p_id, CURRENT_USER_ID, 'respond_to_post_tag', status, None, parent_request_id))
                 
-                if not parent_p_id:
-                    parent_request_id_map[p_id] = cursor.lastrowid
+                # Always map the persona_id to the newly created request_id
+                # so it can be found by subsequent children in the same chain.
+                parent_request_id_map[p_id] = cursor.lastrowid
             # --- End LLM Requests ---
             
             db.commit()
