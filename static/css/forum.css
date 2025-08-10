@@ -369,3 +369,67 @@ input[type="file"]::file-selector-button:hover {
     font-weight: 500;
     white-space: nowrap; /* Prevent wrapping if possible */
 }
+
+/* Post Options Menu */
+.post-meta {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 1rem;
+}
+
+.post-meta-info {
+    flex-grow: 1;
+    color: var(--text-color-secondary);
+}
+
+.post-meta-actions {
+    position: relative;
+    flex-shrink: 0;
+}
+
+.post-options-btn {
+    background: none;
+    border: 1px solid transparent;
+    color: var(--text-color-secondary);
+    font-size: 1.2rem;
+    cursor: pointer;
+    padding: 0 0.5rem;
+    border-radius: 4px;
+}
+
+.post-options-btn:hover {
+    color: var(--text-color-primary);
+    background-color: var(--background-color-secondary-hover);
+    border-color: var(--border-color);
+}
+
+.post-options-menu {
+    display: none;
+    position: absolute;
+    right: 0;
+    top: 100%;
+    background-color: var(--background-color-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+    z-index: 10;
+    min-width: 120px;
+    list-style: none;
+    padding: 5px 0;
+    margin: 2px 0 0 0;
+}
+
+.post-options-menu a {
+    display: block;
+    padding: 8px 12px;
+    color: var(--text-color-primary);
+    text-decoration: none;
+    font-size: 0.9rem;
+    white-space: nowrap;
+}
+
+.post-options-menu a:hover {
+    background-color: var(--accent-color);
+    color: var(--background-color-primary);
+}

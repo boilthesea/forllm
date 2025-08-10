@@ -28,6 +28,7 @@ let currentSubforumId = null;
 let currentTopicId = null;
 let currentPosts = []; // Store posts for the current topic
 let currentPersonaId = null;
+let isEditingPost = false;
 
 // --- Persona Tagging Cache for forum.js ---
 let forumActivePersonasCache = [];
@@ -269,32 +270,83 @@ function renderPostNode(post, parentElement, depth) {
         postDiv.classList.add('llm-response');
     }
 
+    // --- Create Meta Header ---
     const metaDiv = document.createElement('div');
     metaDiv.className = 'post-meta';
-    
-    // If it's an LLM response and a persona_name is available, use it. Otherwise, fall back to username.
+
+    const metaInfo = document.createElement('div');
+    metaInfo.className = 'post-meta-info';
     const displayName = (post.is_llm_response && post.persona_name) ? post.persona_name : post.username;
-    metaDiv.textContent = `Posted by ${displayName} on ${new Date(post.created_at).toLocaleString()}`;
+    const dateString = new Date(post.created_at).toLocaleString();
+    metaInfo.innerHTML = `Posted by <strong>${displayName}</strong> on ${dateString}`;
 
     if (post.is_llm_response) {
         const llmMeta = document.createElement('span');
         llmMeta.className = 'llm-meta';
-        // Show the model and Persona ID for clarity, since the name is now the primary identifier.
         llmMeta.textContent = ` (LLM: ${post.llm_model_id || 'default'} / Persona ID: ${post.llm_persona_id})`;
-        metaDiv.appendChild(llmMeta);
+        metaInfo.appendChild(llmMeta);
     }
+
+    const metaActions = document.createElement('div');
+    metaActions.className = 'post-meta-actions';
+
+    const optionsButton = document.createElement('button');
+    optionsButton.className = 'post-options-btn';
+    optionsButton.innerHTML = '&hellip;';
+
+    const optionsMenu = document.createElement('div');
+    optionsMenu.className = 'post-options-menu';
+
+    const editBtn = document.createElement('a');
+    editBtn.href = '#';
+    editBtn.className = 'edit-post-btn';
+    editBtn.textContent = 'Edit';
+    editBtn.dataset.postId = post.post_id;
+    optionsMenu.appendChild(editBtn);
+
+    const isRootPost = post.parent_post_id === null;
+    if (isRootPost) {
+        const deleteTopicBtn = document.createElement('a');
+        deleteTopicBtn.href = '#';
+        deleteTopicBtn.className = 'delete-topic-btn';
+        deleteTopicBtn.textContent = 'Delete Topic';
+        deleteTopicBtn.dataset.topicId = post.topic_id;
+        optionsMenu.appendChild(deleteTopicBtn);
+    } else {
+        const deletePostBtn = document.createElement('a');
+        deletePostBtn.href = '#';
+        deletePostBtn.className = 'delete-post-btn';
+        deletePostBtn.textContent = 'Delete Post';
+        deletePostBtn.dataset.postId = post.post_id;
+        optionsMenu.appendChild(deletePostBtn);
+    }
+
+    metaActions.appendChild(optionsButton);
+    metaActions.appendChild(optionsMenu);
+
+    optionsButton.addEventListener('click', (e) => {
+        e.stopPropagation();
+        document.querySelectorAll('.post-options-menu').forEach(menu => {
+            if (menu !== optionsMenu) {
+                menu.style.display = 'none';
+            }
+        });
+        optionsMenu.style.display = optionsMenu.style.display === 'block' ? 'none' : 'block';
+    });
+
+    metaDiv.appendChild(metaInfo);
+    metaDiv.appendChild(metaActions);
+    // --- End Meta Header ---
 
     const contentDiv = document.createElement('div');
     contentDiv.className = 'post-content';
-    contentDiv.innerHTML = post.content; // Original content set here
+    contentDiv.id = `post-content-${post.post_id}`;
+    contentDiv.innerHTML = post.content;
 
-    // Apply visual marker for @[Persona Name](persona_id) tags
-    // This should be done AFTER setting innerHTML from post.content
     contentDiv.innerHTML = contentDiv.innerHTML.replace(
         /@\[([^\]]+)\]\((\d+)\)/g, 
         '<span class="persona-tag" data-persona-id="$2" title="Persona: $1 (ID: $2)">@$1</span>'
     );
-
 
     const actionsDiv = document.createElement('div');
     actionsDiv.className = 'post-actions';
@@ -311,27 +363,23 @@ function renderPostNode(post, parentElement, depth) {
         actionsDiv.appendChild(llmButton);
     }
 
-    // --- UI for Tagging Existing Post ---
     const tagPersonaContainer = document.createElement('div');
     tagPersonaContainer.className = 'tag-persona-container';
     
     const tagInput = document.createElement('input');
-    tagInput.setAttribute('type', 'text');
-    tagInput.setAttribute('placeholder', 'Tag persona to respond...');
-    tagInput.className = 'tag-persona-input'; // Ensure CSS targets this
+    tagInput.type = 'text';
+    tagInput.placeholder = 'Tag persona to respond...';
+    tagInput.className = 'tag-persona-input';
     tagInput.dataset.postId = post.post_id; 
 
     const tagSuggestionsDiv = document.createElement('div');
-    tagSuggestionsDiv.className = 'tag-persona-suggestions'; // Ensure CSS targets this
-    // Most styling for tagSuggestionsDiv should come from forum.css
-    // Ensure display:none is here as it's toggled by JS
+    tagSuggestionsDiv.className = 'tag-persona-suggestions';
     tagSuggestionsDiv.style.display = 'none'; 
-
 
     tagInput.addEventListener('input', async (e) => {
         const query = e.target.value;
-        const currentPostId = e.target.dataset.postId; // Retrieve postId
-        if (query.length > 0) { // Or some other condition like query.startsWith('@')
+        const currentPostId = e.target.dataset.postId;
+        if (query.length > 0) {
             await displayPostTagSuggestions(query, tagSuggestionsDiv, currentPostId, tagInput);
         } else {
             tagSuggestionsDiv.style.display = 'none';
@@ -339,44 +387,38 @@ function renderPostNode(post, parentElement, depth) {
     });
     
     tagInput.addEventListener('blur', () => {
-        // Delay hiding to allow click on suggestion items
         setTimeout(() => {
-            if (!tagSuggestionsDiv.matches(':hover')) { // Only hide if mouse isn't over suggestions
+            if (!tagSuggestionsDiv.matches(':hover')) {
                 tagSuggestionsDiv.style.display = 'none';
             }
         }, 200);
     });
 
     tagPersonaContainer.appendChild(tagInput);
-    tagPersonaContainer.appendChild(tagSuggestionsDiv); // Suggestions div associated with this input
-    actionsDiv.appendChild(tagPersonaContainer); // Add to actions or directly to postDiv
+    tagPersonaContainer.appendChild(tagSuggestionsDiv);
+    actionsDiv.appendChild(tagPersonaContainer);
 
     postDiv.appendChild(metaDiv);
     postDiv.appendChild(contentDiv);
     postDiv.appendChild(actionsDiv);
 
-    // Add event listeners to persona tags to prevent default navigation
     const personaTagElements = contentDiv.querySelectorAll('.persona-tag');
     personaTagElements.forEach(tagEl => {
         tagEl.addEventListener('click', function(event) {
             event.preventDefault();
-            console.log('Persona tag clicked: ID ' + tagEl.dataset.personaId + '. Navigation prevented.');
-            // Future: Implement modal display or other desired interaction here.
         });
     });
 
-    // --- Render Attachments for the post ---
     if (post.attachments && Array.isArray(post.attachments) && post.attachments.length > 0) {
         const attachmentsContainerDiv = document.createElement('div');
         attachmentsContainerDiv.className = 'post-attachments-list mt-2';
-        attachmentsContainerDiv.id = `post-attachments-${post.post_id}`; // Unique ID for this post's attachments
+        attachmentsContainerDiv.id = `post-attachments-${post.post_id}`;
 
         post.attachments.forEach(attachmentData => {
             renderAttachmentItem(attachmentData, attachmentsContainerDiv, post.post_id);
         });
         postDiv.appendChild(attachmentsContainerDiv);
     }
-    // --- End Render Attachments ---
 
     parentElement.appendChild(postDiv);
 
@@ -661,17 +703,197 @@ export async function requestLlm(postId) {
     }
 }
 
-// Link Interception - Moved from main event listeners
-postList.addEventListener('click', (event) => {
-    const link = event.target.closest('a');
+function enterEditMode(postId) {
+    if (isEditingPost) {
+        alert('Please save or cancel your current edit before editing another post.');
+        return;
+    }
+    isEditingPost = true;
+
+    const post = currentPosts.find(p => p.post_id == postId);
+    if (!post) {
+        isEditingPost = false;
+        return;
+    }
+
+    const postContentDiv = document.getElementById(`post-content-${postId}`);
+    const postDiv = postContentDiv.closest('.post');
+    const actionsDiv = postDiv.querySelector('.post-actions');
+
+    const originalContentHTML = postContentDiv.innerHTML;
+    let originalTitle = null;
+
+    if (actionsDiv) actionsDiv.style.display = 'none';
+
+    const editorContainer = document.createElement('div');
+    editorContainer.className = 'edit-container';
+
+    const isRootPost = post.parent_post_id === null;
+    if (isRootPost) {
+        const topicTitleElement = document.getElementById('current-topic-title');
+        originalTitle = topicTitleElement.textContent;
+        const titleInput = document.createElement('input');
+        titleInput.type = 'text';
+        titleInput.className = 'edit-topic-title-input form-input';
+        titleInput.value = originalTitle;
+        topicTitleElement.innerHTML = '';
+        topicTitleElement.appendChild(titleInput);
+        titleInput.id = 'current-topic-title-edit'; // Use a class or more specific selector if needed
+    }
+
+    const textArea = document.createElement('textarea');
+    editorContainer.appendChild(textArea);
+    postContentDiv.innerHTML = '';
+    postContentDiv.appendChild(editorContainer);
+
+    const easyMDE = new EasyMDE({
+        element: textArea,
+        initialValue: post.content,
+        spellChecker: false,
+        minHeight: '150px',
+        maxHeight: '500px',
+        status: false,
+        toolbar: ["bold", "italic", "heading", "|", "quote", "unordered-list", "ordered-list", "|", "link", "image", "|", "preview", "side-by-side", "fullscreen"],
+    });
+
+    const editActions = document.createElement('div');
+    editActions.className = 'edit-actions mt-2';
+
+    const saveBtn = document.createElement('button');
+    saveBtn.textContent = 'Save';
+    saveBtn.className = 'btn button-primary';
+
+    const cancelBtn = document.createElement('button');
+    cancelBtn.textContent = 'Cancel';
+    cancelBtn.className = 'btn button-secondary ml-2';
+
+    editActions.appendChild(saveBtn);
+    editActions.appendChild(cancelBtn);
+    editorContainer.appendChild(editActions);
+
+    const cancelEdit = () => {
+        isEditingPost = false;
+        postContentDiv.innerHTML = originalContentHTML;
+
+        if (isRootPost) {
+            const topicTitleElement = document.getElementById('current-topic-title');
+            if (topicTitleElement) {
+                topicTitleElement.innerHTML = ''; // Clear the input
+                topicTitleElement.textContent = originalTitle;
+            }
+        }
+
+        if (actionsDiv) actionsDiv.style.display = 'flex';
+    };
+
+    saveBtn.addEventListener('click', async () => {
+        const newContent = easyMDE.value();
+        let newTitle = null;
+        const payload = { content: newContent };
+
+        if (isRootPost) {
+            const titleInput = document.querySelector('.edit-topic-title-input');
+            newTitle = titleInput.value.trim();
+            if (!newTitle) {
+                alert('Topic title cannot be empty.');
+                return;
+            }
+            payload.title = newTitle;
+        }
+
+        try {
+            const response = await apiRequest(`/api/posts/${postId}`, 'PUT', payload);
+            if (response) {
+                isEditingPost = false;
+                post.content = newContent;
+                postContentDiv.innerHTML = response.new_content_html;
+
+                if (isRootPost && response.new_title) {
+                    const topicTitleElement = document.getElementById('current-topic-title');
+                    if (topicTitleElement) {
+                        topicTitleElement.innerHTML = '';
+                        topicTitleElement.textContent = response.new_title;
+                    }
+                }
+
+                if (actionsDiv) actionsDiv.style.display = 'flex';
+            } else {
+                cancelEdit();
+            }
+        } catch (error) {
+            cancelEdit();
+        }
+    });
+
+    cancelBtn.addEventListener('click', cancelEdit);
+}
+
+// Event Delegation for post actions (edit, delete, links)
+postList.addEventListener('click', async (event) => {
+    const target = event.target;
+
+    // Handle LLM link security
+    const link = target.closest('a');
     if (link && link.classList.contains('llm-link')) {
-        // Access currentSettings from settings.js
         if (currentSettings.llmLinkSecurity === 'true') {
             event.preventDefault();
             const url = link.href;
             const text = link.textContent;
             showLinkWarningPopup(url, text);
         }
+        return; // Stop further processing
+    }
+
+    // Handle Delete Post
+    if (target.classList.contains('delete-post-btn')) {
+        event.preventDefault();
+        const postId = target.dataset.postId;
+        if (confirm('Are you sure you want to delete this post? This action is permanent and cannot be undone.')) {
+            try {
+                await apiRequest(`/api/posts/${postId}`, 'DELETE');
+                const postContentDiv = document.getElementById(`post-content-${postId}`);
+                if (postContentDiv) {
+                    postContentDiv.innerHTML = '<p><em>[Post Deleted]</em></p>';
+                    const postDiv = postContentDiv.closest('.post');
+                    // Remove action buttons and edit/delete options
+                    const actionsDiv = postDiv.querySelector('.post-actions');
+                    if (actionsDiv) actionsDiv.remove();
+                    const metaActionsDiv = postDiv.querySelector('.post-meta-actions');
+                    if (metaActionsDiv) metaActionsDiv.remove();
+                }
+            } catch (error) {
+                console.error(`Failed to delete post ${postId}:`, error);
+            }
+        }
+    }
+
+    // Handle Delete Topic
+    if (target.classList.contains('delete-topic-btn')) {
+        event.preventDefault();
+        const topicId = target.dataset.topicId;
+        if (confirm('Are you sure you want to delete this entire topic? This will delete all posts and cannot be undone.')) {
+            try {
+                await apiRequest(`/api/topics/${topicId}`, 'DELETE');
+                // After deleting, load the parent subforum's topic list
+                const subforumLink = subforumList.querySelector(`a[data-subforum-id="${currentSubforumId}"]`);
+                const subforumName = subforumLink ? subforumLink.dataset.subforumName : 'Current Subforum';
+                loadTopics(currentSubforumId, subforumName);
+            } catch (error) {
+                console.error(`Failed to delete topic ${topicId}:`, error);
+            }
+        }
+    }
+
+    // Handle Edit Post
+    if (target.classList.contains('edit-post-btn')) {
+        event.preventDefault();
+        const postId = target.dataset.postId;
+        // Close the options menu before entering edit mode
+        const menu = target.closest('.post-options-menu');
+        if (menu) {
+            menu.style.display = 'none';
+        }
+        enterEditMode(postId);
     }
 });
 

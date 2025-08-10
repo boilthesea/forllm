@@ -10,7 +10,8 @@ from ..database import (
     assign_persona_to_subforum, unassign_persona_from_subforum, list_personas_for_subforum,
     set_subforum_default_persona, get_subforum_default_persona, update_user_activity,
     get_subforums_with_status, get_topics_for_subforum_with_status,
-    get_persona # Import get_persona for validation
+    get_persona, # Import get_persona for validation
+    soft_delete_post, hard_delete_topic, update_post
 )
 from ..markdown_config import md
 from ..config import CURRENT_USER_ID, DEFAULT_MODEL
@@ -666,99 +667,77 @@ def delete_attachment(attachment_id):
         # db.rollback() # Rollback may not be needed if the error is not from sqlite
         return jsonify({'error': f'An unexpected error occurred: {str(e)}'}), 500
 
-@forum_api_bp.route('/posts/<int:post_id>', methods=['DELETE'])
-def delete_post(post_id):
+@forum_api_bp.route('/posts/<int:post_id>', methods=['PUT'])
+def edit_post(post_id):
+    data = request.get_json()
+    if not data:
+        return jsonify({'error': 'No data provided'}), 400
+
+    content = data.get('content')
+    title = data.get('title') # This can be None
+
+    if not content and content != "":
+        return jsonify({'error': 'Content field is required'}), 400
+
+    if update_post(post_id, content, title):
+        # On success, fetch the updated post to return it, including the rendered markdown
+        db = get_db()
+        cursor = db.cursor()
+        cursor.execute("SELECT content FROM posts WHERE post_id = ?", (post_id,))
+        updated_post = cursor.fetchone()
+
+        new_title = None
+        if title:
+            cursor.execute("SELECT t.title FROM topics t JOIN posts p ON t.topic_id = p.topic_id WHERE p.post_id = ?", (post_id,))
+            updated_topic = cursor.fetchone()
+            if updated_topic:
+                new_title = updated_topic['title']
+
+        if updated_post:
+            html_content = md.render(updated_post['content'])
+            return jsonify({
+                'message': 'Post updated successfully',
+                'post_id': post_id,
+                'new_content_html': html_content,
+                'new_title': new_title
+            }), 200
+        else:
+            return jsonify({'message': 'Post updated, but failed to retrieve updated content.'}), 200
+    else:
+        return jsonify({'error': 'Failed to update post. Ensure a title is only provided for a topic\'s root post.'}), 500
+
+@forum_api_bp.route('/topics/<int:topic_id>', methods=['DELETE'])
+def delete_topic(topic_id):
+    # Check if the topic exists first, to give a precise error.
     db = get_db()
     cursor = db.cursor()
+    cursor.execute("SELECT topic_id FROM topics WHERE topic_id = ?", (topic_id,))
+    if not cursor.fetchone():
+        return jsonify({'error': 'Topic not found'}), 404
 
-    # 1. Check if post exists
-    cursor.execute("SELECT post_id FROM posts WHERE post_id = ?", (post_id,))
+    if hard_delete_topic(topic_id):
+        return jsonify({'message': f'Topic {topic_id} and all its posts deleted successfully'}), 200
+    else:
+        return jsonify({'error': 'Failed to delete topic'}), 500
+
+@forum_api_bp.route('/posts/<int:post_id>', methods=['DELETE'])
+def delete_post(post_id):
+    # Check if the post exists first for a better error message.
+    db = get_db()
+    cursor = db.cursor()
+    cursor.execute("SELECT post_id, topic_id FROM posts WHERE post_id = ?", (post_id,))
     post = cursor.fetchone()
     if not post:
         return jsonify({'error': 'Post not found'}), 404
+    
+    # Check if it's the root post of a topic. If so, disallow deletion via this endpoint.
+    # The user should be prompted to delete the topic instead.
+    cursor.execute("SELECT post_id FROM posts WHERE topic_id = ? AND parent_post_id IS NULL", (post['topic_id'],))
+    root_post = cursor.fetchone()
+    if root_post and root_post['post_id'] == post_id:
+        return jsonify({'error': 'Cannot delete the root post of a topic. Please delete the topic instead.'}), 400
 
-    # 2. Fetch attachment filepaths BEFORE deleting the post record
-    cursor.execute("SELECT filepath FROM attachments WHERE post_id = ?", (post_id,))
-    attachment_rows = cursor.fetchall()
-    filepaths_to_delete = [row['filepath'] for row in attachment_rows]
-
-    # 3. Delete physical files
-    upload_folder = current_app.config.get('UPLOAD_FOLDER')
-    if not upload_folder:
-        print(f"Warning: UPLOAD_FOLDER not configured. Cannot delete attachment files for post {post_id}.")
-        # Decide if this should be a hard error or just a warning. For now, proceed to delete DB record.
+    if soft_delete_post(post_id):
+        return jsonify({'message': f'Post {post_id} soft-deleted successfully'}), 200
     else:
-        for relative_filepath in filepaths_to_delete:
-            if not relative_filepath: # Should not happen if DB data is clean
-                continue
-            full_filepath = os.path.join(upload_folder, relative_filepath)
-            try:
-                if os.path.exists(full_filepath) and os.path.isfile(full_filepath): # Ensure it's a file
-                    os.remove(full_filepath)
-                    print(f"Deleted attachment file: {full_filepath}")
-                elif not os.path.exists(full_filepath):
-                    print(f"Attachment file not found (already deleted?): {full_filepath}")
-            except Exception as e:
-                print(f"Error deleting attachment file {full_filepath}: {e}")
-                # Continue to delete other files and the post record
-
-    # 4. Delete the post record from the database
-    # The ON DELETE CASCADE on 'attachments.post_id' will handle deleting attachment records.
-    # The ON DELETE CASCADE on 'posts.parent_post_id' (if it were set, it's not by default for self-referencing)
-    # would need careful consideration. For now, we assume only direct post deletion.
-    # If a post is a parent, its children might become orphaned or need specific handling
-    # (e.g., delete children or re-parent). This is outside current scope of attachment cleanup.
-    # We also need to consider llm_requests associated with this post.
-    # For now, let's assume related llm_requests should also be deleted if the post they respond to is deleted.
-    # The schema for llm_requests has ON DELETE CASCADE for post_id_to_respond_to.
-    
-    try:
-        # First, handle any replies to this post (children).
-        # Simple approach: delete children posts. More complex: re-parent or prevent deletion.
-        # For now, let's recursively delete children to avoid orphaned posts.
-        # This requires a recursive function or careful iterative deletion.
-        # For simplicity in this step, we'll delete direct children. A full recursive delete is more complex.
-        
-        # Get child posts
-        cursor.execute("SELECT post_id FROM posts WHERE parent_post_id = ?", (post_id,))
-        child_post_ids = [row['post_id'] for row in cursor.fetchall()]
-        
-        # Recursively call delete_post for each child.
-        # This is a simplified recursion; true recursion within a single request can be tricky.
-        # A better way might be to gather all descendant IDs first.
-        # However, for this task, we'll focus on the requested file deletion aspect.
-        # Let's assume for now that deleting child posts is handled elsewhere or not required for this specific task.
-        # A simple deletion of the post itself:
-        
-        cursor.execute("DELETE FROM posts WHERE post_id = ?", (post_id,))
-        db.commit()
-
-        if cursor.rowcount == 0:
-            # Should not happen if we checked for existence, but as a safeguard
-            return jsonify({'error': 'Post not found during deletion or already deleted'}), 404
-        
-        print(f"Successfully deleted post {post_id} and its attachment records from DB.")
-
-    except sqlite3.Error as e:
-        db.rollback()
-        print(f"Database error deleting post {post_id}: {e}")
-        return jsonify({'error': f'Database error: {str(e)}'}), 500
-    
-    # 5. Attempt to delete the post's attachment subdirectory
-    if upload_folder and filepaths_to_delete: # Only try if there were attachments and upload_folder is set
-        # The relative_filepath for an attachment is like "post_id/filename.txt"
-        # So, the directory is the first part of that path.
-        # We can robustly get the post's specific directory:
-        post_specific_upload_dir = os.path.join(upload_folder, str(post_id))
-        try:
-            if os.path.exists(post_specific_upload_dir) and os.path.isdir(post_specific_upload_dir):
-                if not os.listdir(post_specific_upload_dir): # Check if empty
-                    os.rmdir(post_specific_upload_dir)
-                    print(f"Deleted empty attachment directory: {post_specific_upload_dir}")
-                else:
-                    print(f"Attachment directory not empty, not deleting: {post_specific_upload_dir}")
-        except Exception as e:
-            print(f"Error deleting attachment directory {post_specific_upload_dir}: {e}")
-            # Do not let this error block the success response for post deletion
-
-    return jsonify({'message': f'Post {post_id} and associated attachments deleted successfully'}), 200
+        return jsonify({'error': 'Failed to soft-delete post'}), 500
