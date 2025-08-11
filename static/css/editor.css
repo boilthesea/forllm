@@ -148,3 +148,12 @@
 #reply-token-breakdown-container.expanded {
     display: block; /* Shown when expanded */
 }
+/* --- Persona Tag Highlighting in Editor --- */
+.cm-persona-tag {
+    background-color: var(--button-bg);
+    color: var(--text-color);
+    border-radius: 4px;
+    padding: 0.1em 0.3em;
+    font-family: monospace;
+    border: 1px solid var(--button-secondary-border);
+}

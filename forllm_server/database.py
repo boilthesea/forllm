@@ -1,6 +1,7 @@
 import sqlite3
 import datetime
 import logging # ADDED
+import os
 from flask import g, current_app # Added current_app for logger access
 from .config import DATABASE, CURRENT_USER_ID, CURRENT_USERNAME, DEFAULT_MODEL
 
@@ -515,6 +516,134 @@ def init_db():
         # db.rollback()
 
     db.close()
+
+def soft_delete_post(post_id):
+    """
+    Soft deletes a post by updating its content and deleting associated attachments.
+    Does not delete the post row itself to preserve thread integrity.
+    """
+    db = get_db()
+    try:
+        with db:
+            cursor = db.cursor()
+            # First, find and delete associated attachment files
+            cursor.execute("SELECT filepath FROM attachments WHERE post_id = ?", (post_id,))
+            attachment_rows = cursor.fetchall()
+            filepaths_to_delete = [row['filepath'] for row in attachment_rows]
+
+            upload_folder = current_app.config.get('UPLOAD_FOLDER')
+            if upload_folder:
+                for relative_filepath in filepaths_to_delete:
+                    if relative_filepath:
+                        full_filepath = os.path.join(upload_folder, relative_filepath)
+                        try:
+                            if os.path.exists(full_filepath) and os.path.isfile(full_filepath):
+                                os.remove(full_filepath)
+                        except Exception as e:
+                            current_app.logger.error(f"Error deleting attachment file {full_filepath}: {e}")
+
+            # Delete attachment records from the database.
+            cursor.execute("DELETE FROM attachments WHERE post_id = ?", (post_id,))
+
+            # Now, "soft delete" the post by updating its content.
+            cursor.execute("""
+                UPDATE posts
+                SET content = '[Post Deleted]',
+                    tagged_personas_in_content = NULL
+                WHERE post_id = ?
+            """, (post_id,))
+
+            # We should also cancel any pending LLM requests for this post.
+            cursor.execute("""
+                DELETE FROM llm_requests
+                WHERE post_id_to_respond_to = ? AND status IN ('pending', 'pending_dependency')
+            """, (post_id,))
+
+        return True
+    except sqlite3.Error as e:
+        current_app.logger.error(f"Database error in soft_delete_post for post {post_id}: {e}")
+        return False
+
+def update_post(post_id, content, title=None, tagged_persona_ids=None):
+    """
+    Updates a post's content and its list of tagged personas.
+    If a title is also provided, it updates the topic title, implying it's a root post.
+    """
+    db = get_db()
+    try:
+        with db:
+            cursor = db.cursor()
+            
+            # Prepare the update query
+            update_fields = ["content = ?"]
+            params = [content]
+
+            if tagged_persona_ids is not None:
+                import json
+                update_fields.append("tagged_personas_in_content = ?")
+                params.append(json.dumps(sorted(list(tagged_persona_ids))))
+
+            params.append(post_id)
+            
+            # Update the post content and tags
+            cursor.execute(f"UPDATE posts SET {', '.join(update_fields)} WHERE post_id = ?", tuple(params))
+
+            if title:
+                # If a title is provided, find the topic_id for this post and update the topic title.
+                cursor.execute("SELECT topic_id FROM posts WHERE post_id = ? AND parent_post_id IS NULL", (post_id,))
+                topic_row = cursor.fetchone()
+                if topic_row:
+                    topic_id = topic_row['topic_id']
+                    cursor.execute("UPDATE topics SET title = ? WHERE topic_id = ?", (title, topic_id))
+                else:
+                    # A title was provided for a non-root post. This is a client-side error.
+                    raise ValueError("A title can only be updated for the root post of a topic.")
+        return True
+    except (sqlite3.Error, ValueError) as e:
+        current_app.logger.error(f"Error in update_post for post {post_id}: {e}")
+        return False
+
+def hard_delete_topic(topic_id):
+    """
+    Permanently deletes a topic and all of its associated posts and attachments.
+    """
+    db = get_db()
+    try:
+        with db:
+            cursor = db.cursor()
+            # Get all posts in the topic to delete their attachments
+            cursor.execute("SELECT post_id FROM posts WHERE topic_id = ?", (topic_id,))
+            post_ids = [row['post_id'] for row in cursor.fetchall()]
+
+            if post_ids:
+                placeholders = ','.join('?' for _ in post_ids)
+                cursor.execute(f"SELECT filepath FROM attachments WHERE post_id IN ({placeholders})", post_ids)
+                attachment_rows = cursor.fetchall()
+                filepaths_to_delete = [row['filepath'] for row in attachment_rows]
+
+                upload_folder = current_app.config.get('UPLOAD_FOLDER')
+                if upload_folder:
+                    for relative_filepath in filepaths_to_delete:
+                        if relative_filepath:
+                            full_filepath = os.path.join(upload_folder, relative_filepath)
+                            try:
+                                if os.path.exists(full_filepath) and os.path.isfile(full_filepath):
+                                    os.remove(full_filepath)
+                            except Exception as e:
+                                current_app.logger.error(f"Error deleting attachment file {full_filepath}: {e}")
+
+            # Deleting posts will automatically clean up records in attachments and llm_requests tables
+            # due to ON DELETE CASCADE constraints in the schema.
+            if post_ids:
+                cursor.execute(f"DELETE FROM posts WHERE topic_id = ?", (topic_id,))
+
+            # Finally, delete the topic itself
+            cursor.execute("DELETE FROM topics WHERE topic_id = ?", (topic_id,))
+
+        return True
+    except sqlite3.Error as e:
+        current_app.logger.error(f"Database error in hard_delete_topic for topic {topic_id}: {e}")
+        return False
 
 # --- LLM Model Metadata Cache Logic ---
 

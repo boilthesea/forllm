@@ -184,6 +184,18 @@ document.addEventListener('DOMContentLoaded', () => {
         // This might be expected if the reply form isn't always visible or part of the initial DOM.
         // console.warn("Element with ID 'reply-attachment-input' not found during initial setup.");
     }
+
+    // Global listener to close post options menus
+    document.addEventListener('click', (e) => {
+        const clickedElement = e.target;
+        // If the click is not on an options button, close all menus.
+        // The button's own click listener will handle toggling.
+        if (!clickedElement.classList.contains('post-options-btn')) {
+            document.querySelectorAll('.post-options-menu').forEach(menu => {
+                menu.style.display = 'none';
+            });
+        }
+    });
 });
 
 // window click listener for modals is now in ui.js
