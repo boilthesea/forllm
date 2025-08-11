@@ -274,21 +274,49 @@ function initializeEditorPersonaTagging(editorInstance) {
     });
 }
 
+function highlightPersonaTags(cm) {
+    if (!cm) return;
+    const regex = /@\[([^\]]+)\]\((\d+)\)/g;
+    const content = cm.getValue();
+    let match;
+    while ((match = regex.exec(content)) !== null) {
+        const startPos = cm.posFromIndex(match.index);
+        const endPos = cm.posFromIndex(match.index + match[0].length);
+        cm.markText(startPos, endPos, {
+            className: 'cm-persona-tag',
+            atomic: true, // Makes the whole tag act as a single unit
+        });
+    }
+}
+
+export function createEditor(textAreaElement, editorType, initialValue = '') {
+    if (!textAreaElement) return null;
+
+    const config = createEditorConfig(editorType);
+    config.element = textAreaElement;
+    config.initialValue = initialValue;
+
+    const editor = new EasyMDE(config);
+    initializeEditorPersonaTagging(editor);
+    initializeTokenBreakdownDisplay(editor, editorType);
+
+    editor.codemirror.on("refresh", function(cm) {
+        highlightPersonaTags(cm);
+    });
+    
+    // Initial highlight
+    highlightPersonaTags(editor.codemirror);
+
+    return editor;
+}
+
 // Initialize editors
 if (newTopicContentInput) {
-    const config = createEditorConfig('new-topic');
-    config.element = newTopicContentInput;
-    newTopicEditor = new EasyMDE(config);
-    initializeEditorPersonaTagging(newTopicEditor);
-    initializeTokenBreakdownDisplay(newTopicEditor, 'new-topic');
+    newTopicEditor = createEditor(newTopicContentInput, 'new-topic');
 }
 
 if (replyContentInput) {
-    const config = createEditorConfig('reply');
-    config.element = replyContentInput;
-    replyEditor = new EasyMDE(config);
-    initializeEditorPersonaTagging(replyEditor);
-    initializeTokenBreakdownDisplay(replyEditor, 'reply');
+    replyEditor = createEditor(replyContentInput, 'reply');
 }
 
 // --- Token Breakdown Display ---

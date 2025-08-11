@@ -20,7 +20,7 @@ import {
     subforumPersonasBar
 } from './dom.js';
 import { showSection, showLinkWarningPopup, openSecondaryPane, isMobile, toggleMobileMenu } from './ui.js';
-import { newTopicEditor, replyEditor } from './editor.js'; // Import editor instances
+import { newTopicEditor, replyEditor, createEditor } from './editor.js'; // Import editor instances and creator
 import { initializeTomSelect } from './ui-helpers.js';
 
 // --- State Variables ---
@@ -703,7 +703,7 @@ export async function requestLlm(postId) {
     }
 }
 
-function enterEditMode(postId) {
+async function enterEditMode(postId) {
     if (isEditingPost) {
         alert('Please save or cancel your current edit before editing another post.');
         return;
@@ -715,6 +715,22 @@ function enterEditMode(postId) {
         isEditingPost = false;
         return;
     }
+
+    // --- Fetch raw content for editing ---
+    let rawContent;
+    try {
+        const response = await apiRequest(`/api/posts/${postId}/raw`);
+        if (!response || typeof response.content === 'undefined') {
+            throw new Error('Invalid response from raw content endpoint.');
+        }
+        rawContent = response.content;
+    } catch (error) {
+        alert('Failed to load post content for editing. Please try again.');
+        console.error('Error fetching raw post content:', error);
+        isEditingPost = false;
+        return;
+    }
+    // --- End fetch raw content ---
 
     const postContentDiv = document.getElementById(`post-content-${postId}`);
     const postDiv = postContentDiv.closest('.post');
@@ -746,15 +762,7 @@ function enterEditMode(postId) {
     postContentDiv.innerHTML = '';
     postContentDiv.appendChild(editorContainer);
 
-    const easyMDE = new EasyMDE({
-        element: textArea,
-        initialValue: post.content,
-        spellChecker: false,
-        minHeight: '150px',
-        maxHeight: '500px',
-        status: false,
-        toolbar: ["bold", "italic", "heading", "|", "quote", "unordered-list", "ordered-list", "|", "link", "image", "|", "preview", "side-by-side", "fullscreen"],
-    });
+    const easyMDE = createEditor(textArea, `edit-post-${postId}`, rawContent);
 
     const editActions = document.createElement('div');
     editActions.className = 'edit-actions mt-2';

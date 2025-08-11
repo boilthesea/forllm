@@ -564,17 +564,29 @@ def soft_delete_post(post_id):
         current_app.logger.error(f"Database error in soft_delete_post for post {post_id}: {e}")
         return False
 
-def update_post(post_id, content, title=None):
+def update_post(post_id, content, title=None, tagged_persona_ids=None):
     """
-    Updates a post's content. If a title is also provided, it updates the topic title.
-    This implies that the post is the root post of the topic.
+    Updates a post's content and its list of tagged personas.
+    If a title is also provided, it updates the topic title, implying it's a root post.
     """
     db = get_db()
     try:
         with db:
             cursor = db.cursor()
-            # Update the post content
-            cursor.execute("UPDATE posts SET content = ? WHERE post_id = ?", (content, post_id))
+            
+            # Prepare the update query
+            update_fields = ["content = ?"]
+            params = [content]
+
+            if tagged_persona_ids is not None:
+                import json
+                update_fields.append("tagged_personas_in_content = ?")
+                params.append(json.dumps(sorted(list(tagged_persona_ids))))
+
+            params.append(post_id)
+            
+            # Update the post content and tags
+            cursor.execute(f"UPDATE posts SET {', '.join(update_fields)} WHERE post_id = ?", tuple(params))
 
             if title:
                 # If a title is provided, find the topic_id for this post and update the topic title.
@@ -585,7 +597,6 @@ def update_post(post_id, content, title=None):
                     cursor.execute("UPDATE topics SET title = ? WHERE topic_id = ?", (title, topic_id))
                 else:
                     # A title was provided for a non-root post. This is a client-side error.
-                    # Raising an exception will cause the 'with db:' block to rollback the transaction.
                     raise ValueError("A title can only be updated for the root post of a topic.")
         return True
     except (sqlite3.Error, ValueError) as e:

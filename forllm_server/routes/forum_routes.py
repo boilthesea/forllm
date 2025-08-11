@@ -667,6 +667,20 @@ def delete_attachment(attachment_id):
         # db.rollback() # Rollback may not be needed if the error is not from sqlite
         return jsonify({'error': f'An unexpected error occurred: {str(e)}'}), 500
 
+@forum_api_bp.route('/posts/<int:post_id>/raw', methods=['GET'])
+def get_raw_post_content(post_id):
+    """
+    Fetches the raw, un-rendered Markdown content of a single post.
+    This is used to populate the editor when a user wants to edit a post.
+    """
+    db = get_db()
+    cursor = db.cursor()
+    cursor.execute("SELECT content FROM posts WHERE post_id = ?", (post_id,))
+    post = cursor.fetchone()
+    if not post:
+        return jsonify({'error': 'Post not found'}), 404
+    return jsonify({'content': post['content']})
+
 @forum_api_bp.route('/posts/<int:post_id>', methods=['PUT'])
 def edit_post(post_id):
     data = request.get_json()
@@ -674,37 +688,113 @@ def edit_post(post_id):
         return jsonify({'error': 'No data provided'}), 400
 
     content = data.get('content')
-    title = data.get('title') # This can be None
+    title = data.get('title')
 
-    if not content and content != "":
+    if content is None:
         return jsonify({'error': 'Content field is required'}), 400
 
-    if update_post(post_id, content, title):
-        # On success, fetch the updated post to return it, including the rendered markdown
-        db = get_db()
-        cursor = db.cursor()
-        cursor.execute("SELECT content FROM posts WHERE post_id = ?", (post_id,))
-        updated_post = cursor.fetchone()
+    db = get_db()
+    cursor = db.cursor()
 
-        new_title = None
-        if title:
-            cursor.execute("SELECT t.title FROM topics t JOIN posts p ON t.topic_id = p.topic_id WHERE p.post_id = ?", (post_id,))
-            updated_topic = cursor.fetchone()
-            if updated_topic:
-                new_title = updated_topic['title']
+    # 1. Fetch Old Tags
+    cursor.execute("SELECT tagged_personas_in_content FROM posts WHERE post_id = ?", (post_id,))
+    post_row = cursor.fetchone()
+    if not post_row:
+        return jsonify({'error': 'Post not found'}), 404
+    
+    try:
+        old_tagged_ids = set(json.loads(post_row['tagged_personas_in_content'] or '[]'))
+    except (json.JSONDecodeError, TypeError):
+        old_tagged_ids = set()
 
-        if updated_post:
-            html_content = md.render(updated_post['content'])
-            return jsonify({
-                'message': 'Post updated successfully',
-                'post_id': post_id,
-                'new_content_html': html_content,
-                'new_title': new_title
-            }), 200
-        else:
-            return jsonify({'message': 'Post updated, but failed to retrieve updated content.'}), 200
+    # 2. Parse New Tags from incoming content
+    new_tagged_ids = set()
+    llm_requests_to_create = []
+    if content:
+        chain_regex = re.compile(r'@\[[^\]]+\]\(\d+\)(?::@\[[^\]]+\]\(\d+\))*')
+        persona_id_regex = re.compile(r'@\[[^\]]+\]\((\d+)\)')
+        all_chains = chain_regex.findall(content)
+
+        for chain_str in all_chains:
+            chain_tags = chain_str.split(':')
+            last_persona_id_in_chain = None
+            for i, tag_str in enumerate(chain_tags):
+                match = persona_id_regex.match(tag_str.strip())
+                if match:
+                    persona_id = int(match.group(1))
+                    new_tagged_ids.add(persona_id)
+                    
+                    # 3. Compare and decide whether to queue
+                    if persona_id not in old_tagged_ids:
+                        if i == 0:
+                            llm_requests_to_create.append({'p_id': persona_id, 'status': 'pending', 'parent_id': None})
+                        else:
+                            llm_requests_to_create.append({'p_id': persona_id, 'status': 'pending_dependency', 'parent_id': last_persona_id_in_chain})
+                    
+                    last_persona_id_in_chain = persona_id
+
+    # Update the post in the database first
+    if not update_post(post_id, content, title, list(new_tagged_ids)):
+        return jsonify({'error': 'Failed to update post in database.'}), 500
+
+    # 4. Queue LLM requests for genuinely new tags
+    try:
+        parent_request_id_map = {}
+        for req_info in llm_requests_to_create:
+            p_id = req_info['p_id']
+            status = req_info['status']
+            parent_p_id = req_info['parent_id']
+            
+            persona_check = get_persona(p_id, active_only=True)
+            if not persona_check:
+                current_app.logger.warning(f"Persona ID {p_id} not found or not active. Skipping LLM request for edited post.")
+                continue
+
+            parent_request_id = None
+            if parent_p_id:
+                # This logic assumes a chain is either all new or all old.
+                # A more complex scenario (editing a chain) is not handled here,
+                # but this covers adding new chains/tags.
+                parent_request_id = parent_request_id_map.get(parent_p_id)
+                if not parent_request_id:
+                    current_app.logger.error(f"Could not find parent request for chained tag with child {p_id} in edited post. Skipping.")
+                    continue
+            
+            cursor.execute("""
+                INSERT INTO llm_requests
+                (post_id_to_respond_to, llm_persona, requested_by_user_id, request_type, status, llm_model, parent_request_id)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            """, (post_id, p_id, CURRENT_USER_ID, 'respond_to_post_tag', status, None, parent_request_id))
+            
+            parent_request_id_map[p_id] = cursor.lastrowid
+        
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        current_app.logger.error(f"Error creating LLM requests for edited post {post_id}: {e}")
+        # The post is already updated, but we should inform the user that tagging failed.
+        return jsonify({'error': f'Post updated, but failed to queue new tags: {e}'}), 500
+
+    # Return success response with new rendered content
+    cursor.execute("SELECT content FROM posts WHERE post_id = ?", (post_id,))
+    updated_post = cursor.fetchone()
+    new_title_text = None
+    if title:
+        cursor.execute("SELECT t.title FROM topics t JOIN posts p ON t.topic_id = p.topic_id WHERE p.post_id = ?", (post_id,))
+        updated_topic = cursor.fetchone()
+        if updated_topic:
+            new_title_text = updated_topic['title']
+
+    if updated_post:
+        html_content = md.render(updated_post['content'])
+        return jsonify({
+            'message': 'Post updated successfully',
+            'post_id': post_id,
+            'new_content_html': html_content,
+            'new_title': new_title_text
+        }), 200
     else:
-        return jsonify({'error': 'Failed to update post. Ensure a title is only provided for a topic\'s root post.'}), 500
+        return jsonify({'message': 'Post updated, but failed to retrieve updated content.'}), 200
 
 @forum_api_bp.route('/topics/<int:topic_id>', methods=['DELETE'])
 def delete_topic(topic_id):

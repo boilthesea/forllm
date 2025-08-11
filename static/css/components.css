@@ -327,7 +327,7 @@ input:checked + .slider:before {
 }
 
 .ts-dropdown {
-    background-color: var(--section-bg);
+    background-color: var(--input-bg) !important; /* Changed from --section-bg and added !important to override layout.css */
     border-color: var(--modal-border);
     color: var(--input-text);
 }
