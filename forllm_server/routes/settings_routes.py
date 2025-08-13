@@ -406,8 +406,9 @@ def update_indexed_folder(folder_id):
    custom_blocklist = data.get('custom_blocklist') # Expects a JSON string
    custom_allowlist = data.get('custom_allowlist') # Expects a JSON string
 
-   if not folder_path or not os.path.isdir(folder_path):
-       return jsonify({"error": "Invalid or missing folder path."}), 400
+   # Path is only required if it's being changed.
+   if folder_path and not os.path.isdir(folder_path):
+       return jsonify({"error": "Invalid folder path provided."}), 400
 
    db = get_db()
    try:
@@ -415,6 +416,10 @@ def update_indexed_folder(folder_id):
            # Construct the update query dynamically based on provided fields
            update_fields = []
            params = []
+
+           if folder_path is not None:
+               update_fields.append("folder_path = ?")
+               params.append(folder_path)
 
            if is_recursive is not None:
                update_fields.append("is_recursive = ?")

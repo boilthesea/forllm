@@ -398,9 +398,11 @@ function attachContainerEventHandlers(container) {
            deleteIndexedFolder(folderId, container);
        } else if (e.target.classList.contains('folder-toggle')) {
            const folderId = e.target.dataset.folderId;
+           const listItem = e.target.closest('.indexed-folder-item');
+           const path = listItem.querySelector('.folder-path-display').textContent;
            const isRecursive = container.querySelector(`#recursive-toggle-${folderId}`).checked;
            const useGlobal = container.querySelector(`#global-filters-toggle-${folderId}`).checked;
-           updateIndexedFolder(folderId, { is_recursive: isRecursive, use_global_filters: useGlobal }, container);
+           updateIndexedFolder(folderId, { path: path, is_recursive: isRecursive, use_global_filters: useGlobal }, container);
            // Toggle visibility of custom filters panel
            const customFiltersPanel = container.querySelector(`#custom-filters-${folderId}`);
            if (customFiltersPanel) {
@@ -545,6 +547,10 @@ async function deleteIndexedFolder(folderId, container) {
 }
 
 async function updateIndexedFolder(folderId, settings, container) {
+    // The path is now required for all updates by the backend for validation,
+    // but we don't need to send it if we are only updating filters.
+    // Let's adjust the backend to not require it for filter-only updates.
+    // For now, the frontend fix is correct.
     try {
         await apiRequest(`/api/settings/file-indexing/folders/${folderId}`, 'PUT', settings);
         // Optional: show a temporary success message
