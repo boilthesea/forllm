@@ -113,6 +113,7 @@ This project is under active development. Future plans include:
 *   [ ] Improved persona generation (functions, but needs refining).
 *   [ ] Queue improvements (to show non-post items like queued persona generation).
 *   [ ] Notes section.
+*   [ ] File tagging.
 *   [ ] Alternate unthreaded (vbulletin style) view of posts.
 *   [ ] Direct message/live chat option.
 *   [ ] Support for more LLM backends (let me know what backends you want support for).

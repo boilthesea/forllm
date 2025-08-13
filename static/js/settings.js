@@ -276,6 +276,44 @@ function renderContainerHTML(container) {
             <input type="number" step="0.05" min="0" max="1" id="ch-primary-history-budget-ratio" name="ch_primary_history_budget_ratio">
             <span class="tooltip-icon" title="Proportion (0.0 to 1.0) of available history tokens to allocate to the primary conversation thread. The rest is for ambient history. E.g., 0.7 means 70% for primary. (Default: 0.7)">?</span>
         </div>
+       <div class="settings-subsection">
+           <h4>File Tagging Settings</h4>
+           <p class="settings-info-text">Only plain text files are supported. Blocked file types will be ignored.</p>
+           <div id="file-indexing-settings-container">
+               <!-- Indexed Folders List -->
+               <div class="setting-item">
+                   <label>Indexed Folders:</label>
+                   <ul id="indexed-folders-list" class="indexed-folders-list">
+                       <!-- Folders will be dynamically inserted here -->
+                   </ul>
+               </div>
+               <!-- Add New Folder Form -->
+               <div class="setting-item">
+                   <label for="new-folder-path-input">Add Folder to Index:</label>
+                   <div class="input-with-button">
+                       <input type="text" id="new-folder-path-input" placeholder="Click Browse to select a folder">
+                       <button id="browse-folder-btn" class="button-secondary">Browse...</button>
+                       <button id="add-indexed-folder-btn" class="button-secondary">Add</button>
+                   </div>
+                   <div class="setting-item" style="margin-left: 10px;">
+                       <input type="checkbox" id="new-folder-recursive-toggle" checked>
+                       <label for="new-folder-recursive-toggle">Index Recursively</label>
+                   </div>
+               </div>
+                <!-- Filter Lists -->
+               <div class="setting-item">
+                   <label for="global-blocklist-input">Global Blocklist (comma-separated extensions):</label>
+                   <textarea id="global-blocklist-input" class="textarea-input" rows="3"></textarea>
+               </div>
+               <div class="setting-item">
+                   <label for="global-allowlist-input">Global Allowlist (comma-separated extensions):</label>
+                   <textarea id="global-allowlist-input" class="textarea-input" rows="2" placeholder="Optional. If set, only these types will be indexed."></textarea>
+               </div>
+               <button id="save-filters-btn" class="button-secondary">Save Filters</button>
+               <button id="reindex-files-btn" class="button-primary">Re-index All Files</button>
+               <p id="file-indexing-message" class="message-area" style="display: none;"></p>
+           </div>
+       </div>
     </div>
 </div>
 <div id="settings-schedule-section" class="settings-tab-section" style="display:none"></div>
@@ -351,8 +389,204 @@ function attachContainerEventHandlers(container) {
         }
     });
 
+   // File Indexing Handlers
+   container.querySelector('#browse-folder-btn')?.addEventListener('click', () => browseForFolder(container));
+   container.querySelector('#add-indexed-folder-btn')?.addEventListener('click', () => addIndexedFolder(container));
+   container.querySelector('#indexed-folders-list').addEventListener('click', (e) => {
+        if (e.target.classList.contains('delete-folder-btn')) {
+           const folderId = e.target.dataset.folderId;
+           deleteIndexedFolder(folderId, container);
+       } else if (e.target.classList.contains('folder-toggle')) {
+           const folderId = e.target.dataset.folderId;
+           const isRecursive = container.querySelector(`#recursive-toggle-${folderId}`).checked;
+           const useGlobal = container.querySelector(`#global-filters-toggle-${folderId}`).checked;
+           updateIndexedFolder(folderId, { is_recursive: isRecursive, use_global_filters: useGlobal }, container);
+           // Toggle visibility of custom filters panel
+           const customFiltersPanel = container.querySelector(`#custom-filters-${folderId}`);
+           if (customFiltersPanel) {
+               customFiltersPanel.style.display = useGlobal ? 'none' : 'block';
+           }
+       } else if (e.target.classList.contains('save-custom-filters-btn')) {
+           const folderId = e.target.dataset.folderId;
+           const custom_blocklist = container.querySelector(`#custom-blocklist-${folderId}`).value.split(',').map(ext => ext.trim()).filter(Boolean);
+           const custom_allowlist = container.querySelector(`#custom-allowlist-${folderId}`).value.split(',').map(ext => ext.trim()).filter(Boolean);
+           updateIndexedFolder(folderId, {
+               custom_blocklist: JSON.stringify(custom_blocklist),
+               custom_allowlist: JSON.stringify(custom_allowlist)
+           }, container);
+       }
+   });
+   container.querySelector('#save-filters-btn')?.addEventListener('click', () => saveFileFilters(container));
+   container.querySelector('#reindex-files-btn')?.addEventListener('click', () => triggerReindex(container));
+
     // Populate UI fields from the current state
     updateSettingsUI();
+   // Load file indexing settings when the LLM tab is shown
+   loadFileIndexingSettings(container);
+}
+
+// --- File Indexing Logic ---
+async function loadFileIndexingSettings(container) {
+   try {
+       const data = await apiRequest('/api/settings/file-indexing');
+       renderFileIndexingSettings(data, container);
+   } catch (error) {
+       console.error("Error loading file indexing settings:", error);
+       const messageArea = container.querySelector('#file-indexing-message');
+       if (messageArea) {
+           messageArea.textContent = `Error: ${error.message}`;
+           messageArea.style.display = 'block';
+       }
+   }
+}
+
+function renderFileIndexingSettings(data, container) {
+   const foldersList = container.querySelector('#indexed-folders-list');
+   const blocklistInput = container.querySelector('#global-blocklist-input');
+   const allowlistInput = container.querySelector('#global-allowlist-input');
+
+   // Render folders
+   foldersList.innerHTML = '';
+   if (data.indexed_folders && data.indexed_folders.length > 0) {
+       data.indexed_folders.forEach(folder => {
+           const li = document.createElement('li');
+           li.className = 'indexed-folder-item';
+
+           // Safely parse custom lists
+           let customBlock = [];
+           let customAllow = [];
+           try {
+               if (folder.custom_blocklist) customBlock = JSON.parse(folder.custom_blocklist);
+           } catch (e) { console.error(`Error parsing custom_blocklist for folder ${folder.id}:`, folder.custom_blocklist); }
+           try {
+               if (folder.custom_allowlist) customAllow = JSON.parse(folder.custom_allowlist);
+           } catch (e) { console.error(`Error parsing custom_allowlist for folder ${folder.id}:`, folder.custom_allowlist); }
+
+
+           li.innerHTML = `
+               <div class="folder-main-controls">
+                   <span class="folder-path-display">${folder.folder_path}</span>
+                   <div class="folder-toggles">
+                       <input type="checkbox" id="recursive-toggle-${folder.id}" class="folder-toggle" data-folder-id="${folder.id}" ${folder.is_recursive ? 'checked' : ''}>
+                       <label for="recursive-toggle-${folder.id}">Recursive</label>
+                       <input type="checkbox" id="global-filters-toggle-${folder.id}" class="folder-toggle" data-folder-id="${folder.id}" ${folder.use_global_filters ? 'checked' : ''}>
+                       <label for="global-filters-toggle-${folder.id}">Use Global Filters</label>
+                   </div>
+                   <button class="button-icon delete-folder-btn" data-folder-id="${folder.id}" title="Remove Folder">&times;</button>
+               </div>
+               <div id="custom-filters-${folder.id}" class="custom-filters-panel" style="display: ${folder.use_global_filters ? 'none' : 'block'};">
+                   <label for="custom-blocklist-${folder.id}">Custom Blocklist:</label>
+                   <textarea id="custom-blocklist-${folder.id}" class="textarea-input" rows="2">${customBlock.join(', ')}</textarea>
+                   <label for="custom-allowlist-${folder.id}">Custom Allowlist:</label>
+                   <textarea id="custom-allowlist-${folder.id}" class="textarea-input" rows="2">${customAllow.join(', ')}</textarea>
+                   <button class="button-secondary save-custom-filters-btn" data-folder-id="${folder.id}">Save Custom Filters</button>
+               </div>
+           `;
+           foldersList.appendChild(li);
+       });
+   } else {
+       foldersList.innerHTML = '<li>No folders are currently indexed.</li>';
+   }
+
+   // Render filters
+   const blocklist = data.filter_rules.filter(r => r.rule_type === 'global_blocklist').map(r => r.extension).join(', ');
+   const allowlist = data.filter_rules.filter(r => r.rule_type === 'global_allowlist').map(r => r.extension).join(', ');
+   blocklistInput.value = blocklist;
+   allowlistInput.value = allowlist;
+}
+
+async function browseForFolder(container) {
+    const input = container.querySelector('#new-folder-path-input');
+    const browseBtn = container.querySelector('#browse-folder-btn');
+    browseBtn.textContent = '...';
+    browseBtn.disabled = true;
+    try {
+        const response = await apiRequest('/api/utils/browse-folder');
+        if (response && response.path) {
+            input.value = response.path;
+        }
+    } catch (error) {
+        console.error("Error browsing for folder:", error);
+        alert(`Failed to browse for folder: ${error.message}`);
+    } finally {
+        browseBtn.textContent = 'Browse...';
+        browseBtn.disabled = false;
+    }
+}
+
+async function addIndexedFolder(container) {
+   const input = container.querySelector('#new-folder-path-input');
+   const recursiveToggle = container.querySelector('#new-folder-recursive-toggle');
+   const path = input.value.trim();
+   const is_recursive = recursiveToggle.checked;
+
+   if (!path) return;
+ 
+   try {
+       await apiRequest('/api/settings/file-indexing/folders', 'POST', { path, is_recursive });
+       input.value = '';
+       await loadFileIndexingSettings(container); // Refresh list
+   } catch (error) {
+       console.error("Error adding folder:", error);
+       alert(`Failed to add folder: ${error.message}`);
+   }
+}
+
+async function deleteIndexedFolder(folderId, container) {
+    if (!confirm('Are you sure you want to remove this folder from the index?')) return;
+ 
+    try {
+        await apiRequest(`/api/settings/file-indexing/folders/${folderId}`, 'DELETE');
+        await loadFileIndexingSettings(container); // Refresh list
+    } catch (error) {
+        console.error("Error deleting folder:", error);
+        alert(`Failed to delete folder: ${error.message}`);
+    }
+}
+
+async function updateIndexedFolder(folderId, settings, container) {
+    try {
+        await apiRequest(`/api/settings/file-indexing/folders/${folderId}`, 'PUT', settings);
+        // Optional: show a temporary success message
+        const messageArea = container.querySelector('#file-indexing-message');
+        if (messageArea) {
+            messageArea.textContent = 'Folder settings updated.';
+            messageArea.style.display = 'block';
+            setTimeout(() => { messageArea.style.display = 'none'; }, 2000);
+        }
+    } catch (error) {
+        console.error(`Error updating folder ${folderId}:`, error);
+        alert(`Failed to update folder settings: ${error.message}`);
+        // Re-load settings to revert UI to last known good state
+        await loadFileIndexingSettings(container);
+    }
+}
+
+async function saveFileFilters(container) {
+   const blocklist = container.querySelector('#global-blocklist-input').value.split(',').map(ext => ext.trim()).filter(Boolean);
+   const allowlist = container.querySelector('#global-allowlist-input').value.split(',').map(ext => ext.trim()).filter(Boolean);
+
+   try {
+       await apiRequest('/api/settings/file-indexing/filters', 'PUT', { blocklist, allowlist });
+       alert('Filter settings saved.');
+   } catch (error) {
+       console.error("Error saving filters:", error);
+       alert(`Failed to save filters: ${error.message}`);
+   }
+}
+
+async function triggerReindex(container) {
+   const messageArea = container.querySelector('#file-indexing-message');
+   messageArea.textContent = 'Re-indexing in progress...';
+   messageArea.style.display = 'block';
+
+   try {
+       const result = await apiRequest('/api/settings/file-indexing/reindex', 'POST');
+       messageArea.textContent = `Re-indexing complete. Indexed ${result.indexed_files} files.`;
+   } catch (error) {
+       console.error("Error triggering re-index:", error);
+       messageArea.textContent = `Error: ${error.message}`;
+   }
 }
 
 function renderModelOptions(modelSelectElement, models, selectedModel) {

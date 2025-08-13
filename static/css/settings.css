@@ -1,0 +1,75 @@
+/* Styles for the Settings Page, particularly File Indexing */
+
+.indexed-folders-list {
+    list-style-type: none;
+    padding: 0;
+    margin-top: 5px;
+    border: 1px solid #444;
+    border-radius: 4px;
+    max-height: 250px;
+    overflow-y: auto;
+}
+
+.indexed-folder-item {
+    padding: 10px;
+    border-bottom: 1px solid #444;
+    display: flex;
+    flex-direction: column;
+}
+
+.indexed-folder-item:last-child {
+    border-bottom: none;
+}
+
+.folder-main-controls {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    width: 100%;
+}
+
+.folder-path-display {
+    flex-grow: 1;
+    margin-right: 15px;
+    word-break: break-all;
+    font-family: monospace;
+    font-size: 0.9em;
+}
+
+.folder-toggles {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    white-space: nowrap;
+}
+
+.folder-toggles label {
+    margin-left: 4px;
+    user-select: none;
+}
+
+.custom-filters-panel {
+    margin-top: 10px;
+    padding: 10px;
+    background-color: rgba(0, 0, 0, 0.1);
+    border-radius: 4px;
+    border: 1px solid #555;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.custom-filters-panel label {
+    font-weight: bold;
+    margin-bottom: -5px; /* Reduce space between label and textarea */
+}
+
+.custom-filters-panel .textarea-input {
+    width: 100%;
+    box-sizing: border-box;
+}
+
+.save-custom-filters-btn {
+    align-self: flex-end;
+    margin-top: 5px;
+}

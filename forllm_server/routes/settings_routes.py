@@ -6,6 +6,8 @@ from ..database import (
 )
 from ..config import CURRENT_USER_ID, DEFAULT_MODEL
 from ..database import get_db
+from ..file_indexer import scan_and_cache_files
+import os
 
 settings_bp = Blueprint('settings', __name__, url_prefix='/api')
 
@@ -349,6 +351,161 @@ def api_persona_preview():
     except Exception as e:
         print(f"Error in api_persona_preview: {str(e)}")
         return jsonify({'error': 'An internal server error occurred while generating the preview.'}), 500
+
+# --- File Indexing Settings Endpoints ---
+@settings_bp.route('/settings/file-indexing', methods=['GET'])
+def get_file_indexing_settings():
+   db = get_db()
+   cursor = db.cursor()
+   try:
+       # Fetch indexed folders
+       cursor.execute("SELECT id, folder_path, is_recursive, use_global_filters, custom_blocklist, custom_allowlist FROM indexed_folders ORDER BY folder_path")
+       folders = [dict(row) for row in cursor.fetchall()]
+
+       # Fetch filter rules
+       cursor.execute("SELECT id, rule_type, extension FROM file_filter_rules ORDER BY extension")
+       rules = [dict(row) for row in cursor.fetchall()]
+       
+       return jsonify({
+           "indexed_folders": folders,
+           "filter_rules": rules
+       })
+   except sqlite3.Error as e:
+       print(f"Database error in get_file_indexing_settings: {e}")
+       return jsonify({"error": "A database error occurred."}), 500
+
+@settings_bp.route('/settings/file-indexing/folders', methods=['POST'])
+def add_indexed_folder():
+   data = request.get_json()
+   folder_path = data.get('path')
+   is_recursive = data.get('is_recursive', True)
+
+   if not folder_path or not os.path.isdir(folder_path):
+       return jsonify({"error": "Invalid or missing folder path."}), 400
+
+   db = get_db()
+   try:
+       with db:
+           db.execute(
+               "INSERT INTO indexed_folders (folder_path, is_recursive, use_global_filters) VALUES (?, ?, ?)",
+               (folder_path, is_recursive, True) # Defaults to recursive and using global filters
+           )
+       return jsonify({"message": "Folder added successfully."}), 201
+   except sqlite3.IntegrityError:
+       return jsonify({"error": "This folder path is already indexed."}), 409
+   except sqlite3.Error as e:
+       print(f"Database error in add_indexed_folder: {e}")
+       return jsonify({"error": "A database error occurred."}), 500
+
+@settings_bp.route('/settings/file-indexing/folders/<int:folder_id>', methods=['PUT'])
+def update_indexed_folder(folder_id):
+   data = request.get_json()
+   folder_path = data.get('path')
+   is_recursive = data.get('is_recursive')
+   use_global_filters = data.get('use_global_filters')
+   custom_blocklist = data.get('custom_blocklist') # Expects a JSON string
+   custom_allowlist = data.get('custom_allowlist') # Expects a JSON string
+
+   if not folder_path or not os.path.isdir(folder_path):
+       return jsonify({"error": "Invalid or missing folder path."}), 400
+
+   db = get_db()
+   try:
+       with db:
+           # Construct the update query dynamically based on provided fields
+           update_fields = []
+           params = []
+
+           if is_recursive is not None:
+               update_fields.append("is_recursive = ?")
+               params.append(is_recursive)
+           
+           if use_global_filters is not None:
+               update_fields.append("use_global_filters = ?")
+               params.append(use_global_filters)
+
+           if custom_blocklist is not None: # Sent as a JSON string from frontend
+               update_fields.append("custom_blocklist = ?")
+               params.append(custom_blocklist)
+
+           if custom_allowlist is not None: # Sent as a JSON string from frontend
+               update_fields.append("custom_allowlist = ?")
+               params.append(custom_allowlist)
+
+           if not update_fields:
+               return jsonify({"error": "No update fields provided."}), 400
+
+           params.append(folder_id)
+           
+           query = f"UPDATE indexed_folders SET {', '.join(update_fields)} WHERE id = ?"
+           
+           cursor = db.execute(query, tuple(params))
+
+           if cursor.rowcount == 0:
+               return jsonify({"error": "Folder not found."}), 404
+       return jsonify({"message": "Folder updated successfully."})
+   except sqlite3.IntegrityError:
+       return jsonify({"error": "This folder path is already indexed."}), 409
+   except sqlite3.Error as e:
+       print(f"Database error in update_indexed_folder: {e}")
+       return jsonify({"error": "A database error occurred."}), 500
+
+@settings_bp.route('/settings/file-indexing/folders/<int:folder_id>', methods=['DELETE'])
+def delete_indexed_folder(folder_id):
+   db = get_db()
+   try:
+       with db:
+           cursor = db.execute("DELETE FROM indexed_folders WHERE id = ?", (folder_id,))
+           if cursor.rowcount == 0:
+               return jsonify({"error": "Folder not found."}), 404
+       return jsonify({"message": "Folder removed successfully."})
+   except sqlite3.Error as e:
+       print(f"Database error in delete_indexed_folder: {e}")
+       return jsonify({"error": "A database error occurred."}), 500
+
+@settings_bp.route('/settings/file-indexing/filters', methods=['PUT'])
+def update_file_filters():
+   data = request.get_json()
+   blocklist = data.get('blocklist')
+   allowlist = data.get('allowlist')
+
+   if blocklist is None and allowlist is None:
+       return jsonify({"error": "Request must contain 'blocklist' and/or 'allowlist'."}), 400
+
+   db = get_db()
+   try:
+       with db:
+           if blocklist is not None:
+               db.execute("DELETE FROM file_filter_rules WHERE rule_type = 'global_blocklist'")
+               if blocklist: # If list is not empty
+                   db.executemany(
+                       "INSERT INTO file_filter_rules (rule_type, extension) VALUES ('global_blocklist', ?)",
+                       [(ext,) for ext in blocklist]
+                   )
+           
+           if allowlist is not None:
+               db.execute("DELETE FROM file_filter_rules WHERE rule_type = 'global_allowlist'")
+               if allowlist: # If list is not empty
+                   db.executemany(
+                       "INSERT INTO file_filter_rules (rule_type, extension) VALUES ('global_allowlist', ?)",
+                       [(ext,) for ext in allowlist]
+                   )
+       return jsonify({"message": "Filter rules updated successfully."})
+   except sqlite3.Error as e:
+       print(f"Database error in update_file_filters: {e}")
+       return jsonify({"error": "A database error occurred."}), 500
+
+@settings_bp.route('/settings/file-indexing/reindex', methods=['POST'])
+def trigger_reindex():
+   try:
+       result = scan_and_cache_files()
+       if result['status'] == 'success':
+           return jsonify(result)
+       else:
+           return jsonify(result), 500
+   except Exception as e:
+       print(f"Error triggering re-index: {e}")
+       return jsonify({"status": "error", "message": "An unexpected error occurred."}), 500
 
 # Export for forllm.py compatibility
 settings_api_bp = settings_bp
