@@ -8,7 +8,7 @@
 
 ---
 
-### FORLLM is a self-hosted, forum-style interface for your local LLMs that turns long inference waits into a seamless, asynchronous conversation. In public beta, adventerous users welcomed.
+### FORLLM is a self-hosted, forum-style interface for your local LLMs that turns long inference waits into a seamless, asynchronous conversation. All code is AI generated. In public beta, adventerous users welcomed.
 
 <p align="center">
 <img src="assets/screenshot1.png" alt="light mode example" width="500"><img src="assets/screenshot2.png" alt="dark mode example" width="500">
@@ -108,11 +108,14 @@ This project is under active development. Future plans include:
 
 *   [x] Chained tagging @Persona1:@Persona2, persona1 replies to you, persona2 replies to persona1.
 *   [x] Edit and delete posts and topics.
+*   [ ] Custom instructions.
+*   [ ] Persona model over-ride.
 *   [ ] Better Firefox support.
 *   [ ] Tripane overhaul, there's much to do to fully realize the potential.
 *   [ ] Improved persona generation (functions, but needs refining).
-*   [ ] Queue improvements (to show non-post items like queued persona generation).
+*   [ ] Queue improvements (show queued persona generation, delete items).
 *   [ ] Notes section.
+*   [x] File tagging.
 *   [ ] Alternate unthreaded (vbulletin style) view of posts.
 *   [ ] Direct message/live chat option.
 *   [ ] Support for more LLM backends (let me know what backends you want support for).
@@ -125,4 +128,4 @@ This project is under active development. Future plans include:
 
 ## 📜 License
 
-You may freely use this software, all other rights reserved for now. I've been laser focused on functionality for months and I haven't explored licenses at all. Feel free to chime in on what license you'd like to see and why.
+You may freely use this software, all other rights reserved for now. I'm very focused on functionality and I haven't explored licenses at all. Feel free to chime in on what license you'd like to see and why.

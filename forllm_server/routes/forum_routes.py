@@ -152,13 +152,19 @@ def handle_topics(subforum_id):
         tagged_personas_json = json.dumps(unique_tagged_persona_ids)
         # --- End Persona Tagging Logic ---
 
+        # --- File Tagging Logic ---
+        file_path_regex = re.compile(r'\[#([^\]]+)\]\(([^)]+)\)')
+        tagged_file_paths = [match[2] for match in file_path_regex.finditer(content)]
+        tagged_files_json = json.dumps(sorted(list(set(tagged_file_paths))))
+        # --- End File Tagging Logic ---
+
         try:
             cursor.execute('INSERT INTO topics (subforum_id, user_id, title) VALUES (?, ?, ?)',
                            (subforum_id, CURRENT_USER_ID, title))
             topic_id = cursor.lastrowid
             
-            cursor.execute('INSERT INTO posts (topic_id, user_id, content, tagged_personas_in_content) VALUES (?, ?, ?, ?)',
-                           (topic_id, CURRENT_USER_ID, content, tagged_personas_json))
+            cursor.execute('INSERT INTO posts (topic_id, user_id, content, tagged_personas_in_content, tagged_files_in_content) VALUES (?, ?, ?, ?, ?)',
+                           (topic_id, CURRENT_USER_ID, content, tagged_personas_json, tagged_files_json))
             post_id = cursor.lastrowid
 
             # --- Create LLM Requests for tagged personas ---
@@ -285,9 +291,15 @@ def handle_posts(topic_id):
         tagged_personas_json = json.dumps(unique_tagged_persona_ids)
         # --- End Persona Tagging Logic ---
 
+        # --- File Tagging Logic ---
+        file_path_regex = re.compile(r'\[#([^\]]+)\]\(([^)]+)\)')
+        tagged_file_paths = [match[1] for match in file_path_regex.finditer(content)]
+        tagged_files_json = json.dumps(sorted(list(set(tagged_file_paths))))
+        # --- End File Tagging Logic ---
+
         try:
-            cursor.execute('INSERT INTO posts (topic_id, user_id, parent_post_id, content, tagged_personas_in_content) VALUES (?, ?, ?, ?, ?)',
-                           (topic_id, CURRENT_USER_ID, parent_post_id, content, tagged_personas_json))
+            cursor.execute('INSERT INTO posts (topic_id, user_id, parent_post_id, content, tagged_personas_in_content, tagged_files_in_content) VALUES (?, ?, ?, ?, ?, ?)',
+                           (topic_id, CURRENT_USER_ID, parent_post_id, content, tagged_personas_json, tagged_files_json))
             post_id = cursor.lastrowid
 
             # --- Create LLM Requests for tagged personas ---
@@ -733,8 +745,13 @@ def edit_post(post_id):
                     
                     last_persona_id_in_chain = persona_id
 
+    # --- File Tagging Logic for Edit ---
+    file_path_regex = re.compile(r'\[#([^\]]+)\]\(([^)]+)\)')
+    new_tagged_file_paths = [match[2] for match in file_path_regex.finditer(content)]
+    # --- End File Tagging Logic for Edit ---
+
     # Update the post in the database first
-    if not update_post(post_id, content, title, list(new_tagged_ids)):
+    if not update_post(post_id, content, title, list(new_tagged_ids), new_tagged_file_paths):
         return jsonify({'error': 'Failed to update post in database.'}), 500
 
     # 4. Queue LLM requests for genuinely new tags

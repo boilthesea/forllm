@@ -8,6 +8,7 @@ from waitress import serve
 from forllm_server.config import DATABASE, UPLOAD_FOLDER
 from forllm_server.database import init_db, close_db, update_setting
 from forllm_server.llm_queue import llm_worker
+from forllm_server.file_indexer import scan_and_cache_files
 
 # Import Blueprints
 from forllm_server.routes.main_routes import main_bp
@@ -18,6 +19,7 @@ from forllm_server.routes.settings_routes import settings_api_bp
 from forllm_server.routes.persona_routes import persona_routes_bp # Added
 from forllm_server.routes.activity_routes import activity_bp # Added for activity page
 from forllm_server.routes.utility_routes import utility_bp # Added for utility routes
+from forllm_server.routes.file_routes import file_routes
 
 # --- Flask App Initialization ---
 app = Flask(__name__, template_folder='templates', static_folder='static')
@@ -33,6 +35,7 @@ app.register_blueprint(settings_api_bp) # Default prefix is /api
 app.register_blueprint(persona_routes_bp) # Added
 app.register_blueprint(activity_bp) # Added for activity page
 app.register_blueprint(utility_bp) # Added for utility routes
+app.register_blueprint(file_routes)
 
 
 # Register database close function
@@ -75,6 +78,12 @@ if __name__ == '__main__':
     # Pass the Flask 'app' instance to the llm_worker thread
     worker_thread = threading.Thread(target=llm_worker, args=(app,), daemon=True)
     worker_thread.start()
+
+    # Initial file indexing on startup
+    with app.app_context():
+       print("Performing initial file indexing on startup...")
+       scan_and_cache_files()
+       print("Initial file indexing complete.")
 
     if args.debug:
         print("Starting Flask development server in debug mode...")

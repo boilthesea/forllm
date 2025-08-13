@@ -52,6 +52,7 @@ graph TD
     *   Registers all Blueprints from the `forllm_server.routes` package.
     *   Calls database initialization (`init_db()`) from `forllm_server.database`.
     *   Starts the background LLM worker thread (`llm_worker()`) from `forllm_server.llm_queue`.
+    *   Calls the file indexing service (`scan_and_cache_files()`) on startup.
     *   Runs the Flask development server.
 
 *   **`forllm_server/`** (Core Server Logic Package):
@@ -60,9 +61,10 @@ graph TD
     *   **`markdown_config.py`**: Configures and provides the `MarkdownIt` instance used for rendering Markdown content to HTML, including custom Pygments syntax highlighting.
     *   **`tokenizer_utils.py`**: Implements token counting functionality using the `tiktoken` library. Provides a `count_tokens` function to estimate the number of tokens in a given text string.
     *   **`ollama_utils.py`**: (NEW) Contains utility functions for interacting directly with the Ollama API, such as fetching detailed model information (including context window size) and parsing it.
+    *   **`file_indexer.py`**: (NEW) Manages the file indexing service. Scans user-defined directories, applies filtering rules, and caches file paths for quick searching.
     *   **`llm_queue.py`**: Manages the in-memory queue for LLM requests (`llm_request_queue`) and contains the main loop for the background LLM processing thread (`llm_worker`), which polls both the in-memory and database queues. The worker now also handles activating dependent requests (chained tags) upon parent request completion.
     *   **`llm_processing.py`**: Contains the core logic for interacting with the LLM service (currently Ollama). This includes:
-        *   Prompt construction (`process_llm_request`): Assembling all prompt components (attachments, persona instructions, primary and ambient chat history, current post).
+        *   Prompt construction (`process_llm_request`): Assembling all prompt components (attachments, tagged files, persona instructions, primary and ambient chat history, current post).
         *   Chat history management:
             *   Utilizes helper functions (`_get_raw_history_strings`, `_prune_history_sections`) to manage history logic.
             *   Handles both primary linear history and ambient branch-aware history using configurable settings (max ambient posts, posts per branch, primary budget ratio) fetched from the database via `get_chat_history_settings`.
@@ -79,10 +81,12 @@ graph TD
     *   **`routes/utility_routes.py`**: Defines Flask Blueprint for utility API endpoints.
         *   `/api/utils/count_tokens_for_text`: Estimates token count for a given text (primarily for simple, ad-hoc checks; detailed breakdown is preferred).
         *   `POST /api/prompts/estimate_tokens`: Calculates and returns a detailed breakdown of estimated token counts. Now simulates the full, complex, and configurable chat history (primary + ambient + pruning using database settings) to provide a more accurate token breakdown, comparing against the current model's context window.
-    *   **`routes/forum_routes.py`**: Defines Flask Blueprint for API endpoints related to forum management: subforums, topics, and posts (CRUD operations, listing). Includes endpoints for assigning/unassigning multiple personas per subforum and setting the per-subforum default persona. Handles parsing of `@[Persona Name](persona_id)` and chained `@[Persona1](id1):@[Persona2](id2)` tags from post content, stores extracted IDs in `posts.tagged_personas_in_content`, and queues `llm_requests` for tagged personas, creating dependent requests for chains.
+        *   `GET /api/utils/browse-folder`: Opens a native OS folder selection dialog on the server machine and returns the selected path. Used for adding folders to the file indexer.
+    *   **`routes/forum_routes.py`**: Defines Flask Blueprint for API endpoints related to forum management: subforums, topics, and posts (CRUD operations, listing). Includes endpoints for assigning/unassigning multiple personas per subforum and setting the per-subforum default persona. Handles parsing of `@[Persona Name](persona_id)` and `[#filename.ext](path/to/file)` tags from post content, stores extracted IDs/paths in `posts.tagged_personas_in_content` and `posts.tagged_files_in_content`, and queues `llm_requests` for tagged personas.
     *   **`routes/llm_routes.py`**: Defines Flask Blueprint for API endpoints related to LLM interactions: requesting an LLM response for a post and fetching available Ollama models. Allows persona override at LLM request time. `POST /api/posts/<int:post_id>/tag_persona`: Allows users to tag an existing post with a persona, creating an entry in `post_persona_tags` and queuing an `llm_request`.
     *   **`routes/schedule_routes.py`**: Defines Flask Blueprint for API endpoints managing LLM processing schedules: CRUD operations for schedules, and status/next schedule information.
-    *   **`routes/settings_routes.py`**: Defines Flask Blueprint for API endpoints to get and update application-wide settings. Includes endpoints for persona management (list, create, update, delete, get, version history) and global default persona. Handles GET/PUT for `default_llm_context_window`, `autoCheckContextWindow` (boolean, defaults to false, for automatically checking Ollama modelfile for context window), and chat history configuration settings (`ch_max_ambient_posts`, `ch_max_posts_per_sibling_branch`, `ch_primary_history_budget_ratio`).
+    *   **`routes/settings_routes.py`**: Defines Flask Blueprint for API endpoints to get and update application-wide settings. Includes endpoints for persona management, global default persona, chat history configuration, and file indexing settings (CRUD for indexed folders, filter rules, and re-indexing).
+    *   **`routes/file_routes.py`**: (NEW) Defines Flask Blueprint for file-related API endpoints, primarily the `/api/files/search` endpoint for editor autocomplete.
     *   **`routes/persona_routes.py`**: Defines Flask Blueprint for API endpoints related to persona generation. Includes:
         *   `POST /api/personas/generate/from_details`: Queues generation of a persona from name/description hints.
         *   `POST /api/personas/generate/subforum_expert`: Queues generation of a subforum expert persona.
@@ -116,11 +120,11 @@ graph TD
         *   **Modal Management:** Creates the draggable Theme Creator modal (`openThemeCreator`, `makeDraggable`) and the LLM link warning popup.
     *   **`forum.js`**: Encapsulates all logic related to the forum features. Includes the hook to call `ui.openSecondaryPane` when a user clicks the "open in new pane" icon on a topic. Initializes Tom Select for the persona override dropdown.
     *   **`schedule.js`**: Manages the scheduling functionality, including loading, rendering, and saving user-defined processing schedules, as well as displaying the next scheduled time and the current processor status.
-    *   **`settings.js`**: Deals with application-wide settings. Handles theme selection and includes the event listener to launch the Theme Creator via `theming.js`. Initializes Tom Select for the model and theme selection dropdowns.
+    *   **`settings.js`**: Deals with application-wide settings. Handles theme selection, file indexing settings UI, and includes the event listener to launch the Theme Creator via `theming.js`. Initializes Tom Select for the model and theme selection dropdowns.
     *   **`theming.js`**: (NEW) Contains the client-side "live theming" engine. It introspects CSS variables from the current theme, dynamically builds the Theme Creator modal's UI, applies style changes in real-time for live preview, and handles exporting the generated CSS.
     *   **`queue.js`**: Manages the display of the LLM processing queue. Fetches and renders the list of queued tasks, showing a summary including the *total prompt tokens*. Now visually represents chained requests and their dependencies. Clicking a queue item opens a modal displaying the full prompt content and a detailed, formatted token breakdown in a separate metadata pane within the modal.
     *   **`activity.js`**: Contains the frontend JavaScript logic for the Recent Activity Page, including fetching data from the activity API endpoints (recent topics, replies, personas) and rendering it into the respective panels on the activity page. Manages navigation from activity items to their respective content areas.
-    *   **`editor.js`**: Responsible for initializing and configuring the EasyMDE Markdown editor instances used for creating new topics and replies. Integrates with `/api/prompts/estimate_tokens` to display a detailed token breakdown (post content, persona, attachments, chat history, total vs. model limit) with a visual bar near the editor. The chat history estimation now benefits from the more accurate backend simulation of history construction and pruning.
+    *   **`editor.js`**: Responsible for initializing and configuring the EasyMDE Markdown editor instances. Integrates with `/api/prompts/estimate_tokens` to display a detailed token breakdown. Handles autocomplete and tag insertion for both `@persona` and `#file` mentions.
 
 *   **`static/css/base.css`**: Contains fundamental styles, CSS variables for all themes (e.g., `theme-silvery`, `theme-hc-black`), typography, and resets.
 *   **`static/css/layout.css`**: Handles the main structural layout. Defines styles for the desktop sidebar, the primary and secondary panes, and the rules for the Tripane layout (`#main-container.tripane-active`). Also contains all media queries for the responsive mobile layout, including the mobile top nav and the "bottom sheet" styles for the secondary pane.
@@ -128,7 +132,7 @@ graph TD
 *   **`static/css/modals.css`**: Contains styles for all modal windows. Includes specific, hardcoded styles for the Theme Creator modal to ensure it is always usable, regardless of the live theme being edited.
 *   **`static/css/forum.css`**: Styles specific to the forum content display, including the subtle, icon-only "open in new pane" button.
 *   **`static/css/markdown.css`**: Styles for rendering Markdown elements and Pygments syntax highlighting within posts.
-*   **`static/css/editor.css`**: Contains style overrides specifically for the EasyMDE editor. Includes styles for the token count display associated with editors.
+*   **`static/css/editor.css`**: Contains style overrides specifically for the EasyMDE editor. Includes styles for the token count display and autocomplete suggestions for both personas and files.
 *   **`static/css/status-indicator.css`**: Styles for the processing status indicator.
 
 *   **`forllm_data.db`** (Database File):
@@ -139,6 +143,7 @@ graph TD
         *   `topics`: Topic titles and metadata, linked to subforums and users.
         *   `posts`: User-generated content and LLM responses, forming threaded discussions.
             *   `tagged_personas_in_content` (TEXT, storing a JSON array of persona IDs from @mentions in content).
+            *   `tagged_files_in_content` (TEXT, storing a JSON array of file paths from #mentions in content).
         *   `llm_requests`: Queue for LLM processing, tracking `status` (e.g., 'pending', 'processing', 'complete', 'error', 'pending_dependency'), `model`, `persona`, `request_type` (e.g., 'respond_to_post', 'generate_persona'), `request_params` (JSON string), `parent_request_id` (for chained requests), and `prompt_token_breakdown`.
             *   `prompt_token_breakdown TEXT`: JSON string storing a breakdown of token counts for different parts of the prompt (e.g., persona, user post, attachments, `primary_chat_history_tokens`, `ambient_chat_history_tokens`, `headers_tokens`, total).
         *   `llm_model_metadata`: (NEW) Caches metadata about LLM models, primarily their context window size.
@@ -157,6 +162,9 @@ graph TD
         *   `subforum_personas`: Links subforums and personas, indicating which personas are assigned to a subforum and the default for that subforum.
         *   `persona_versions`: Stores historical versions of persona details for versioning and revert capability.
         *   `user_activity`: Tracks user views of subforums and topics (`user_id`, `item_type` ('subforum' or 'topic'), `item_id`, `last_viewed_at`). This supports features like notification badges and identifying new content.
+       *   `indexed_folders`: (NEW) Stores user-defined folder paths for the file indexer.
+       *   `file_index_cache`: (NEW) Caches file paths from indexed locations for fast autocomplete searching.
+       *   `file_filter_rules`: (NEW) Manages global and per-folder block/allow lists for file extensions.
 
 ## 3. Phased Development Plan
 
@@ -295,6 +303,7 @@ graph TD
     *   `[DONE]` For existing posts, a dedicated input field allows users to select a persona to tag for a response.
     *   `[DONE]` Both methods result in LLM requests being queued for the tagged persona(s), with dependencies correctly handled for chains. Rendered posts visually highlight these tags.
     *   `[TODO]` Future Enhancement: Make the rendered `@PersonaName` tags interactive, potentially linking to a dedicated persona view/edit page or modal.
+*   **File Tagging:** [COMPLETED] Users can reference local files in posts using a `#filename` syntax with autocomplete, similar to persona tagging. Indexed files are included as context in LLM prompts.
 *   **Optional Automated Persona Interaction:** [TODO] A setting (per-topic?) to allow enabled personas to automatically reply to each other's posts within certain limits (e.g., depth, time). *Requires careful design to avoid runaway computation.*
 *   **Summarization Tools:** [TODO] Add a feature to use an LLM to summarize a selected topic thread or a set of LLM replies.
 *   **Rich Text Editor (Optional):** [DONE] Replace plain text area with a simple WYSIWYG editor. (EasyMDE implemented)

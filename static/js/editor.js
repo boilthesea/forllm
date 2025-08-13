@@ -1,7 +1,7 @@
 // This file will handle the initialization and configuration of the EasyMDE editor instances.
 
 import { newTopicContentInput, replyContentInput } from './dom.js';
-import { fetchActivePersonas } from './api.js'; // Import API function
+import { apiRequest } from './api.js';
 
 let cachedAttachmentsContent = { 'new-topic': { text: '', filesHash: null }, 'reply': { text: '', filesHash: null } };
 
@@ -11,18 +11,29 @@ let personasCacheTimestamp = 0;
 const PERSONA_CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
 let personaSuggestionsDiv = null;
 let currentMentionState = {
-    editor: null, // The CodeMirror instance
+    editor: null,
     query: '',
-    startPos: null, // {line, ch} where '@' was typed
+    startPos: null,
     active: false,
     selectedIndex: -1,
-    currentResults: [] // To store currently displayed results for keyboard navigation
+    currentResults: []
 };
+
+// --- File Tagging Globals ---
+let fileTagSuggestionsDiv = null;
+let fileTagState = {
+    editor: null,
+    query: '',
+    startPos: null,
+    active: false,
+    selectedIndex: -1,
+    currentResults: []
+};
+let fileTagDebounceTimer = null;
 
 // --- EasyMDE Configuration ---
 const easyMDEConfigBase = {
     spellChecker: false,
-    // status is now handled in createEditorConfig
     toolbar: [
         "bold", "italic", "|",
         "heading-1", "heading-2", "heading-3", "|",
@@ -47,7 +58,7 @@ function createEditorConfig(editorType) {
                 defaultValue: (el) => {
                     el.innerHTML = ` | <span class="toggle-button" title="Toggle Token Breakdown">[+]</span> Tokens: <span class="total-token-count ${editorType}-statusbar-token-count">~0</span>`;
                 },
-                onUpdate: () => {} // We update this manually via API calls
+                onUpdate: () => {}
             }
         ]
     };
@@ -56,11 +67,9 @@ function createEditorConfig(editorType) {
 function createPersonaSuggestionsUI() {
     if (!personaSuggestionsDiv) {
         personaSuggestionsDiv = document.createElement('div');
-        // Ensure this ID matches the one in index.html and targeted by editor.css
-        personaSuggestionsDiv.id = 'personaMentionSuggestions'; 
-        // Styles are primarily handled by CSS. Ensure functional styles like position and initial display are set.
-        personaSuggestionsDiv.style.position = 'absolute'; 
-        personaSuggestionsDiv.style.display = 'none'; 
+        personaSuggestionsDiv.id = 'personaMentionSuggestions';
+        personaSuggestionsDiv.style.position = 'absolute';
+        personaSuggestionsDiv.style.display = 'none';
         document.body.appendChild(personaSuggestionsDiv);
     }
 }
@@ -68,7 +77,7 @@ function createPersonaSuggestionsUI() {
 function hidePersonaSuggestions() {
     if (personaSuggestionsDiv) {
         personaSuggestionsDiv.style.display = 'none';
-        personaSuggestionsDiv.innerHTML = ''; // Clear previous suggestions
+        personaSuggestionsDiv.innerHTML = '';
     }
     currentMentionState.active = false;
     currentMentionState.editor = null;
@@ -83,11 +92,9 @@ async function displayPersonaSuggestions(cm, query) {
 
     const now = Date.now();
     if (!activePersonasCache.length || (now - personasCacheTimestamp > PERSONA_CACHE_DURATION)) {
-        console.log("Fetching active personas...");
-        activePersonasCache = await fetchActivePersonas() || [];
+        activePersonasCache = await apiRequest('/api/personas/list_active') || [];
         personasCacheTimestamp = now;
         if (!activePersonasCache.length) {
-            console.log("No active personas found or failed to fetch.");
             hidePersonaSuggestions();
             return;
         }
@@ -98,55 +105,35 @@ async function displayPersonaSuggestions(cm, query) {
     );
 
     currentMentionState.currentResults = filteredPersonas;
-    currentMentionState.selectedIndex = -1; 
+    currentMentionState.selectedIndex = -1;
 
-    personaSuggestionsDiv.innerHTML = ''; // Clear previous suggestions
+    personaSuggestionsDiv.innerHTML = '';
     if (!filteredPersonas.length) {
         const noResultsItem = document.createElement('div');
         noResultsItem.textContent = 'No matching personas';
-        noResultsItem.classList.add('suggestion-item', 'no-results'); // Add classes for styling
+        noResultsItem.classList.add('suggestion-item', 'no-results');
         personaSuggestionsDiv.appendChild(noResultsItem);
     } else {
         filteredPersonas.forEach((persona, index) => {
             const item = document.createElement('div');
             item.textContent = persona.name;
-            item.classList.add('suggestion-item'); // Add a common class for items
+            item.classList.add('suggestion-item');
             item.dataset.id = persona.persona_id;
             item.dataset.name = persona.name;
-
-            item.addEventListener('mouseenter', () => {
-                // Remove 'selected' from previously selected item if any
-                if (currentMentionState.selectedIndex !== -1 && personaSuggestionsDiv.children[currentMentionState.selectedIndex]) {
-                    personaSuggestionsDiv.children[currentMentionState.selectedIndex].classList.remove('selected');
-                }
-                // Add 'selected' to current item and update index
-                item.classList.add('selected');
-                currentMentionState.selectedIndex = index;
-            });
-            item.addEventListener('mouseleave', () => {
-                item.classList.remove('selected');
-                 // Optional: reset selectedIndex if mouse leaves, or rely on keyboard nav to manage it
-            });
-
-            item.addEventListener('click', () => {
-                insertPersonaTag(cm, persona);
-            });
+            item.addEventListener('click', () => insertPersonaTag(cm, persona));
             personaSuggestionsDiv.appendChild(item);
         });
     }
 
-    // Position suggestion div. Consider editor scroll and viewport.
+    const startCoords = cm.cursorCoords(currentMentionState.startPos, 'local');
     const editorWrapper = cm.getWrapperElement();
     const editorRect = editorWrapper.getBoundingClientRect();
-    const bodyRect = document.body.getBoundingClientRect(); // To offset body scrolling if #personaMentionSuggestions is child of body
-
-    // Get coordinates of the '@' character or start of the query
-    const startCoords = cm.cursorCoords(currentMentionState.startPos, 'local');
+    const bodyRect = document.body.getBoundingClientRect();
 
     personaSuggestionsDiv.style.left = `${editorRect.left + startCoords.left - bodyRect.left}px`;
-    personaSuggestionsDiv.style.top = `${editorRect.top + startCoords.bottom - bodyRect.top + 5}px`; // 5px below the line
+    personaSuggestionsDiv.style.top = `${editorRect.top + startCoords.bottom - bodyRect.top + 5}px`;
     personaSuggestionsDiv.style.display = 'block';
-    updateSuggestionsHighlight(false); // Update highlight without scrolling initially
+    updateSuggestionsHighlight(false);
 }
 
 function insertPersonaTag(cm, persona) {
@@ -156,25 +143,66 @@ function insertPersonaTag(cm, persona) {
     }
     const textToInsert = `@[${persona.name}](${persona.persona_id})`;
     const currentCursor = cm.getCursor();
-    // Replace from the '@' symbol (startPos) up to the current cursor position
     cm.replaceRange(textToInsert, currentMentionState.startPos, currentCursor);
     hidePersonaSuggestions();
-    cm.focus(); 
+    cm.focus();
 }
 
 function handleEditorKeyEvent(cm, event, type) {
-    // If suggestions are active, certain key events are handled differently
+    if (fileTagState.active && fileTagState.editor === cm) {
+        if (type === 'keydown') {
+            if (['Escape', 'Enter', 'Tab', 'ArrowUp', 'ArrowDown'].includes(event.key)) {
+                event.preventDefault();
+                if (event.key === 'Escape') {
+                    hideFileTagSuggestions();
+                } else if (event.key === 'Enter' || event.key === 'Tab') {
+                    if (fileTagState.selectedIndex !== -1 && fileTagState.currentResults[fileTagState.selectedIndex]) {
+                        insertFileTag(cm, fileTagState.currentResults[fileTagState.selectedIndex]);
+                    } else {
+                        hideFileTagSuggestions();
+                    }
+                } else if (event.key === 'ArrowDown') {
+                    if (fileTagState.currentResults.length > 0) {
+                        fileTagState.selectedIndex = (fileTagState.selectedIndex + 1) % fileTagState.currentResults.length;
+                        updateFileTagSuggestionsHighlight();
+                    }
+                } else if (event.key === 'ArrowUp') {
+                    if (fileTagState.currentResults.length > 0) {
+                        fileTagState.selectedIndex = (fileTagState.selectedIndex - 1 + fileTagState.currentResults.length) % fileTagState.currentResults.length;
+                        updateFileTagSuggestionsHighlight();
+                    }
+                }
+                return;
+            }
+        }
+        if (type === 'keyup') {
+            const cursor = cm.getCursor();
+            if (cursor.line === fileTagState.startPos.line && cursor.ch >= fileTagState.startPos.ch) {
+                const textFromHash = cm.getRange(fileTagState.startPos, cursor);
+                if (textFromHash.startsWith('#') && !textFromHash.substring(1).includes(' ') && textFromHash.length <= 100) {
+                    fileTagState.query = textFromHash.substring(1);
+                    displayFileTagSuggestions(cm, fileTagState.query);
+                } else {
+                    hideFileTagSuggestions();
+                }
+            } else {
+                hideFileTagSuggestions();
+            }
+            return;
+        }
+    }
+
     if (currentMentionState.active && currentMentionState.editor === cm) {
         if (type === 'keydown') {
             if (['Escape', 'Enter', 'Tab', 'ArrowUp', 'ArrowDown'].includes(event.key)) {
-                event.preventDefault(); // Prevent default editor actions for these keys
+                event.preventDefault();
                 if (event.key === 'Escape') {
                     hidePersonaSuggestions();
                 } else if (event.key === 'Enter' || event.key === 'Tab') {
                     if (currentMentionState.selectedIndex !== -1 && currentMentionState.currentResults[currentMentionState.selectedIndex]) {
                         insertPersonaTag(cm, currentMentionState.currentResults[currentMentionState.selectedIndex]);
                     } else {
-                        hidePersonaSuggestions(); // Or insert query as plain text if no selection
+                        hidePersonaSuggestions();
                     }
                 } else if (event.key === 'ArrowDown') {
                     if (currentMentionState.currentResults.length > 0) {
@@ -187,30 +215,27 @@ function handleEditorKeyEvent(cm, event, type) {
                         updateSuggestionsHighlight();
                     }
                 }
-                return; // Event handled
+                return;
             }
         }
-        // For keyup, or other keydown events when suggestions are active
         if (type === 'keyup') {
             const cursor = cm.getCursor();
-            // Check if cursor is still within a potential mention
             if (cursor.line === currentMentionState.startPos.line && cursor.ch >= currentMentionState.startPos.ch) {
                 const textFromAt = cm.getRange(currentMentionState.startPos, cursor);
-                if (textFromAt.startsWith('@') && !textFromAt.includes(' ') && textFromAt.length <= 50) { // Basic validation
-                    currentMentionState.query = textFromAt.substring(1); // Remove '@'
+                if (textFromAt.startsWith('@') && !textFromAt.includes(' ') && textFromAt.length <= 50) {
+                    currentMentionState.query = textFromAt.substring(1);
                     displayPersonaSuggestions(cm, currentMentionState.query);
                 } else {
-                    hidePersonaSuggestions(); // Invalid mention (e.g., space typed, or @ deleted)
+                    hidePersonaSuggestions();
                 }
             } else {
-                hidePersonaSuggestions(); // Cursor moved out of mention line/context
+                hidePersonaSuggestions();
             }
-            return; // Event handled (or decided to hide)
+            return;
         }
     }
 
-    // If suggestions are NOT active, check if we need to activate them
-    if (type === 'keyup' && !currentMentionState.active) {
+    if (type === 'keyup' && !currentMentionState.active && !fileTagState.active) {
         const cursor = cm.getCursor();
         if (cursor.ch > 0) {
             const charBefore = cm.getRange({ line: cursor.line, ch: cursor.ch - 1 }, cursor);
@@ -220,6 +245,12 @@ function handleEditorKeyEvent(cm, event, type) {
                 currentMentionState.query = '';
                 currentMentionState.startPos = { line: cursor.line, ch: cursor.ch - 1 };
                 displayPersonaSuggestions(cm, '');
+            } else if (charBefore === '#') {
+                fileTagState.active = true;
+                fileTagState.editor = cm;
+                fileTagState.query = '';
+                fileTagState.startPos = { line: cursor.line, ch: cursor.ch - 1 };
+                displayFileTagSuggestions(cm, '');
             }
         }
     }
@@ -228,7 +259,7 @@ function handleEditorKeyEvent(cm, event, type) {
 function updateSuggestionsHighlight(shouldScroll = true) {
     if (!personaSuggestionsDiv || !currentMentionState.active) return;
     Array.from(personaSuggestionsDiv.children).forEach((child, index) => {
-        if (child.classList.contains('no-results')) return; // Skip "no results" item
+        if (child.classList.contains('no-results')) return;
         if (index === currentMentionState.selectedIndex) {
             child.classList.add('selected');
             if (shouldScroll) {
@@ -240,34 +271,33 @@ function updateSuggestionsHighlight(shouldScroll = true) {
     });
 }
 
-
-function initializeEditorPersonaTagging(editorInstance) {
+function initializeEditorTagging(editorInstance) {
     if (!editorInstance) return;
-    createPersonaSuggestionsUI(); 
+    createPersonaSuggestionsUI();
+    createFileTagSuggestionsUI();
     const cm = editorInstance.codemirror;
 
     cm.on('keyup', (cmInstance, event) => {
-        // Filter out keys that should not trigger suggestion logic / query updates
-        if (['Control', 'Alt', 'Shift', 'Meta', 'CapsLock', 'Escape', 'Enter', 'Tab', 
-             'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 
-             'Home', 'End', 'PageUp', 'PageDown'].includes(event.key)) {
+        if (['Control', 'Alt', 'Shift', 'Meta', 'CapsLock', 'Escape', 'Enter', 'Tab', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Home', 'End', 'PageUp', 'PageDown'].includes(event.key)) {
             return;
         }
         handleEditorKeyEvent(cmInstance, event, 'keyup');
     });
     cm.on('keydown', (cmInstance, event) => {
-        // Only pass to handler if suggestions are active and it's a relevant key
-        if (currentMentionState.active && currentMentionState.editor === cmInstance &&
-            ['Escape', 'Enter', 'Tab', 'ArrowUp', 'ArrowDown'].includes(event.key)) {
+        if ((currentMentionState.active || fileTagState.active) && (currentMentionState.editor === cmInstance || fileTagState.editor === cmInstance) && ['Escape', 'Enter', 'Tab', 'ArrowUp', 'ArrowDown'].includes(event.key)) {
             handleEditorKeyEvent(cmInstance, event, 'keydown');
         }
     });
     cm.on('blur', (cmInstance) => {
         setTimeout(() => {
-            // Check if the new active element is part of our suggestion box
             if (personaSuggestionsDiv && !personaSuggestionsDiv.contains(document.activeElement)) {
-                 if (currentMentionState.editor === cmInstance) { // Only hide if blur is from the currently active editor
+                if (currentMentionState.editor === cmInstance) {
                     hidePersonaSuggestions();
+                }
+            }
+            if (fileTagSuggestionsDiv && !fileTagSuggestionsDiv.contains(document.activeElement)) {
+                if (fileTagState.editor === cmInstance) {
+                    hideFileTagSuggestions();
                 }
             }
         }, 200);
@@ -284,7 +314,121 @@ function highlightPersonaTags(cm) {
         const endPos = cm.posFromIndex(match.index + match[0].length);
         cm.markText(startPos, endPos, {
             className: 'cm-persona-tag',
-            atomic: true, // Makes the whole tag act as a single unit
+            atomic: true,
+        });
+    }
+}
+
+function createFileTagSuggestionsUI() {
+    if (!fileTagSuggestionsDiv) {
+        fileTagSuggestionsDiv = document.createElement('div');
+        fileTagSuggestionsDiv.id = 'fileTagSuggestions';
+        fileTagSuggestionsDiv.style.position = 'absolute';
+        fileTagSuggestionsDiv.style.display = 'none';
+        document.body.appendChild(fileTagSuggestionsDiv);
+    }
+}
+
+function hideFileTagSuggestions() {
+    if (fileTagSuggestionsDiv) {
+        fileTagSuggestionsDiv.style.display = 'none';
+        fileTagSuggestionsDiv.innerHTML = '';
+    }
+    fileTagState.active = false;
+    fileTagState.editor = null;
+    fileTagState.query = '';
+    fileTagState.startPos = null;
+    fileTagState.selectedIndex = -1;
+    fileTagState.currentResults = [];
+}
+
+async function displayFileTagSuggestions(cm, query) {
+    if (!fileTagState.active) return;
+
+    clearTimeout(fileTagDebounceTimer);
+    fileTagDebounceTimer = setTimeout(async () => {
+        try {
+            const results = await apiRequest(`/api/files/search?q=${encodeURIComponent(query)}`);
+            fileTagState.currentResults = results;
+            fileTagState.selectedIndex = -1;
+
+            fileTagSuggestionsDiv.innerHTML = '';
+            if (!results.length) {
+                const noResultsItem = document.createElement('div');
+                noResultsItem.textContent = 'No matching files';
+                noResultsItem.classList.add('suggestion-item', 'no-results');
+                fileTagSuggestionsDiv.appendChild(noResultsItem);
+            } else {
+                results.forEach((file, index) => {
+                    const item = document.createElement('div');
+                    item.textContent = file.display;
+                    item.classList.add('suggestion-item');
+                    item.dataset.path = file.path;
+                    item.addEventListener('click', () => insertFileTag(cm, file));
+                    fileTagSuggestionsDiv.appendChild(item);
+                });
+            }
+
+            const startCoords = cm.cursorCoords(fileTagState.startPos, 'local');
+            const editorWrapper = cm.getWrapperElement();
+            const editorRect = editorWrapper.getBoundingClientRect();
+            const bodyRect = document.body.getBoundingClientRect();
+
+            fileTagSuggestionsDiv.style.left = `${editorRect.left + startCoords.left - bodyRect.left}px`;
+            fileTagSuggestionsDiv.style.top = `${editorRect.top + startCoords.bottom - bodyRect.top + 5}px`;
+            fileTagSuggestionsDiv.style.display = 'block';
+            updateFileTagSuggestionsHighlight();
+
+        } catch (error) {
+            console.error("Error fetching file suggestions:", error);
+            hideFileTagSuggestions();
+        }
+    }, 250);
+}
+
+function insertFileTag(cm, file) {
+    if (!fileTagState.startPos || !cm) {
+        hideFileTagSuggestions();
+        return;
+    }
+    const filename = file.path.split(/[\\/]/).pop();
+    const textToInsert = `[#${filename}](${file.path})`;
+    const currentCursor = cm.getCursor();
+    cm.replaceRange(textToInsert, fileTagState.startPos, currentCursor);
+    
+    const endPos = { line: fileTagState.startPos.line, ch: fileTagState.startPos.ch + textToInsert.length };
+    cm.markText(fileTagState.startPos, endPos, {
+        className: 'cm-file-tag',
+        atomic: true,
+    });
+
+    hideFileTagSuggestions();
+    cm.focus();
+}
+
+function updateFileTagSuggestionsHighlight(shouldScroll = true) {
+    if (!fileTagSuggestionsDiv || !fileTagState.active) return;
+    Array.from(fileTagSuggestionsDiv.children).forEach((child, index) => {
+        if (index === fileTagState.selectedIndex) {
+            child.classList.add('selected');
+            if (shouldScroll) child.scrollIntoView({ block: 'nearest' });
+        } else {
+            child.classList.remove('selected');
+        }
+    });
+}
+
+function highlightFileTags(cm) {
+    if (!cm) return;
+    const regex = /\[#([^\]]+)\]\(([^)]+)\)/g;
+    const content = cm.getValue();
+    let match;
+    while ((match = regex.exec(content)) !== null) {
+        const startPos = cm.posFromIndex(match.index);
+        const endPos = cm.posFromIndex(match.index + match[0].length);
+        cm.markText(startPos, endPos, {
+            className: 'cm-file-tag',
+            atomic: true,
         });
     }
 }
@@ -297,20 +441,20 @@ export function createEditor(textAreaElement, editorType, initialValue = '') {
     config.initialValue = initialValue;
 
     const editor = new EasyMDE(config);
-    initializeEditorPersonaTagging(editor);
+    initializeEditorTagging(editor);
     initializeTokenBreakdownDisplay(editor, editorType);
 
     editor.codemirror.on("refresh", function(cm) {
         highlightPersonaTags(cm);
+        highlightFileTags(cm);
     });
     
-    // Initial highlight
     highlightPersonaTags(editor.codemirror);
+    highlightFileTags(editor.codemirror);
 
     return editor;
 }
 
-// Initialize editors
 if (newTopicContentInput) {
     newTopicEditor = createEditor(newTopicContentInput, 'new-topic');
 }
@@ -319,9 +463,6 @@ if (replyContentInput) {
     replyEditor = createEditor(replyContentInput, 'reply');
 }
 
-// --- Token Breakdown Display ---
-
-// Debounce function - (Make sure it's defined, or import if it's global)
 function debounce(func, delay) {
     let timeout;
     return function(...args) {
@@ -331,41 +472,29 @@ function debounce(func, delay) {
     };
 }
 
-// Function to update token breakdown via API
 async function updateTokenBreakdown(editorInstance, editorType) {
     if (!editorInstance) return;
-
     const container = document.getElementById(`${editorType}-token-breakdown-container`);
-    if (!container) {
-        console.error(`Token breakdown container not found for ${editorType}`);
-        return;
-    }
+    if (!container) return;
 
     const current_post_text = editorInstance.value();
     let selected_persona_id = null;
     const personaSelectElement = document.getElementById('llm-persona-select');
     if (personaSelectElement && personaSelectElement.value && personaSelectElement.value !== "0" && personaSelectElement.value !== "") {
-        // Basic check: is the persona selector visible and has a valid selection?
-        // More complex logic might be needed if the selector's relevance depends heavily on editorType/context.
         if (personaSelectElement.offsetParent !== null) {
             selected_persona_id = parseInt(personaSelectElement.value, 10);
         }
     }
 
     const attachments_text = cachedAttachmentsContent[editorType] ? cachedAttachmentsContent[editorType].text : "";
-
-    // Determine parent_post_id based on editorType
     let parent_post_id = null;
     if (editorType === 'reply') {
-        const parentPostIdElement = document.getElementById('reply-parent-post-id'); // Assumed ID
+        const parentPostIdElement = document.getElementById('reply-parent-post-id');
         if (parentPostIdElement && parentPostIdElement.value) {
             parent_post_id = parseInt(parentPostIdElement.value, 10);
-            if (isNaN(parent_post_id)) parent_post_id = null; // Ensure it's null if parsing fails
+            if (isNaN(parent_post_id)) parent_post_id = null;
         }
     }
-    // For 'new-topic', parent_post_id remains null, which is correct.
-
-    // For logging/debugging in backend if needed
     const client_request_id = `${editorType}-${Date.now()}`;
 
     try {
@@ -376,8 +505,6 @@ async function updateTokenBreakdown(editorInstance, editorType) {
             parent_post_id: parent_post_id,
             request_id: client_request_id
         };
-        // console.log("Token estimation request body:", requestBody);
-
         const response = await fetch('/api/prompts/estimate_tokens', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -387,51 +514,31 @@ async function updateTokenBreakdown(editorInstance, editorType) {
         if (!response.ok) {
             const errorData = await response.json();
             console.error('Error fetching token breakdown:', errorData.error || response.statusText);
-            // Display a simplified error in the breakdown area
             document.getElementById(`${editorType}-token-total-estimated`).textContent = 'Error';
             document.getElementById(`${editorType}-token-model-context-window`).textContent = 'N/A';
             return;
         }
 
         const data = await response.json();
-
-        // Update DOM elements
-        // These are the raw value of the current text in editor, and persona prompt string
         document.getElementById(`${editorType}-token-post-content`).textContent = `~${data.post_content_tokens}`;
         document.getElementById(`${editorType}-token-persona-name`).textContent = data.persona_name || "Default";
         document.getElementById(`${editorType}-token-persona-prompt`).textContent = `~${data.persona_prompt_tokens}`;
-
-        // Attachments tokens as calculated by backend (based on text sent by client)
         document.getElementById(`${editorType}-token-attachments`).textContent = `~${data.attachments_tokens}`;
-
-        // Chat History: Use the combined field from backend which sums primary, ambient, and their headers.
         document.getElementById(`${editorType}-token-chat-history`).textContent = `~${data.chat_history_tokens}`;
-
-        // System prompt is currently 0 from backend, persona prompt covers it.
-        // If there's a dedicated display for system_prompt_tokens and it's always 0, it can be hidden or explicitly shown as 0.
         const systemPromptEl = document.getElementById(`${editorType}-token-system-prompt`);
-        if (systemPromptEl) systemPromptEl.textContent = `~${data.system_prompt_tokens}`; // Will show ~0
-
-        // Display individual components if elements exist (optional, for detailed view)
-        // Example: if you add <span id="[editorType]-token-primary-history"></span> in HTML
+        if (systemPromptEl) systemPromptEl.textContent = `~${data.system_prompt_tokens}`;
         const primaryHistEl = document.getElementById(`${editorType}-token-primary-history`);
         if (primaryHistEl) primaryHistEl.textContent = `~${data.primary_chat_history_tokens}`;
-
         const ambientHistEl = document.getElementById(`${editorType}-token-ambient-history`);
         if (ambientHistEl) ambientHistEl.textContent = `~${data.ambient_chat_history_tokens}`;
-
         const headersEl = document.getElementById(`${editorType}-token-headers`);
         if (headersEl) headersEl.textContent = `~${data.headers_tokens}`;
-
         const finalInstructionEl = document.getElementById(`${editorType}-token-final-instruction`);
         if (finalInstructionEl) finalInstructionEl.textContent = `~${data.final_instruction_tokens}`;
-
-        // Totals and Model Info
         document.getElementById(`${editorType}-token-total-estimated`).textContent = `~${data.total_estimated_tokens}`;
         document.getElementById(`${editorType}-token-model-context-window`).textContent = data.model_context_window || "N/A";
         document.getElementById(`${editorType}-token-model-name`).textContent = data.model_name || "default";
 
-        // Update the token count in the status bar
         const easyMDEContainer = editorInstance.element.parentElement;
         if (easyMDEContainer) {
             const statusBarTokenCount = easyMDEContainer.querySelector(`.${editorType}-statusbar-token-count`);
@@ -440,23 +547,20 @@ async function updateTokenBreakdown(editorInstance, editorType) {
             }
         }
 
-        // Update visual bar
         const visualBar = document.getElementById(`${editorType}-token-visual-bar`);
         let percentage = 0;
         if (data.model_context_window && data.model_context_window > 0) {
             percentage = (data.total_estimated_tokens / data.model_context_window) * 100;
         }
-        percentage = Math.max(0, Math.min(100, percentage)); // Clamp between 0 and 100
-
+        percentage = Math.max(0, Math.min(100, percentage));
         visualBar.style.width = percentage + '%';
         if (percentage >= 90) {
-            visualBar.style.backgroundColor = '#D32F2F'; // Red
+            visualBar.style.backgroundColor = '#D32F2F';
         } else if (percentage >= 70) {
-            visualBar.style.backgroundColor = '#FBC02D'; // Yellow
+            visualBar.style.backgroundColor = '#FBC02D';
         } else {
-            visualBar.style.backgroundColor = '#4CAF50'; // Green
+            visualBar.style.backgroundColor = '#4CAF50';
         }
-
     } catch (error) {
         console.error('Failed to send request for token breakdown:', error);
         document.getElementById(`${editorType}-token-total-estimated`).textContent = 'Error';
@@ -464,36 +568,19 @@ async function updateTokenBreakdown(editorInstance, editorType) {
     }
 }
 
-// Function to set up token breakdown display for an editor instance
 function initializeTokenBreakdownDisplay(editorInstance, editorType) {
-    if (!editorInstance || !editorInstance.codemirror) {
-        console.warn(`Editor instance or CodeMirror not found for ${editorType}. Token breakdown display disabled.`);
-        return;
-    }
-
+    if (!editorInstance || !editorInstance.codemirror) return;
     const breakdownContainer = document.getElementById(`${editorType}-token-breakdown-container`);
-    if (!breakdownContainer) {
-        console.warn(`Token breakdown container not found for ${editorType}.`);
-        return;
-    }
-
-    // The EasyMDEContainer is the parent of both the editor and the status bar.
+    if (!breakdownContainer) return;
     const easyMDEContainer = editorInstance.element.parentElement;
-    if (!easyMDEContainer) {
-        console.error(`Could not find EasyMDEContainer for ${editorType}.`);
-        return;
-    }
+    if (!easyMDEContainer) return;
 
     const setupEventListeners = (statusBar) => {
         const tokenControl = statusBar.querySelector(`.${editorType}-token-summary`);
-        if (!tokenControl) {
-            console.error(`Token summary control not found in status bar for ${editorType}.`);
-            return;
-        }
+        if (!tokenControl) return;
 
-        // Add click listener to the control
         tokenControl.addEventListener('click', (event) => {
-            event.stopPropagation(); // Prevent any other editor events from firing
+            event.stopPropagation();
             const isExpanded = breakdownContainer.classList.toggle('expanded');
             const toggleButton = tokenControl.querySelector('.toggle-button');
             if (toggleButton) {
@@ -501,15 +588,11 @@ function initializeTokenBreakdownDisplay(editorInstance, editorType) {
             }
         });
 
-        // Debounced update function specific to this editor instance
         const debouncedTokenBreakdownUpdate = debounce(() => {
             updateTokenBreakdown(editorInstance, editorType);
-        }, 750); // 750ms debounce delay
+        }, 750);
 
-        // Listen for changes in the editor
         editorInstance.codemirror.on('change', debouncedTokenBreakdownUpdate);
-
-        // Also listen for changes on persona selector and attachment input
         const personaSelector = document.getElementById('llm-persona-select');
         if (personaSelector) {
             personaSelector.addEventListener('change', () => updateTokenBreakdown(editorInstance, editorType));
@@ -521,30 +604,12 @@ function initializeTokenBreakdownDisplay(editorInstance, editorType) {
             attachmentInput.addEventListener('change', async () => {
                 const files = attachmentInput.files;
                 let combinedText = "";
-                let filesHash = ""; // Simple hash: concat names and sizes
-
+                let filesHash = "";
                 if (files && files.length > 0) {
                     const textFilePromises = [];
                     const fileDetailsForHash = [];
-
-                    const plainTextMimeTypes = [
-                        'text/plain', 'text/markdown', 'text/csv', 'application/json', 'application/xml',
-                        'text/html', 'text/css', 'text/javascript', 'application/javascript',
-                        'application/x-javascript', 'text/x-python', 'application/python',
-                        'application/x-python', 'text/x-java-source', 'text/x-csrc', 'text/x-c++src',
-                        'application/rtf', 'text/richtext', 'text/yaml', 'application/yaml', 'text/x-yaml',
-                        'application/x-yaml', 'text/toml', 'application/toml', 'application/ld+json',
-                        'text/calendar', 'text/vcard', 'text/sgml', 'application/sgml', 'text/tab-separated-values',
-                        'application/xhtml+xml', 'application/rss+xml', 'application/atom+xml', 'text/x-script.python'
-                    ];
-                    const plainTextExtensions = [
-                        '.txt', '.md', '.markdown', '.csv', '.json', '.xml', '.html', '.htm', '.css', '.js',
-                        '.py', '.pyw', '.java', '.c', '.cpp', '.h', '.hpp', '.rtf', '.yaml', '.yml',
-                        '.toml', '.ini', '.cfg', '.conf', '.log', '.text', '.tex', '.tsv', '.jsonld',
-                        '.ical', '.ics', '.vcf', '.vcard', '.sgml', '.sgm', '.xhtml', '.xht', '.rss', '.atom',
-                        '.sh', '.bash', '.ps1', '.bat', '.cmd'
-                    ];
-
+                    const plainTextMimeTypes = ['text/plain', 'text/markdown', 'text/csv', 'application/json', 'application/xml', 'text/html', 'text/css', 'text/javascript', 'application/javascript', 'application/x-javascript', 'text/x-python', 'application/python', 'application/x-python', 'text/x-java-source', 'text/x-csrc', 'text/x-c++src', 'application/rtf', 'text/richtext', 'text/yaml', 'application/yaml', 'text/x-yaml', 'application/x-yaml', 'text/toml', 'application/toml', 'application/ld+json', 'text/calendar', 'text/vcard', 'text/sgml', 'application/sgml', 'text/tab-separated-values', 'application/xhtml+xml', 'application/rss+xml', 'application/atom+xml', 'text/x-script.python'];
+                    const plainTextExtensions = ['.txt', '.md', '.markdown', '.csv', '.json', '.xml', '.html', '.htm', '.css', '.js', '.py', '.pyw', '.java', '.c', '.cpp', '.h', '.hpp', '.rtf', '.yaml', '.yml', '.toml', '.ini', '.cfg', '.conf', '.log', '.text', '.tex', '.tsv', '.jsonld', '.ical', '.ics', '.vcf', '.vcard', '.sgml', '.sgm', '.xhtml', '.xht', '.rss', '.atom', '.sh', '.bash', '.ps1', '.bat', '.cmd'];
                     for (const file of files) {
                         fileDetailsForHash.push(`${file.name}_${file.size}`);
                         let isTextFile = false;
@@ -559,7 +624,6 @@ function initializeTokenBreakdownDisplay(editorInstance, editorType) {
                                 }
                             }
                         }
-
                         if (isTextFile) {
                             textFilePromises.push(file.text());
                         }
@@ -573,26 +637,19 @@ function initializeTokenBreakdownDisplay(editorInstance, editorType) {
                     }
                     filesHash = fileDetailsForHash.join('|');
                 }
-
                 cachedAttachmentsContent[editorType] = { text: combinedText, filesHash: filesHash };
                 updateTokenBreakdown(editorInstance, editorType);
             });
         }
-
-        // Initial breakdown update, now that we know the UI is ready
         updateTokenBreakdown(editorInstance, editorType);
     };
 
-    // Use a MutationObserver to wait for the status bar to be added to the DOM.
     const observer = new MutationObserver((mutationsList, obs) => {
         for (const mutation of mutationsList) {
             if (mutation.type === 'childList') {
                 for (const node of mutation.addedNodes) {
-                    // The status bar is an element with the class 'editor-statusbar'
                     if (node.nodeType === Node.ELEMENT_NODE && node.classList.contains('editor-statusbar')) {
-                        // Found it! Now we can set up our event listeners.
                         setupEventListeners(node);
-                        // We're done, so disconnect the observer.
                         obs.disconnect();
                         return;
                     }
@@ -601,10 +658,7 @@ function initializeTokenBreakdownDisplay(editorInstance, editorType) {
         }
     });
 
-    // Start observing the EasyMDE container for changes to its direct children.
     observer.observe(easyMDEContainer, { childList: true, subtree: false });
-
-    // As a fallback, check if the status bar is already there (e.g., if the script runs late)
     const existingStatusBar = easyMDEContainer.querySelector('.editor-statusbar');
     if (existingStatusBar) {
         setupEventListeners(existingStatusBar);

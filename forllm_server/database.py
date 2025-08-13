@@ -514,9 +514,98 @@ def init_db():
         print(f"Error creating/verifying llm_model_metadata table: {e}")
         # No rollback needed here usually for CREATE IF NOT EXISTS, but good practice if part of larger transaction block
         # db.rollback()
+ 
+    # --- File Tagging Feature Tables (NEW) ---
+    print("Verifying/Creating File Tagging Feature tables...")
+    try:
+        # Table to store user-defined folders to index
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS indexed_folders (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                folder_path TEXT NOT NULL UNIQUE,
+                is_recursive BOOLEAN NOT NULL DEFAULT TRUE,
+                use_global_filters BOOLEAN NOT NULL DEFAULT TRUE,
+                custom_blocklist TEXT, -- JSON array of strings
+                custom_allowlist TEXT, -- JSON array of strings
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+        """)
+
+        # Table to cache the file index for performance
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS file_index_cache (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                file_path TEXT NOT NULL UNIQUE,
+                filename TEXT NOT NULL,
+                last_indexed TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+        """)
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_file_index_cache_filename ON file_index_cache(filename)')
+
+
+        # Table for file filtering rules
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS file_filter_rules (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                rule_type TEXT NOT NULL, -- 'global_blocklist', 'global_allowlist'
+                extension TEXT NOT NULL UNIQUE,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+        """)
+        
+        # Add default blocklist
+        default_blocklist = [
+            '.exe', '.dll', '.so', '.a', '.o', '.lib', '.pyc', '.pyo', '.pyd',
+            '.jar', '.class', '.war', '.ear',
+            '.com', '.bat', '.sh', '.cmd', '.ps1',
+            '.msi', '.dmg', '.pkg',
+            '.zip', '.tar', '.gz', '.bz2', '.7z', '.rar', '.xz',
+            '.iso', '.img', '.vhd', '.vhdx',
+            '.png', '.jpg', '.jpeg', '.gif', '.bmp', '.tiff', '.svg', '.webp',
+            '.mp3', '.wav', '.ogg', '.flac', '.aac',
+            '.mp4', '.mkv', '.avi', '.mov', '.wmv', '.flv',
+
+            '.pdf', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx',
+            '.odt', '.ods', '.odp',
+            '.db', '.sqlite', '.sqlite3', '.db-journal', '.db-wal', '.db-shm',
+            '.log', '.bak', '.tmp', '.temp',
+            '.DS_Store', 'Thumbs.db', '.git', '.svn', '.hg'
+        ]
+        for ext in default_blocklist:
+            cursor.execute("INSERT OR IGNORE INTO file_filter_rules (rule_type, extension) VALUES (?, ?)", ('global_blocklist', ext))
+
+        # Add 'tagged_files_in_content' to 'posts' table if it doesn't exist
+        cursor.execute("PRAGMA table_info(posts)")
+        columns = [col[1] for col in cursor.fetchall()]
+        if 'tagged_files_in_content' not in columns:
+            print("Updating posts table: Adding 'tagged_files_in_content' column...")
+            cursor.execute("ALTER TABLE posts ADD COLUMN tagged_files_in_content TEXT") # JSON array of file paths
+            print("'tagged_files_in_content' column added to posts.")
+
+        db.commit()
+        print("File Tagging Feature tables verified/created.")
+
+        # --- Migration for new columns in indexed_folders ---
+        cursor.execute("PRAGMA table_info(indexed_folders)")
+        columns = [col[1] for col in cursor.fetchall()]
+        if 'use_global_filters' not in columns:
+            print("Updating indexed_folders table: Adding 'use_global_filters' column...")
+            cursor.execute("ALTER TABLE indexed_folders ADD COLUMN use_global_filters BOOLEAN NOT NULL DEFAULT TRUE")
+        if 'custom_blocklist' not in columns:
+            print("Updating indexed_folders table: Adding 'custom_blocklist' column...")
+            cursor.execute("ALTER TABLE indexed_folders ADD COLUMN custom_blocklist TEXT")
+        if 'custom_allowlist' not in columns:
+            print("Updating indexed_folders table: Adding 'custom_allowlist' column...")
+            cursor.execute("ALTER TABLE indexed_folders ADD COLUMN custom_allowlist TEXT")
+        
+        db.commit()
+
+    except sqlite3.Error as e:
+        print(f"Error creating/verifying File Tagging Feature tables: {e}")
+        db.rollback()
+
 
     db.close()
-
 def soft_delete_post(post_id):
     """
     Soft deletes a post by updating its content and deleting associated attachments.
@@ -549,7 +638,8 @@ def soft_delete_post(post_id):
             cursor.execute("""
                 UPDATE posts
                 SET content = '[Post Deleted]',
-                    tagged_personas_in_content = NULL
+                    tagged_personas_in_content = NULL,
+                    tagged_files_in_content = NULL
                 WHERE post_id = ?
             """, (post_id,))
 
@@ -564,14 +654,15 @@ def soft_delete_post(post_id):
         current_app.logger.error(f"Database error in soft_delete_post for post {post_id}: {e}")
         return False
 
-def update_post(post_id, content, title=None, tagged_persona_ids=None):
+def update_post(post_id, content, title=None, tagged_persona_ids=None, tagged_file_paths=None):
     """
-    Updates a post's content and its list of tagged personas.
+    Updates a post's content and its list of tagged personas and files.
     If a title is also provided, it updates the topic title, implying it's a root post.
     """
     db = get_db()
     try:
         with db:
+            import json
             cursor = db.cursor()
             
             # Prepare the update query
@@ -579,9 +670,12 @@ def update_post(post_id, content, title=None, tagged_persona_ids=None):
             params = [content]
 
             if tagged_persona_ids is not None:
-                import json
                 update_fields.append("tagged_personas_in_content = ?")
                 params.append(json.dumps(sorted(list(tagged_persona_ids))))
+            
+            if tagged_file_paths is not None:
+                update_fields.append("tagged_files_in_content = ?")
+                params.append(json.dumps(sorted(list(tagged_file_paths))))
 
             params.append(post_id)
             

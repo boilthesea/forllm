@@ -17,6 +17,8 @@ from forllm_server.llm_processing import ( # Import refactored helpers and const
 )
 import sqlite3
 import logging
+import tkinter as tk
+from tkinter import filedialog
 
 utility_bp = Blueprint('utility_bp', __name__)
 logger = logging.getLogger(__name__)
@@ -221,3 +223,28 @@ def estimate_tokens_route():
     except Exception as e:
         logger.error(f"Error in /api/prompts/estimate_tokens: {e}", exc_info=True)
         return jsonify({'error': "An unexpected error occurred. Please check logs."}), 500
+
+@utility_bp.route('/api/utils/browse-folder', methods=['GET'])
+def browse_folder():
+    """
+    Opens a native OS dialog to select a folder.
+    This is intended to be called from the settings page to allow the user
+    to select a directory on the server's local filesystem.
+    """
+    try:
+        root = tk.Tk()
+        root.withdraw()  # Hide the main Tkinter window
+        folder_path = filedialog.askdirectory(
+            title="Select a Folder to Index"
+        )
+        root.destroy() # Clean up the Tkinter instance
+
+        if folder_path:
+            # Return the selected path, normalized to use forward slashes
+            return jsonify({"path": folder_path.replace('\\', '/')})
+        else:
+            # User cancelled the dialog
+            return jsonify({"path": ""})
+    except Exception as e:
+        logger.error(f"Error opening folder browse dialog: {e}", exc_info=True)
+        return jsonify({'error': 'Failed to open folder dialog. Check server logs. This may happen if the server is in an environment without a graphical interface.'}), 500
