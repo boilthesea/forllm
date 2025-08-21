@@ -1700,3 +1700,38 @@ def save_generated_persona(persona_name, prompt_instructions, generation_source,
         if db:
             db.rollback()
         return None
+
+def get_active_instructions_for_context(subforum_id=None):
+    """
+    Fetches all active default instructions for a given context.
+    Returns a dictionary with 'global' and 'subforum' instruction lists.
+    """
+    db = get_db()
+    results = {
+        "global": [],
+        "subforum": []
+    }
+
+    try:
+        # Get global defaults
+        cursor = db.execute(
+            "SELECT id, name FROM custom_instructions WHERE is_global_default = 1 ORDER BY priority, name"
+        )
+        results["global"] = [dict(row) for row in cursor.fetchall()]
+
+        # Get subforum-specific defaults if subforum_id is provided
+        if subforum_id:
+            cursor = db.execute("""
+                SELECT ci.id, ci.name
+                FROM custom_instructions ci
+                JOIN subforum_instruction_defaults sid ON ci.id = sid.instruction_id
+                WHERE sid.subforum_id = ?
+                ORDER BY ci.priority, ci.name
+            """, (subforum_id,))
+            results["subforum"] = [dict(row) for row in cursor.fetchall()]
+            
+        return results
+    except sqlite3.Error as e:
+        print(f"Database error in get_active_instructions_for_context: {e}")
+        # In case of error, return the empty structure
+        return results

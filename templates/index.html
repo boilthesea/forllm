@@ -254,8 +254,11 @@
                             <hr>
                             <p><strong>Total Estimated: <span id="new-topic-token-total-estimated">~0</span> / <span id="new-topic-token-model-context-window">N/A</span> tokens (for <span id="new-topic-token-model-name">model</span>)</strong></p>
                             <div id="new-topic-token-visual-bar-container" style="background-color: #eee; height: 20px; border-radius: 5px; margin-top: 5px;">
-                                <div id="new-topic-token-visual-bar" style="width: 0%; height: 100%; background-color: #4CAF50; border-radius: 5px; transition: width 0.3s ease, background-color 0.3s ease;"></div>
+                                <div id="new-topic-visual-bar" style="width: 0%; height: 100%; background-color: #4CAF50; border-radius: 5px; transition: width 0.3s ease, background-color 0.3s ease;"></div>
                             </div>
+                        </div>
+                        <div id="new-topic-instruction-breakdown-container" class="instruction-breakdown-container">
+                            <!-- Instruction breakdown will be loaded here -->
                         </div>
                         <!-- File attachment input for new topics -->
                         <label for="new-topic-attachment-input" class="form-label">Attachments (plain text only):</label>
@@ -299,6 +302,9 @@
                             <div id="reply-token-visual-bar-container" style="background-color: #eee; height: 20px; border-radius: 5px; margin-top: 5px;">
                                 <div id="reply-token-visual-bar" style="width: 0%; height: 100%; background-color: #4CAF50; border-radius: 5px; transition: width 0.3s ease, background-color 0.3s ease;"></div>
                             </div>
+                        </div>
+                        <div id="reply-instruction-breakdown-container" class="instruction-breakdown-container">
+                            <!-- Instruction breakdown will be loaded here -->
                         </div>
                          <!-- File attachment input for replies -->
                          <label for="reply-attachment-input" class="form-label">Attachments (plain text only):</label>

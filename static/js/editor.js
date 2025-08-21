@@ -52,6 +52,13 @@ function createEditorConfig(editorType) {
                     el.innerHTML = ` | <span class="toggle-button" title="Toggle Token Breakdown">[+]</span> Tokens: <span class="total-token-count ${editorType}-statusbar-token-count">~0</span>`;
                 },
                 onUpdate: () => {}
+            },
+            {
+                className: `instruction-summary-control ${editorType}-instruction-summary`,
+                defaultValue: (el) => {
+                    el.innerHTML = ` | <span class="toggle-button" title="Toggle Instructions Breakdown">[+]</span> Instructs: <span class="active-instructions-list ${editorType}-statusbar-instruct-list"></span>`;
+                },
+                onUpdate: () => {}
             }
         ]
     };
@@ -343,7 +350,7 @@ export function createEditor(textAreaElement, editorType, initialValue = '') {
 
     const editor = new EasyMDE(config);
     initializeEditorTagging(editor);
-    initializeTokenBreakdownDisplay(editor, editorType);
+    initializeEditorStatusBars(editor, editorType);
 
     editor.codemirror.on("refresh", function(cm) {
         highlightTags(cm);
@@ -467,31 +474,120 @@ async function updateTokenBreakdown(editorInstance, editorType) {
     }
 }
 
-function initializeTokenBreakdownDisplay(editorInstance, editorType) {
+async function updateInstructionsDisplay(editorInstance, editorType) {
+    if (!editorInstance) return;
+
+    const breakdownContainer = document.getElementById(`${editorType}-instruction-breakdown-container`);
+    if (!breakdownContainer) {
+        console.warn(`Instruction breakdown container not found for editor type: ${editorType}`);
+        return;
+    }
+
+    // Get context
+    const { currentSubforumId, currentSubforumName } = await import('./forum.js');
+    const subforumId = currentSubforumId;
+
+    // Get tagged instructions from editor
+    const content = editorInstance.value();
+    const taggedInstructionRegex = /!\\[([^\\]+)\\]\((\\d+)\)/g;
+    const taggedSetRegex = /!set:\\[([^\\]+)\\]\((\\d+)\)/g;
+    let match;
+    const tagged = [];
+
+    while ((match = taggedInstructionRegex.exec(content)) !== null) {
+        tagged.push({ name: match[1], id: match[2], type: 'instruction' });
+    }
+    while ((match = taggedSetRegex.exec(content)) !== null) {
+        tagged.push({ name: match[1], id: match[2], type: 'set' });
+    }
+
+    try {
+        // Get default instructions from API
+        const defaultInstructions = await apiRequest(`/api/instructions/active-for-context?subforum_id=${subforumId || ''}`);
+
+        // --- Update UI ---
+        const { global: globalDefaults, subforum: subforumDefaults } = defaultInstructions;
+
+        // Clear previous content
+        breakdownContainer.innerHTML = '';
+
+        // Populate breakdown
+        if (globalDefaults.length > 0) {
+            const globalDiv = document.createElement('div');
+            globalDiv.innerHTML = `<strong>Global:</strong> ${globalDefaults.map(i => `<span>!${i.name}</span>`).join(', ')}`;
+            breakdownContainer.appendChild(globalDiv);
+        }
+        if (subforumDefaults.length > 0) {
+            const subforumDiv = document.createElement('div');
+            const subforumNameText = document.getElementById('current-subforum-name')?.textContent || 'Subforum';
+            subforumDiv.innerHTML = `<strong>${subforumNameText}:</strong> ${subforumDefaults.map(i => `<span>!${i.name}</span>`).join(', ')}`;
+            breakdownContainer.appendChild(subforumDiv);
+        }
+        if (tagged.length > 0) {
+            const taggedDiv = document.createElement('div');
+            taggedDiv.innerHTML = `<strong>Tagged:</strong> ${tagged.map(i => `<span>!${i.type === 'set' ? 'set:' : ''}${i.name}</span>`).join(', ')}`;
+            breakdownContainer.appendChild(taggedDiv);
+        }
+
+        // Update the collapsed status bar view
+        const allActive = [...globalDefaults, ...subforumDefaults, ...tagged];
+        const uniqueNames = [...new Set(allActive.map(i => `!${i.type === 'set' ? 'set:' : ''}${i.name}`))];
+
+        const easyMDEContainer = editorInstance.element.parentElement;
+        const statusBarList = easyMDEContainer.querySelector(`.${editorType}-statusbar-instruct-list`);
+        if (statusBarList) {
+            statusBarList.textContent = uniqueNames.slice(0, 3).join(', ') + (uniqueNames.length > 3 ? '...' : '');
+            statusBarList.title = uniqueNames.join(', ');
+        }
+
+    } catch (error) {
+        console.error('Failed to update instructions display:', error);
+        const easyMDEContainer = editorInstance.element.parentElement;
+        const statusBarList = easyMDEContainer.querySelector(`.${editorType}-statusbar-instruct-list`);
+        if (statusBarList) {
+            statusBarList.textContent = 'Error';
+        }
+    }
+}
+
+function initializeEditorStatusBars(editorInstance, editorType) {
     if (!editorInstance || !editorInstance.codemirror) return;
-    const breakdownContainer = document.getElementById(`${editorType}-token-breakdown-container`);
-    if (!breakdownContainer) return;
-    const easyMDEContainer = editorInstance.element.parentElement;
-    if (!easyMDEContainer) return;
 
     const setupEventListeners = (statusBar) => {
+        // --- Token Breakdown Logic ---
+        const tokenBreakdownContainer = document.getElementById(`${editorType}-token-breakdown-container`);
         const tokenControl = statusBar.querySelector(`.${editorType}-token-summary`);
-        if (!tokenControl) return;
+        if (tokenControl && tokenBreakdownContainer) {
+            tokenControl.addEventListener('click', (event) => {
+                event.stopPropagation();
+                const isExpanded = tokenBreakdownContainer.classList.toggle('expanded');
+                const toggleButton = tokenControl.querySelector('.toggle-button');
+                if (toggleButton) toggleButton.textContent = isExpanded ? '[-]' : '[+]';
+            });
+        }
 
-        tokenControl.addEventListener('click', (event) => {
-            event.stopPropagation();
-            const isExpanded = breakdownContainer.classList.toggle('expanded');
-            const toggleButton = tokenControl.querySelector('.toggle-button');
-            if (toggleButton) {
-                toggleButton.textContent = isExpanded ? '[-]' : '[+]';
-            }
+        // --- Instruction Breakdown Logic ---
+        const instructionBreakdownContainer = document.getElementById(`${editorType}-instruction-breakdown-container`);
+        const instructionControl = statusBar.querySelector(`.${editorType}-instruction-summary`);
+        if (instructionControl && instructionBreakdownContainer) {
+            instructionControl.addEventListener('click', (event) => {
+                event.stopPropagation();
+                const isExpanded = instructionBreakdownContainer.classList.toggle('expanded');
+                const toggleButton = instructionControl.querySelector('.toggle-button');
+                if (toggleButton) toggleButton.textContent = isExpanded ? '[-]' : '[+]';
+            });
+        }
+
+        // --- Debounced Update Calls ---
+        const debouncedTokenUpdate = debounce(() => updateTokenBreakdown(editorInstance, editorType), 750);
+        const debouncedInstructionUpdate = debounce(() => updateInstructionsDisplay(editorInstance, editorType), 250);
+
+        editorInstance.codemirror.on('change', () => {
+            debouncedTokenUpdate();
+            debouncedInstructionUpdate();
         });
 
-        const debouncedTokenBreakdownUpdate = debounce(() => {
-            updateTokenBreakdown(editorInstance, editorType);
-        }, 750);
-
-        editorInstance.codemirror.on('change', debouncedTokenBreakdownUpdate);
+        // --- External Event Listeners ---
         const personaSelector = document.getElementById('llm-persona-select');
         if (personaSelector) {
             personaSelector.addEventListener('change', () => updateTokenBreakdown(editorInstance, editorType));
@@ -540,8 +636,20 @@ function initializeTokenBreakdownDisplay(editorInstance, editorType) {
                 updateTokenBreakdown(editorInstance, editorType);
             });
         }
+        
+        // Listen for subforum changes to update instructions
+        document.addEventListener('subforumChanged', () => {
+            updateInstructionsDisplay(editorInstance, editorType);
+        });
+
+        // Initial updates
         updateTokenBreakdown(editorInstance, editorType);
+        updateInstructionsDisplay(editorInstance, editorType);
     };
+
+    // --- Observer to wait for status bar creation ---
+    const easyMDEContainer = editorInstance.element.parentElement;
+    if (!easyMDEContainer) return;
 
     const observer = new MutationObserver((mutationsList, obs) => {
         for (const mutation of mutationsList) {

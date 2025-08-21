@@ -1,5 +1,5 @@
 from flask import Blueprint, request, jsonify
-from ..database import get_db
+from ..database import get_db, get_active_instructions_for_context
 
 custom_instruction_routes = Blueprint('custom_instruction_routes', __name__)
 
@@ -42,7 +42,7 @@ def get_instructions():
         inst['subforum_defaults'] = [dict(row) for row in cursor.fetchall()]
     return jsonify(instructions)
 
-@custom_instruction_routes.route('/api/custom-instructions/&lt;int:instruction_id&gt;', methods=['PUT'])
+@custom_instruction_routes.route('/api/custom-instructions/<int:instruction_id>', methods=['PUT'])
 def update_instruction(instruction_id):
     data = request.get_json()
     name = data.get('name')
@@ -66,7 +66,7 @@ def update_instruction(instruction_id):
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
-@custom_instruction_routes.route('/api/custom-instructions/&lt;int:instruction_id&gt;', methods=['DELETE'])
+@custom_instruction_routes.route('/api/custom-instructions/<int:instruction_id>', methods=['DELETE'])
 def delete_instruction(instruction_id):
     db = get_db()
     try:
@@ -78,17 +78,33 @@ def delete_instruction(instruction_id):
 
 @custom_instruction_routes.route('/api/custom-instructions/autocomplete', methods=['GET'])
 def autocomplete_instructions_and_sets():
+    """
+    Provides a list of active instructions and sets for autocomplete.
+    Filters out instructions that are already active by default in the given context.
+    """
+    subforum_id = request.args.get('subforum_id', type=int)
     db = get_db()
-    
-    # Get instructions
+
+    # Get the IDs of instructions that are already active by default
+    active_defaults = get_active_instructions_for_context(subforum_id)
+    active_default_ids = set(item['id'] for item in active_defaults['global'])
+    active_default_ids.update(item['id'] for item in active_defaults['subforum'])
+
+    # Get all instructions
     cursor = db.execute('SELECT id, name FROM custom_instructions ORDER BY name')
-    instructions = [{'id': row['id'], 'name': row['name'], 'type': 'instruction'} for row in cursor.fetchall()]
-    
-    # Get sets
+    all_instructions = [dict(row) for row in cursor.fetchall()]
+
+    # Filter out the active defaults
+    filtered_instructions = [
+        {'id': inst['id'], 'name': inst['name'], 'type': 'instruction'}
+        for inst in all_instructions if inst['id'] not in active_default_ids
+    ]
+
+    # Get all sets (sets are never "default", so no filtering needed)
     cursor = db.execute('SELECT id, name FROM instruction_sets ORDER BY name')
     sets = [{'id': row['id'], 'name': row['name'], 'type': 'set'} for row in cursor.fetchall()]
     
-    return jsonify(instructions + sets)
+    return jsonify(filtered_instructions + sets)
 
 @custom_instruction_routes.route('/api/instruction-sets', methods=['POST'])
 def create_instruction_set():
@@ -123,7 +139,7 @@ def get_instruction_sets():
         s['instruction_ids'] = [row['instruction_id'] for row in cursor.fetchall()]
     return jsonify(sets)
 
-@custom_instruction_routes.route('/api/instruction-sets/&lt;int:set_id&gt;', methods=['PUT'])
+@custom_instruction_routes.route('/api/instruction-sets/<int:set_id>', methods=['PUT'])
 def update_instruction_set(set_id):
     data = request.get_json()
     name = data.get('name')
@@ -145,7 +161,7 @@ def update_instruction_set(set_id):
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
-@custom_instruction_routes.route('/api/instruction-sets/&lt;int:set_id&gt;', methods=['DELETE'])
+@custom_instruction_routes.route('/api/instruction-sets/<int:set_id>', methods=['DELETE'])
 def delete_instruction_set(set_id):
     db = get_db()
     try:
@@ -154,7 +170,7 @@ def delete_instruction_set(set_id):
         return jsonify({'message': 'Instruction set deleted successfully.'})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
-@custom_instruction_routes.route('/api/custom-instructions/&lt;int:instruction_id&gt;/subforum-defaults', methods=['POST'])
+@custom_instruction_routes.route('/api/custom-instructions/<int:instruction_id>/subforum-defaults', methods=['POST'])
 def add_subforum_default(instruction_id):
     data = request.get_json()
     subforum_id = data.get('subforum_id')
@@ -172,7 +188,7 @@ def add_subforum_default(instruction_id):
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
-@custom_instruction_routes.route('/api/custom-instructions/&lt;int:instruction_id&gt;/subforum-defaults/&lt;int:subforum_id&gt;', methods=['DELETE'])
+@custom_instruction_routes.route('/api/custom-instructions/<int:instruction_id>/subforum-defaults/<int:subforum_id>', methods=['DELETE'])
 def remove_subforum_default(instruction_id, subforum_id):
     db = get_db()
     try:
@@ -181,3 +197,9 @@ def remove_subforum_default(instruction_id, subforum_id):
         return jsonify({'message': 'Subforum default removed successfully.'})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+@custom_instruction_routes.route('/api/instructions/active-for-context', methods=['GET'])
+def get_active_instructions_for_context_route():
+    subforum_id = request.args.get('subforum_id', type=int)
+    instructions = get_active_instructions_for_context(subforum_id)
+    return jsonify(instructions)
