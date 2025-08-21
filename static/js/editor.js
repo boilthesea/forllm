@@ -489,14 +489,16 @@ async function updateInstructionsDisplay(editorInstance, editorType) {
 
     // Get tagged instructions from editor
     const content = editorInstance.value();
-    const taggedInstructionRegex = /!\\[([^\\]+)\\]\((\\d+)\)/g;
-    const taggedSetRegex = /!set:\\[([^\\]+)\\]\((\\d+)\)/g;
+    const taggedInstructionRegex = /!\[([^\]]+)\]\((\d+)\)/g;
+    const taggedSetRegex = /!set:\[([^\]]+)\]\((\d+)\)/g;
     let match;
     const tagged = [];
 
     while ((match = taggedInstructionRegex.exec(content)) !== null) {
         tagged.push({ name: match[1], id: match[2], type: 'instruction' });
     }
+    // Reset regex from previous loop
+    taggedSetRegex.lastIndex = 0;
     while ((match = taggedSetRegex.exec(content)) !== null) {
         tagged.push({ name: match[1], id: match[2], type: 'set' });
     }
