@@ -443,6 +443,47 @@ def process_llm_request(request_details, flask_app):
         prompt_parts = []
         if attachments_string: prompt_parts.append(attachments_string)
         if tagged_files_string: prompt_parts.append(tagged_files_string)
+        
+        # --- Custom Instructions Logic ---
+        custom_instructions_string = ""
+        try:
+            # 1. Get tagged instructions and sets from the post
+            cursor.execute("SELECT tagged_custom_instructions_in_content, tagged_instruction_sets_in_content FROM posts WHERE post_id = ?", (post_id,))
+            post_tags = cursor.fetchone()
+            tagged_instruction_ids = set(json.loads(post_tags['tagged_custom_instructions_in_content'] or '[]'))
+            tagged_set_ids = set(json.loads(post_tags['tagged_instruction_sets_in_content'] or '[]'))
+
+            # 2. Expand sets
+            if tagged_set_ids:
+                placeholders = ','.join('?' for _ in tagged_set_ids)
+                cursor.execute(f"SELECT instruction_id FROM instruction_set_items WHERE set_id IN ({placeholders})", list(tagged_set_ids))
+                for row in cursor.fetchall():
+                    tagged_instruction_ids.add(row['instruction_id'])
+
+            # 3. Get subforum defaults
+            cursor.execute("SELECT instruction_id FROM subforum_instruction_defaults WHERE subforum_id = (SELECT subforum_id FROM topics WHERE topic_id = ?)", (topic_id_for_history,))
+            for row in cursor.fetchall():
+                tagged_instruction_ids.add(row['instruction_id'])
+
+            # 4. Get global defaults
+            cursor.execute("SELECT id FROM custom_instructions WHERE is_global_default = 1")
+            for row in cursor.fetchall():
+                tagged_instruction_ids.add(row['id'])
+
+            # 5. Fetch, order, and apply
+            if tagged_instruction_ids:
+                placeholders = ','.join('?' for _ in tagged_instruction_ids)
+                cursor.execute(f"SELECT prompt_text FROM custom_instructions WHERE id IN ({placeholders}) ORDER BY priority", list(tagged_instruction_ids))
+                custom_instructions_string = "\n".join(row['prompt_text'] for row in cursor.fetchall())
+                if custom_instructions_string:
+                    custom_instructions_string += "\n\n"
+        except Exception as e:
+            logger.error(f"Request {request_id}: Error processing custom instructions: {e}")
+        
+        if custom_instructions_string:
+            prompt_parts.append(custom_instructions_string)
+        # --- End Custom Instructions Logic ---
+
         prompt_parts.append(f"{persona_instructions}\n\n")
         if formatted_ambient_history_string_final:
             prompt_parts.append(formatted_ambient_history_string_final)

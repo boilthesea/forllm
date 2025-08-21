@@ -87,6 +87,17 @@ def handle_subforums():
         # return jsonify([dict(row) for row in subforums])
         subforums_with_status = get_subforums_with_status(CURRENT_USER_ID)
         return jsonify(subforums_with_status)
+@forum_api_bp.route('/subforums/search', methods=['GET'])
+def search_subforums():
+    query = request.args.get('q', '')
+    if not query:
+        return jsonify([])
+
+    db = get_db()
+    cursor = db.cursor()
+    cursor.execute('SELECT subforum_id, name FROM subforums WHERE name LIKE ? ORDER BY name LIMIT 10', ('%' + query + '%',))
+    subforums = [dict(row) for row in cursor.fetchall()]
+    return jsonify(subforums)
 
 @forum_api_bp.route('/subforums/<int:subforum_id>/topics', methods=['GET', 'POST'])
 def handle_topics(subforum_id):
@@ -158,13 +169,22 @@ def handle_topics(subforum_id):
         tagged_files_json = json.dumps(sorted(list(set(tagged_file_paths))))
         # --- End File Tagging Logic ---
 
+        # --- Custom Instruction Tagging Logic ---
+        instruction_id_regex = re.compile(r'\[!([^\]]+)\]\((\d+)\)')
+        set_id_regex = re.compile(r'\[!set:([^\]]+)\]\((\d+)\)')
+        tagged_instruction_ids = [int(match[1]) for match in instruction_id_regex.finditer(content)]
+        tagged_set_ids = [int(match[1]) for match in set_id_regex.finditer(content)]
+        tagged_instructions_json = json.dumps(sorted(list(set(tagged_instruction_ids))))
+        tagged_sets_json = json.dumps(sorted(list(set(tagged_set_ids))))
+        # --- End Custom Instruction Tagging Logic ---
+
         try:
             cursor.execute('INSERT INTO topics (subforum_id, user_id, title) VALUES (?, ?, ?)',
                            (subforum_id, CURRENT_USER_ID, title))
             topic_id = cursor.lastrowid
             
-            cursor.execute('INSERT INTO posts (topic_id, user_id, content, tagged_personas_in_content, tagged_files_in_content) VALUES (?, ?, ?, ?, ?)',
-                           (topic_id, CURRENT_USER_ID, content, tagged_personas_json, tagged_files_json))
+            cursor.execute('INSERT INTO posts (topic_id, user_id, content, tagged_personas_in_content, tagged_files_in_content, tagged_custom_instructions_in_content, tagged_instruction_sets_in_content) VALUES (?, ?, ?, ?, ?, ?, ?)',
+                           (topic_id, CURRENT_USER_ID, content, tagged_personas_json, tagged_files_json, tagged_instructions_json, tagged_sets_json))
             post_id = cursor.lastrowid
 
             # --- Create LLM Requests for tagged personas ---
@@ -297,9 +317,18 @@ def handle_posts(topic_id):
         tagged_files_json = json.dumps(sorted(list(set(tagged_file_paths))))
         # --- End File Tagging Logic ---
 
+        # --- Custom Instruction Tagging Logic ---
+        instruction_id_regex = re.compile(r'\[!([^\]]+)\]\((\d+)\)')
+        set_id_regex = re.compile(r'\[!set:([^\]]+)\]\((\d+)\)')
+        tagged_instruction_ids = [int(match[1]) for match in instruction_id_regex.finditer(content)]
+        tagged_set_ids = [int(match[1]) for match in set_id_regex.finditer(content)]
+        tagged_instructions_json = json.dumps(sorted(list(set(tagged_instruction_ids))))
+        tagged_sets_json = json.dumps(sorted(list(set(tagged_set_ids))))
+        # --- End Custom Instruction Tagging Logic ---
+
         try:
-            cursor.execute('INSERT INTO posts (topic_id, user_id, parent_post_id, content, tagged_personas_in_content, tagged_files_in_content) VALUES (?, ?, ?, ?, ?, ?)',
-                           (topic_id, CURRENT_USER_ID, parent_post_id, content, tagged_personas_json, tagged_files_json))
+            cursor.execute('INSERT INTO posts (topic_id, user_id, parent_post_id, content, tagged_personas_in_content, tagged_files_in_content, tagged_custom_instructions_in_content, tagged_instruction_sets_in_content) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+                           (topic_id, CURRENT_USER_ID, parent_post_id, content, tagged_personas_json, tagged_files_json, tagged_instructions_json, tagged_sets_json))
             post_id = cursor.lastrowid
 
             # --- Create LLM Requests for tagged personas ---

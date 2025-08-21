@@ -605,7 +605,95 @@ def init_db():
         db.rollback()
 
 
+    # --- Custom Instructions Feature Tables (NEW) ---
+    print("Verifying/Creating Custom Instructions Feature tables...")
+    try:
+        # Table to store the custom instructions themselves
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS custom_instructions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL UNIQUE,
+                prompt_text TEXT NOT NULL,
+                priority INTEGER NOT NULL DEFAULT 0,
+                is_global_default BOOLEAN NOT NULL DEFAULT 0,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+        """)
+
+        # Table for instruction sets
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS instruction_sets (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL UNIQUE,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+        """)
+
+        # Association table for sets and instructions
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS instruction_set_items (
+                set_id INTEGER NOT NULL,
+                instruction_id INTEGER NOT NULL,
+                PRIMARY KEY (set_id, instruction_id),
+                FOREIGN KEY (set_id) REFERENCES instruction_sets(id) ON DELETE CASCADE,
+                FOREIGN KEY (instruction_id) REFERENCES custom_instructions(id) ON DELETE CASCADE
+            );
+        """)
+
+        # Association table for subforum default instructions
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS subforum_instruction_defaults (
+                subforum_id INTEGER NOT NULL,
+                instruction_id INTEGER NOT NULL,
+                PRIMARY KEY (subforum_id, instruction_id),
+                FOREIGN KEY (subforum_id) REFERENCES subforums(id) ON DELETE CASCADE,
+                FOREIGN KEY (instruction_id) REFERENCES custom_instructions(id) ON DELETE CASCADE
+            );
+        """)
+
+        # Add new columns to 'posts' table for tagged instructions and sets
+        cursor.execute("PRAGMA table_info(posts)")
+        columns = [col[1] for col in cursor.fetchall()]
+        if 'tagged_custom_instructions_in_content' not in columns:
+            print("Updating posts table: Adding 'tagged_custom_instructions_in_content' column...")
+            cursor.execute("ALTER TABLE posts ADD COLUMN tagged_custom_instructions_in_content TEXT")
+        if 'tagged_instruction_sets_in_content' not in columns:
+            print("Updating posts table: Adding 'tagged_instruction_sets_in_content' column...")
+            cursor.execute("ALTER TABLE posts ADD COLUMN tagged_instruction_sets_in_content TEXT")
+
+        db.commit()
+        print("Custom Instructions Feature tables verified/created.")
+    except sqlite3.Error as e:
+        print(f"Error creating/verifying Custom Instructions Feature tables: {e}")
+        db.rollback()
+
     db.close()
+
+def get_chat_history_settings(db_connection):
+    """
+    Fetches chat history settings from the database.
+    Returns a dictionary with settings or defaults if not found.
+    """
+    try:
+        cursor = db_connection.execute("SELECT setting_key, setting_value FROM settings WHERE setting_key LIKE 'ch_%'")
+        settings_rows = cursor.fetchall()
+        settings = {row['setting_key']: row['setting_value'] for row in settings_rows}
+
+        return {
+            'max_ambient_posts': int(settings.get('ch_max_ambient_posts', 5)),
+            'max_posts_per_sibling_branch': int(settings.get('ch_max_posts_per_sibling_branch', 2)),
+            'primary_history_budget_ratio': float(settings.get('ch_primary_history_budget_ratio', 0.7))
+        }
+    except (sqlite3.Error, ValueError) as e:
+        # In case of error (e.g., DB error, non-numeric value), return defaults
+        print(f"Error fetching chat history settings, returning defaults. Error: {e}")
+        # Consider logging this with current_app.logger if available
+        return {
+            'max_ambient_posts': 5,
+            'max_posts_per_sibling_branch': 2,
+            'primary_history_budget_ratio': 0.7
+        }
+
 def soft_delete_post(post_id):
     """
     Soft deletes a post by updating its content and deleting associated attachments.

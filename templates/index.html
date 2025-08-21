@@ -65,6 +65,7 @@
     <li id="settings-nav-llm">LLM</li>
     <li id="settings-nav-schedule">Schedule</li>
     <li id="settings-nav-personas">Personas</li>
+    <li id="settings-nav-custom-instructions">Custom Instructions</li>
   </ul>
 </nav>
 <div id="settings-general-section" class="settings-tab-section">
@@ -138,6 +139,15 @@
     <h3>Global Default Persona</h3>
     <select id="global-default-persona-select"></select>
     <button id="save-global-default-persona-btn">Save Global Default</button>
+</div>
+<div id="settings-custom-instructions-section" class="settings-tab-section" style="display:none">
+    <h2>Custom Instructions</h2>
+    <button id="add-instruction-btn">Add Instruction</button>
+    <div id="instructions-list-container"></div>
+    <hr class="modal-hr">
+    <h2>Instruction Sets</h2>
+    <button id="add-instruction-set-btn">Add Set</button>
+    <div id="instruction-sets-list-container"></div>
 </div>
         </div>
     </div>

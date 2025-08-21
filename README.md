@@ -123,6 +123,7 @@ This project is under active development. Future plans include:
 *   [ ] LLM-powered topic summarization tools.
 *   [ ] Enhanced UI for subforum expert persona generation.
 *   [ ] Image generation, inline and persona avatars (let me know what diffusion backend you prefer).
+*   [ ] Rich export functionality.
 *   [ ] 1001 other tweaks and fixes.
 
 

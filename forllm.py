@@ -20,6 +20,7 @@ from forllm_server.routes.persona_routes import persona_routes_bp # Added
 from forllm_server.routes.activity_routes import activity_bp # Added for activity page
 from forllm_server.routes.utility_routes import utility_bp # Added for utility routes
 from forllm_server.routes.file_routes import file_routes
+from forllm_server.routes.custom_instruction_routes import custom_instruction_routes
 
 # --- Flask App Initialization ---
 app = Flask(__name__, template_folder='templates', static_folder='static')
@@ -36,6 +37,7 @@ app.register_blueprint(persona_routes_bp) # Added
 app.register_blueprint(activity_bp) # Added for activity page
 app.register_blueprint(utility_bp) # Added for utility routes
 app.register_blueprint(file_routes)
+app.register_blueprint(custom_instruction_routes)
 
 
 # Register database close function
