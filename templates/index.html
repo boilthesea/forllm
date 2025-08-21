@@ -66,6 +66,7 @@
     <li id="settings-nav-schedule">Schedule</li>
     <li id="settings-nav-personas">Personas</li>
     <li id="settings-nav-custom-instructions">Custom Instructions</li>
+    <li id="settings-nav-custom-instructions">Custom Instructions</li>
   </ul>
 </nav>
 <div id="settings-general-section" class="settings-tab-section">
@@ -403,6 +404,46 @@
     </form>
     <div id="persona-versions-container" style="margin-top:16px;"></div>
   </div>
+</div>
+
+<!-- Instruction Modal -->
+<div id="instruction-modal" class="modal" style="display: none;">
+    <div class="modal-content">
+        <span class="close-btn">&times;</span>
+        <h2 id="instruction-modal-title">Add Instruction</h2>
+        <form id="instruction-form">
+            <input type="hidden" id="instruction-id-input">
+            <div class="setting-item">
+                <label for="instruction-name-input">Name:</label>
+                <input type="text" id="instruction-name-input" required>
+            </div>
+            <div class="setting-item">
+                <label for="instruction-prompt-input">Prompt Text:</label>
+                <textarea id="instruction-prompt-input" rows="6" required></textarea>
+            </div>
+            <button type="submit" id="save-instruction-btn" class="button-primary">Save</button>
+        </form>
+    </div>
+</div>
+
+<!-- Instruction Set Modal -->
+<div id="instruction-set-modal" class="modal" style="display: none;">
+    <div class="modal-content">
+        <span class="close-btn">&times;</span>
+        <h2 id="instruction-set-modal-title">Add Instruction Set</h2>
+        <form id="instruction-set-form">
+            <input type="hidden" id="instruction-set-id-input">
+            <div class="setting-item">
+                <label for="instruction-set-name-input">Set Name:</label>
+                <input type="text" id="instruction-set-name-input" required>
+            </div>
+            <div class="setting-item">
+                <label for="instruction-set-instructions-select">Instructions:</label>
+                <select id="instruction-set-instructions-select" multiple placeholder="Select instructions..."></select>
+            </div>
+            <button type="submit" id="save-instruction-set-btn" class="button-primary">Save</button>
+        </form>
+    </div>
 </div>
 
 </body>

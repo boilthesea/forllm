@@ -32,6 +32,14 @@ def get_instructions():
     db = get_db()
     cursor = db.execute('SELECT * FROM custom_instructions ORDER BY priority, name')
     instructions = [dict(row) for row in cursor.fetchall()]
+    for inst in instructions:
+        cursor = db.execute('''
+            SELECT s.subforum_id, s.name 
+            FROM subforum_instruction_defaults sid
+            JOIN subforums s ON sid.subforum_id = s.subforum_id
+            WHERE sid.instruction_id = ?
+        ''', (inst['id'],))
+        inst['subforum_defaults'] = [dict(row) for row in cursor.fetchall()]
     return jsonify(instructions)
 
 @custom_instruction_routes.route('/api/custom-instructions/&lt;int:instruction_id&gt;', methods=['PUT'])
@@ -67,7 +75,21 @@ def delete_instruction(instruction_id):
         return jsonify({'message': 'Instruction deleted successfully.'})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
-# API endpoints will be added here in the next steps.
+
+@custom_instruction_routes.route('/api/custom-instructions/autocomplete', methods=['GET'])
+def autocomplete_instructions_and_sets():
+    db = get_db()
+    
+    # Get instructions
+    cursor = db.execute('SELECT id, name FROM custom_instructions ORDER BY name')
+    instructions = [{'id': row['id'], 'name': row['name'], 'type': 'instruction'} for row in cursor.fetchall()]
+    
+    # Get sets
+    cursor = db.execute('SELECT id, name FROM instruction_sets ORDER BY name')
+    sets = [{'id': row['id'], 'name': row['name'], 'type': 'set'} for row in cursor.fetchall()]
+    
+    return jsonify(instructions + sets)
+
 @custom_instruction_routes.route('/api/instruction-sets', methods=['POST'])
 def create_instruction_set():
     data = request.get_json()
