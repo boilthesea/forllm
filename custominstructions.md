@@ -67,6 +67,21 @@
 
 **Goal:** Integrate the active instructions display into the editor status bar and make the frontend fully aware of the context.
 
+---
+
+#### **Phase 4: Bug Fixes & Refactoring [COMPLETED]**
+
+**Goal:** Resolve a critical bug causing duplicate API requests when creating instructions and sets, leading to erroneous "already exists" errors.
+
+1.  **Problem Analysis:** The root cause was identified as the `attachCustomInstructionsEventHandlers` function in `settings.js` being called repeatedly, attaching multiple listeners to the same elements.
+2.  **Solution: Event Delegation:**
+    *   The event handling logic was refactored to use a robust event delegation pattern.
+    *   All frontend logic for this feature was moved into a new dedicated file: `static/js/custom-instructions.js`.
+    *   A single set of event listeners is now attached to the `document`. These listeners capture all relevant events from the custom instructions UI and modals, delegating them to the appropriate handler based on the event target.
+    *   This ensures that event listeners are attached only once, eliminating the duplicate request bug and improving frontend performance.
+
+---
+
 1.  **Editor Status Bar UI (`editor.js`):**
     *   Following the pattern of the token counter, add a new status bar panel for "Instructions".
     *   **Collapsed View:** `Instructs: !name1, !name2, ...` (truncated with an ellipsis).
