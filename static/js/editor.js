@@ -454,6 +454,12 @@ async function updateTokenBreakdown(editorInstance, editorType) {
         }
 
         const visualBar = document.getElementById(`${editorType}-token-visual-bar`);
+        if (!visualBar) {
+            // If the visual bar doesn't exist, we're likely not on a page with an active editor.
+            // This can happen if a subforum is changed while on the settings page.
+            // Silently exit to prevent errors.
+            return;
+        }
         let percentage = 0;
         if (data.model_context_window && data.model_context_window > 0) {
             percentage = (data.total_estimated_tokens / data.model_context_window) * 100;

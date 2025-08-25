@@ -967,7 +967,11 @@ function attachCustomInstructionsEventHandlers(container, instructions, sets) {
             closeInstructionModal();
             loadCustomInstructionsData(container);
         } catch (error) {
-            alert(`Error saving instruction: ${error.message}`);
+            if (error.message.includes('already exists')) {
+                alert(`Error: ${error.message}`);
+            } else {
+                alert(`An unexpected error occurred: ${error.message}`);
+            }
         }
     });
 
@@ -1093,7 +1097,11 @@ function attachCustomInstructionsEventHandlers(container, instructions, sets) {
             closeSetModal();
             loadCustomInstructionsData(container);
         } catch (error) {
-            alert(`Error saving set: ${error.message}`);
+            if (error.message.includes('already exists')) {
+                alert(`Error: ${error.message}`);
+            } else {
+                alert(`An unexpected error occurred: ${error.message}`);
+            }
         }
     });
 

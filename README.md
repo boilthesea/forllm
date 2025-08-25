@@ -25,7 +25,7 @@ Or to put it another way, with FORLLM, you can just queue stuff. I like to run m
 *   **Flexible Scheduler:** Define exactly when your LLM processor should be active to manage hardware resources effectively.
 *   **Advanced Persona Management:** Create, edit, version, and assign detailed personas for your LLMs to adopt, giving you fine-grained control over response style and content.
 *   **Dynamic Persona Generation:** Use an LLM to help you create new, creative personas automatically from simple descriptions or based on forum topics.
-*   **Smart Chat Context:** Provides both direct conversation history and "ambient" context from other threads for more intelligent and context-aware replies.
+*   **Smart Chat Context:** Provides both direct conversation history and "ambient" context from other threads for more intelligent and context-aware replies. Truncates chat history before sending to backend for inference to preserve instructions.
 *   **Live Theme Customization:** A built-in, interactive theme creator to tailor the look and feel in real-time.
 *   **Tripane UI:** A responsive layout that allows you to view your main forum, a topic thread, and post details all on one screen for maximum productivity.
 *   **Markdown Editor:** Write posts with rich formatting, syntax highlighting, and see token estimates before you send.
@@ -108,22 +108,23 @@ This project is under active development. Future plans include:
 
 *   [x] Chained tagging @Persona1:@Persona2, persona1 replies to you, persona2 replies to persona1.
 *   [x] Edit and delete posts and topics.
-*   [ ] Custom instructions.
+*   [x] Custom instructions.
+*   [x] File tagging.
 *   [ ] Persona model over-ride.
 *   [ ] Better Firefox support.
 *   [ ] Tripane overhaul, there's much to do to fully realize the potential.
 *   [ ] Improved persona generation (functions, but needs refining).
 *   [ ] Queue improvements (show queued persona generation, delete items).
 *   [ ] Notes section.
-*   [x] File tagging.
 *   [ ] Alternate unthreaded (vbulletin style) view of posts.
-*   [ ] Direct message/live chat option.
+*   [ ] Direct message/live chat option for smaller models, quick answers.
 *   [ ] Support for more LLM backends (let me know what backends you want support for).
 *   [ ] Automated inter-persona communication and debates.
 *   [ ] LLM-powered topic summarization tools.
 *   [ ] Enhanced UI for subforum expert persona generation.
 *   [ ] Image generation, inline and persona avatars (let me know what diffusion backend you prefer).
 *   [ ] Rich export functionality.
+*   [ ] Truncated chat history summarization to preserve more context.
 *   [ ] 1001 other tweaks and fixes.
 
 
