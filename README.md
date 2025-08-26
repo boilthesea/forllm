@@ -26,6 +26,7 @@ Or to put it another way, with FORLLM, you can just queue stuff. I like to run m
 *   **Advanced Persona Management:** Create, edit, version, and assign detailed personas for your LLMs to adopt, giving you fine-grained control over response style and content.
 *   **Dynamic Persona Generation:** Use an LLM to help you create new, creative personas automatically from simple descriptions or based on forum topics.
 *   **Smart Chat Context:** Provides both direct conversation history and "ambient" context from other threads for more intelligent and context-aware replies. Truncates chat history before sending to backend for inference to preserve instructions.
+*   **Queue:** Provides an easy to access place to see exactly what prompt was sent to the backend for every request, so you know whether your persona and instructions were included or pruned. This helps debug issues, and if content you wanted was included but the model didn't respond, it might be a model issue or the backend might be truncating it, so you can adjust accordingly.
 *   **Live Theme Customization:** A built-in, interactive theme creator to tailor the look and feel in real-time.
 *   **Tripane UI:** A responsive layout that allows you to view your main forum, a topic thread, and post details all on one screen for maximum productivity.
 *   **Markdown Editor:** Write posts with rich formatting, syntax highlighting, and see token estimates before you send.

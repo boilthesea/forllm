@@ -170,10 +170,10 @@ def handle_topics(subforum_id):
         # --- End File Tagging Logic ---
 
         # --- Custom Instruction Tagging Logic ---
-        instruction_id_regex = re.compile(r'\[!([^\]]+)\]\((\d+)\)')
-        set_id_regex = re.compile(r'\[!set:([^\]]+)\]\((\d+)\)')
-        tagged_instruction_ids = [int(match[1]) for match in instruction_id_regex.finditer(content)]
-        tagged_set_ids = [int(match[1]) for match in set_id_regex.finditer(content)]
+        instruction_id_regex = re.compile(r'!\[([^\]]+)\]\((\d+)\)')
+        set_id_regex = re.compile(r'!set:\[([^\]]+)\]\((\d+)\)')
+        tagged_instruction_ids = [int(match[2]) for match in instruction_id_regex.finditer(content)]
+        tagged_set_ids = [int(match[2]) for match in set_id_regex.finditer(content)]
         tagged_instructions_json = json.dumps(sorted(list(set(tagged_instruction_ids))))
         tagged_sets_json = json.dumps(sorted(list(set(tagged_set_ids))))
         # --- End Custom Instruction Tagging Logic ---
@@ -318,10 +318,10 @@ def handle_posts(topic_id):
         # --- End File Tagging Logic ---
 
         # --- Custom Instruction Tagging Logic ---
-        instruction_id_regex = re.compile(r'\[!([^\]]+)\]\((\d+)\)')
-        set_id_regex = re.compile(r'\[!set:([^\]]+)\]\((\d+)\)')
-        tagged_instruction_ids = [int(match[1]) for match in instruction_id_regex.finditer(content)]
-        tagged_set_ids = [int(match[1]) for match in set_id_regex.finditer(content)]
+        instruction_id_regex = re.compile(r'!\[([^\]]+)\]\((\d+)\)')
+        set_id_regex = re.compile(r'!set:\[([^\]]+)\]\((\d+)\)')
+        tagged_instruction_ids = [int(match[2]) for match in instruction_id_regex.finditer(content)]
+        tagged_set_ids = [int(match[2]) for match in set_id_regex.finditer(content)]
         tagged_instructions_json = json.dumps(sorted(list(set(tagged_instruction_ids))))
         tagged_sets_json = json.dumps(sorted(list(set(tagged_set_ids))))
         # --- End Custom Instruction Tagging Logic ---

@@ -175,7 +175,7 @@ function insertTag(cm, item) {
             textToInsert = `![${item.name}](${item.id})`;
             break;
         case 'set':
-            textToInsert = `!set:[${item.name}](${item.id})`;
+            textToInsert = `![set:${item.name}](${item.id})`;
             break;
     }
 
@@ -323,7 +323,7 @@ function highlightTags(cm) {
         'cm-persona-tag': /@\[([^\]]+)\]\((\d+)\)/g,
         'cm-file-tag': /..\[#([^]]+)\]\(([^)]+)\)/g,
         'cm-instruction-tag': /!\[([^\]]+)\]\((\d+)\)/g,
-        'cm-set-tag': /!set:\[([^\]]+)\]\((\d+)\)/g
+        'cm-set-tag': /!\[set:([^\]]+)\]\((\d+)\)/g
     };
 
     const content = cm.getValue();
@@ -496,7 +496,7 @@ async function updateInstructionsDisplay(editorInstance, editorType) {
     // Get tagged instructions from editor
     const content = editorInstance.value();
     const taggedInstructionRegex = /!\[([^\]]+)\]\((\d+)\)/g;
-    const taggedSetRegex = /!set:\[([^\]]+)\]\((\d+)\)/g;
+    const taggedSetRegex = /!\[set:([^\]]+)\]\((\d+)\)/g;
     let match;
     const tagged = [];
 
