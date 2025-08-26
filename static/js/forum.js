@@ -455,6 +455,7 @@ export async function loadTopics(subforumId, subforumName) {
         currentSubforumName.textContent = subforumName;
         renderTopicList(topics);
         showSection('topic-list-section');
+        document.dispatchEvent(new CustomEvent('subforumChanged', { detail: { subforumId: currentSubforumId } }));
     } catch (error) {
         // Error logged by apiRequest
     }

@@ -9,6 +9,7 @@ import {
 import { applyDarkMode, showSection, lastVisibleSectionId, openThemeCreator } from './ui.js'; // Need applyDarkMode, showSection, and lastVisibleSectionId
 import { initThemeCreator } from './theming.js';
 import { initializeTomSelect } from './ui-helpers.js';
+import { loadCustomInstructionsData, initializeCustomInstructions } from './custom-instructions.js';
 
 // --- State Variables ---
 export let currentSettings = { // Store loaded settings
@@ -221,6 +222,7 @@ function renderContainerHTML(container) {
     <li id="settings-nav-llm">LLM</li>
     <li id="settings-nav-schedule">Schedule</li>
     <li id="settings-nav-personas">Personas</li>
+    <li id="settings-nav-custom-instructions">Custom Instructions</li>
   </ul>
 </nav>
 <div id="settings-general-section" class="settings-tab-section">
@@ -338,9 +340,22 @@ function renderContainerHTML(container) {
     <select id="global-default-persona-select"></select>
     <button id="save-global-default-persona-btn">Save Global Default</button>
 </div>
+<div id="settings-custom-instructions-section" class="settings-tab-section" style="display:none">
+    <h2>Custom Instructions</h2>
+    <button id="add-instruction-btn" class="button-primary">Add Instruction</button>
+    <div id="instructions-list-container"></div>
+    <hr class="modal-hr">
+    <!--
+    <h2>Instruction Sets</h2>
+    <button id="add-instruction-set-btn" class="button-primary">Add Set</button>
+    <div id="instruction-sets-list-container"></div>
+    -->
+</div>
 `;
     // Attach all event handlers and initialize components for this container
     attachContainerEventHandlers(container);
+    // Initialize the delegated event listeners for custom instructions ONCE
+    initializeCustomInstructions();
 }
 
 function attachContainerEventHandlers(container) {
@@ -358,6 +373,9 @@ function attachContainerEventHandlers(container) {
                         if (window.personasModule && window.personasModule.loadPersonasList) {
                             window.personasModule.loadPersonasList(container);
                         }
+                    }
+                    if (tab.id === tabId && tab.id === 'settings-custom-instructions-section') {
+                        loadCustomInstructionsData(container);
                     }
                 });
             };
@@ -788,3 +806,5 @@ export async function loadOllamaModels() {
     console.warn("loadOllamaModels() is deprecated and should not be called directly.");
     // This function is now a no-op because initializeSettings handles it.
 }
+
+// All custom instructions logic has been moved to static/js/custom-instructions.js

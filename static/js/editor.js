@@ -5,29 +5,22 @@ import { apiRequest } from './api.js';
 
 let cachedAttachmentsContent = { 'new-topic': { text: '', filesHash: null }, 'reply': { text: '', filesHash: null } };
 
-// --- Persona Tagging Globals ---
+// --- Tagging Globals ---
 let activePersonasCache = [];
 let personasCacheTimestamp = 0;
-const PERSONA_CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
-let personaSuggestionsDiv = null;
-let currentMentionState = {
-    editor: null,
-    query: '',
-    startPos: null,
-    active: false,
-    selectedIndex: -1,
-    currentResults: []
-};
+const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
+let instructionCache = [];
+let instructionCacheTimestamp = 0;
 
-// --- File Tagging Globals ---
-let fileTagSuggestionsDiv = null;
-let fileTagState = {
+let suggestionsDiv = null;
+let currentTagState = {
     editor: null,
     query: '',
     startPos: null,
     active: false,
     selectedIndex: -1,
-    currentResults: []
+    currentResults: [],
+    type: null // Can be 'persona', 'file', 'instruction', 'set'
 };
 let fileTagDebounceTimer = null;
 
@@ -59,208 +52,234 @@ function createEditorConfig(editorType) {
                     el.innerHTML = ` | <span class="toggle-button" title="Toggle Token Breakdown">[+]</span> Tokens: <span class="total-token-count ${editorType}-statusbar-token-count">~0</span>`;
                 },
                 onUpdate: () => {}
+            },
+            {
+                className: `instruction-summary-control ${editorType}-instruction-summary`,
+                defaultValue: (el) => {
+                    el.innerHTML = ` | <span class="toggle-button" title="Toggle Instructions Breakdown">[+]</span> Instructs: <span class="active-instructions-list ${editorType}-statusbar-instruct-list"></span>`;
+                },
+                onUpdate: () => {}
             }
         ]
     };
 }
 
-function createPersonaSuggestionsUI() {
-    if (!personaSuggestionsDiv) {
-        personaSuggestionsDiv = document.createElement('div');
-        personaSuggestionsDiv.id = 'personaMentionSuggestions';
-        personaSuggestionsDiv.style.position = 'absolute';
-        personaSuggestionsDiv.style.display = 'none';
-        document.body.appendChild(personaSuggestionsDiv);
+function createSuggestionsUI() {
+    if (!suggestionsDiv) {
+        suggestionsDiv = document.createElement('div');
+        suggestionsDiv.id = 'tagSuggestions';
+        suggestionsDiv.style.position = 'absolute';
+        suggestionsDiv.style.display = 'none';
+        document.body.appendChild(suggestionsDiv);
     }
 }
 
-function hidePersonaSuggestions() {
-    if (personaSuggestionsDiv) {
-        personaSuggestionsDiv.style.display = 'none';
-        personaSuggestionsDiv.innerHTML = '';
+function hideSuggestions() {
+    if (suggestionsDiv) {
+        suggestionsDiv.style.display = 'none';
+        suggestionsDiv.innerHTML = '';
     }
-    currentMentionState.active = false;
-    currentMentionState.editor = null;
-    currentMentionState.query = '';
-    currentMentionState.startPos = null;
-    currentMentionState.selectedIndex = -1;
-    currentMentionState.currentResults = [];
+    currentTagState.active = false;
+    currentTagState.editor = null;
+    currentTagState.query = '';
+    currentTagState.startPos = null;
+    currentTagState.selectedIndex = -1;
+    currentTagState.currentResults = [];
+    currentTagState.type = null;
 }
 
-async function displayPersonaSuggestions(cm, query) {
-    if (!currentMentionState.active) return;
+async function displaySuggestions(cm) {
+    if (!currentTagState.active) return;
 
-    const now = Date.now();
-    if (!activePersonasCache.length || (now - personasCacheTimestamp > PERSONA_CACHE_DURATION)) {
-        activePersonasCache = await apiRequest('/api/personas/list_active') || [];
-        personasCacheTimestamp = now;
-        if (!activePersonasCache.length) {
-            hidePersonaSuggestions();
-            return;
+    let results = [];
+    const query = currentTagState.query;
+
+    if (currentTagState.type === 'persona') {
+        const now = Date.now();
+        if (!activePersonasCache.length || (now - personasCacheTimestamp > CACHE_DURATION)) {
+            activePersonasCache = await apiRequest('/api/personas/list_active') || [];
+            personasCacheTimestamp = now;
         }
+        results = activePersonasCache.filter(p => p.name.toLowerCase().includes(query.toLowerCase()));
+    } else if (currentTagState.type === 'instruction' || currentTagState.type === 'set') {
+        const now = Date.now();
+        if (!instructionCache.length || (now - instructionCacheTimestamp > CACHE_DURATION)) {
+            instructionCache = await apiRequest('/api/custom-instructions/autocomplete') || [];
+            instructionCacheTimestamp = now;
+        }
+        const typeFilter = currentTagState.type;
+        results = instructionCache.filter(i => i.type === typeFilter && i.name.toLowerCase().includes(query.toLowerCase()));
+    } else if (currentTagState.type === 'file') {
+        clearTimeout(fileTagDebounceTimer);
+        fileTagDebounceTimer = setTimeout(async () => {
+            try {
+                const fileResults = await apiRequest(`/api/files/search?q=${encodeURIComponent(query)}`);
+                renderSuggestions(cm, fileResults);
+            } catch (error) {
+                console.error("Error fetching file suggestions:", error);
+                hideSuggestions();
+            }
+        }, 250);
+        return; // Return early, renderSuggestions will be called by the timeout
     }
 
-    const filteredPersonas = activePersonasCache.filter(p =>
-        p.name.toLowerCase().includes(query.toLowerCase())
-    );
+    renderSuggestions(cm, results);
+}
 
-    currentMentionState.currentResults = filteredPersonas;
-    currentMentionState.selectedIndex = -1;
+function renderSuggestions(cm, results) {
+    currentTagState.currentResults = results;
+    currentTagState.selectedIndex = -1;
 
-    personaSuggestionsDiv.innerHTML = '';
-    if (!filteredPersonas.length) {
+    suggestionsDiv.innerHTML = '';
+    if (!results.length) {
         const noResultsItem = document.createElement('div');
-        noResultsItem.textContent = 'No matching personas';
+        noResultsItem.textContent = `No matching ${currentTagState.type}s`;
         noResultsItem.classList.add('suggestion-item', 'no-results');
-        personaSuggestionsDiv.appendChild(noResultsItem);
+        suggestionsDiv.appendChild(noResultsItem);
     } else {
-        filteredPersonas.forEach((persona, index) => {
-            const item = document.createElement('div');
-            item.textContent = persona.name;
-            item.classList.add('suggestion-item');
-            item.dataset.id = persona.persona_id;
-            item.dataset.name = persona.name;
-            item.addEventListener('click', () => insertPersonaTag(cm, persona));
-            personaSuggestionsDiv.appendChild(item);
+        results.forEach((item, index) => {
+            const div = document.createElement('div');
+            div.textContent = item.name || item.display;
+            div.classList.add('suggestion-item');
+            div.addEventListener('click', () => insertTag(cm, item));
+            suggestionsDiv.appendChild(div);
         });
     }
 
-    const startCoords = cm.cursorCoords(currentMentionState.startPos, 'local');
+    const startCoords = cm.cursorCoords(currentTagState.startPos, 'local');
     const editorWrapper = cm.getWrapperElement();
     const editorRect = editorWrapper.getBoundingClientRect();
     const bodyRect = document.body.getBoundingClientRect();
 
-    personaSuggestionsDiv.style.left = `${editorRect.left + startCoords.left - bodyRect.left}px`;
-    personaSuggestionsDiv.style.top = `${editorRect.top + startCoords.bottom - bodyRect.top + 5}px`;
-    personaSuggestionsDiv.style.display = 'block';
+    suggestionsDiv.style.left = `${editorRect.left + startCoords.left - bodyRect.left}px`;
+    suggestionsDiv.style.top = `${editorRect.top + startCoords.bottom - bodyRect.top + 5}px`;
+    suggestionsDiv.style.display = 'block';
     updateSuggestionsHighlight(false);
 }
 
-function insertPersonaTag(cm, persona) {
-    if (!currentMentionState.startPos || !cm) {
-        hidePersonaSuggestions();
+function insertTag(cm, item) {
+    if (!currentTagState.startPos || !cm) {
+        hideSuggestions();
         return;
     }
-    const textToInsert = `@[${persona.name}](${persona.persona_id})`;
+    let textToInsert = '';
+    switch (currentTagState.type) {
+        case 'persona':
+            textToInsert = `@[${item.name}](${item.persona_id})`;
+            break;
+        case 'file':
+            const filename = item.path.split(/[\\/]/).pop();
+            textToInsert = `[#${filename}](${item.path})`;
+            break;
+        case 'instruction':
+            textToInsert = `![${item.name}](${item.id})`;
+            break;
+        case 'set':
+            textToInsert = `![set:${item.name}](${item.id})`;
+            break;
+    }
+
     const currentCursor = cm.getCursor();
-    cm.replaceRange(textToInsert, currentMentionState.startPos, currentCursor);
-    hidePersonaSuggestions();
+    cm.replaceRange(textToInsert, currentTagState.startPos, currentCursor);
+    hideSuggestions();
     cm.focus();
 }
 
-function handleEditorKeyEvent(cm, event, type) {
-    if (fileTagState.active && fileTagState.editor === cm) {
-        if (type === 'keydown') {
-            if (['Escape', 'Enter', 'Tab', 'ArrowUp', 'ArrowDown'].includes(event.key)) {
-                event.preventDefault();
-                if (event.key === 'Escape') {
-                    hideFileTagSuggestions();
-                } else if (event.key === 'Enter' || event.key === 'Tab') {
-                    if (fileTagState.selectedIndex !== -1 && fileTagState.currentResults[fileTagState.selectedIndex]) {
-                        insertFileTag(cm, fileTagState.currentResults[fileTagState.selectedIndex]);
-                    } else {
-                        hideFileTagSuggestions();
-                    }
-                } else if (event.key === 'ArrowDown') {
-                    if (fileTagState.currentResults.length > 0) {
-                        fileTagState.selectedIndex = (fileTagState.selectedIndex + 1) % fileTagState.currentResults.length;
-                        updateFileTagSuggestionsHighlight();
-                    }
-                } else if (event.key === 'ArrowUp') {
-                    if (fileTagState.currentResults.length > 0) {
-                        fileTagState.selectedIndex = (fileTagState.selectedIndex - 1 + fileTagState.currentResults.length) % fileTagState.currentResults.length;
-                        updateFileTagSuggestionsHighlight();
-                    }
-                }
-                return;
-            }
-        }
-        if (type === 'keyup') {
+function handleEditorKeyEvent(cm, event, keypressType) {
+    if (!currentTagState.active) {
+        if (keypressType === 'keyup') {
             const cursor = cm.getCursor();
-            if (cursor.line === fileTagState.startPos.line && cursor.ch >= fileTagState.startPos.ch) {
-                const textFromHash = cm.getRange(fileTagState.startPos, cursor);
-                if (textFromHash.startsWith('#') && !textFromHash.substring(1).includes(' ') && textFromHash.length <= 100) {
-                    fileTagState.query = textFromHash.substring(1);
-                    displayFileTagSuggestions(cm, fileTagState.query);
-                } else {
-                    hideFileTagSuggestions();
-                }
-            } else {
-                hideFileTagSuggestions();
+            const line = cm.getLine(cursor.line);
+            const textBeforeCursor = line.substring(0, cursor.ch);
+
+            const personaMatch = textBeforeCursor.match(/@([\w-]*)$/);
+            const fileMatch = textBeforeCursor.match(/#([\w.-]*)$/);
+            const instructionMatch = textBeforeCursor.match(/!([\w-]*)$/);
+            const setMatch = textBeforeCursor.match(/!set:([\w-]*)$/);
+
+            let match, type, query, triggerText;
+
+            if (setMatch) {
+                [triggerText, query] = setMatch;
+                type = 'set';
+            } else if (instructionMatch) {
+                [triggerText, query] = instructionMatch;
+                type = 'instruction';
+            } else if (personaMatch) {
+                [triggerText, query] = personaMatch;
+                type = 'persona';
+            } else if (fileMatch) {
+                [triggerText, query] = fileMatch;
+                type = 'file';
             }
-            return;
+
+            if (type) {
+                currentTagState.active = true;
+                currentTagState.editor = cm;
+                currentTagState.query = query;
+                currentTagState.type = type;
+                currentTagState.startPos = { line: cursor.line, ch: cursor.ch - query.length - triggerText.lastIndexOf(query) };
+                displaySuggestions(cm);
+            }
         }
+        return;
     }
 
-    if (currentMentionState.active && currentMentionState.editor === cm) {
-        if (type === 'keydown') {
-            if (['Escape', 'Enter', 'Tab', 'ArrowUp', 'ArrowDown'].includes(event.key)) {
-                event.preventDefault();
-                if (event.key === 'Escape') {
-                    hidePersonaSuggestions();
-                } else if (event.key === 'Enter' || event.key === 'Tab') {
-                    if (currentMentionState.selectedIndex !== -1 && currentMentionState.currentResults[currentMentionState.selectedIndex]) {
-                        insertPersonaTag(cm, currentMentionState.currentResults[currentMentionState.selectedIndex]);
-                    } else {
-                        hidePersonaSuggestions();
-                    }
-                } else if (event.key === 'ArrowDown') {
-                    if (currentMentionState.currentResults.length > 0) {
-                        currentMentionState.selectedIndex = (currentMentionState.selectedIndex + 1) % currentMentionState.currentResults.length;
-                        updateSuggestionsHighlight();
-                    }
-                } else if (event.key === 'ArrowUp') {
-                    if (currentMentionState.currentResults.length > 0) {
-                        currentMentionState.selectedIndex = (currentMentionState.selectedIndex - 1 + currentMentionState.currentResults.length) % currentMentionState.currentResults.length;
-                        updateSuggestionsHighlight();
-                    }
-                }
-                return;
-            }
-        }
-        if (type === 'keyup') {
-            const cursor = cm.getCursor();
-            if (cursor.line === currentMentionState.startPos.line && cursor.ch >= currentMentionState.startPos.ch) {
-                const textFromAt = cm.getRange(currentMentionState.startPos, cursor);
-                if (textFromAt.startsWith('@') && !textFromAt.includes(' ') && textFromAt.length <= 50) {
-                    currentMentionState.query = textFromAt.substring(1);
-                    displayPersonaSuggestions(cm, currentMentionState.query);
+    // --- Key handling when suggestions are active ---
+    if (keypressType === 'keydown') {
+        if (['Escape', 'Enter', 'Tab', 'ArrowUp', 'ArrowDown'].includes(event.key)) {
+            event.preventDefault();
+            if (event.key === 'Escape') {
+                hideSuggestions();
+            } else if (event.key === 'Enter' || event.key === 'Tab') {
+                if (currentTagState.selectedIndex !== -1 && currentTagState.currentResults[currentTagState.selectedIndex]) {
+                    insertTag(cm, currentTagState.currentResults[currentTagState.selectedIndex]);
                 } else {
-                    hidePersonaSuggestions();
+                    hideSuggestions();
                 }
-            } else {
-                hidePersonaSuggestions();
+            } else if (event.key === 'ArrowDown') {
+                if (currentTagState.currentResults.length > 0) {
+                    currentTagState.selectedIndex = (currentTagState.selectedIndex + 1) % currentTagState.currentResults.length;
+                    updateSuggestionsHighlight();
+                }
+            } else if (event.key === 'ArrowUp') {
+                if (currentTagState.currentResults.length > 0) {
+                    currentTagState.selectedIndex = (currentTagState.selectedIndex - 1 + currentTagState.currentResults.length) % currentTagState.currentResults.length;
+                    updateSuggestionsHighlight();
+                }
             }
-            return;
         }
-    }
-
-    if (type === 'keyup' && !currentMentionState.active && !fileTagState.active) {
+    } else if (keypressType === 'keyup') {
         const cursor = cm.getCursor();
-        if (cursor.ch > 0) {
-            const charBefore = cm.getRange({ line: cursor.line, ch: cursor.ch - 1 }, cursor);
-            if (charBefore === '@') {
-                currentMentionState.active = true;
-                currentMentionState.editor = cm;
-                currentMentionState.query = '';
-                currentMentionState.startPos = { line: cursor.line, ch: cursor.ch - 1 };
-                displayPersonaSuggestions(cm, '');
-            } else if (charBefore === '#') {
-                fileTagState.active = true;
-                fileTagState.editor = cm;
-                fileTagState.query = '';
-                fileTagState.startPos = { line: cursor.line, ch: cursor.ch - 1 };
-                displayFileTagSuggestions(cm, '');
-            }
+        if (cursor.line !== currentTagState.startPos.line || cursor.ch < currentTagState.startPos.ch) {
+            hideSuggestions();
+            return;
         }
+
+        const textFromTrigger = cm.getRange(currentTagState.startPos, cursor);
+        let query = '';
+
+        if (currentTagState.type === 'set' && textFromTrigger.startsWith('!set:')) {
+            query = textFromTrigger.substring(5);
+        } else if (['persona', 'file', 'instruction'].includes(currentTagState.type)) {
+            query = textFromTrigger.substring(1);
+        }
+
+        if (textFromTrigger.includes(' ')) {
+            hideSuggestions();
+            return;
+        }
+
+        currentTagState.query = query;
+        displaySuggestions(cm);
     }
 }
 
 function updateSuggestionsHighlight(shouldScroll = true) {
-    if (!personaSuggestionsDiv || !currentMentionState.active) return;
-    Array.from(personaSuggestionsDiv.children).forEach((child, index) => {
+    if (!suggestionsDiv || !currentTagState.active) return;
+    Array.from(suggestionsDiv.children).forEach((child, index) => {
         if (child.classList.contains('no-results')) return;
-        if (index === currentMentionState.selectedIndex) {
+        if (index === currentTagState.selectedIndex) {
             child.classList.add('selected');
             if (shouldScroll) {
                 child.scrollIntoView({ block: 'nearest' });
@@ -273,8 +292,7 @@ function updateSuggestionsHighlight(shouldScroll = true) {
 
 function initializeEditorTagging(editorInstance) {
     if (!editorInstance) return;
-    createPersonaSuggestionsUI();
-    createFileTagSuggestionsUI();
+    createSuggestionsUI();
     const cm = editorInstance.codemirror;
 
     cm.on('keyup', (cmInstance, event) => {
@@ -284,152 +302,42 @@ function initializeEditorTagging(editorInstance) {
         handleEditorKeyEvent(cmInstance, event, 'keyup');
     });
     cm.on('keydown', (cmInstance, event) => {
-        if ((currentMentionState.active || fileTagState.active) && (currentMentionState.editor === cmInstance || fileTagState.editor === cmInstance) && ['Escape', 'Enter', 'Tab', 'ArrowUp', 'ArrowDown'].includes(event.key)) {
+        if (currentTagState.active && currentTagState.editor === cmInstance && ['Escape', 'Enter', 'Tab', 'ArrowUp', 'ArrowDown'].includes(event.key)) {
             handleEditorKeyEvent(cmInstance, event, 'keydown');
         }
     });
     cm.on('blur', (cmInstance) => {
         setTimeout(() => {
-            if (personaSuggestionsDiv && !personaSuggestionsDiv.contains(document.activeElement)) {
-                if (currentMentionState.editor === cmInstance) {
-                    hidePersonaSuggestions();
-                }
-            }
-            if (fileTagSuggestionsDiv && !fileTagSuggestionsDiv.contains(document.activeElement)) {
-                if (fileTagState.editor === cmInstance) {
-                    hideFileTagSuggestions();
+            if (suggestionsDiv && !suggestionsDiv.contains(document.activeElement)) {
+                if (currentTagState.editor === cmInstance) {
+                    hideSuggestions();
                 }
             }
         }, 200);
     });
 }
 
-function highlightPersonaTags(cm) {
+function highlightTags(cm) {
     if (!cm) return;
-    const regex = /@\[([^\]]+)\]\((\d+)\)/g;
+    const tagRegexes = {
+        'cm-persona-tag': /@\[([^\]]+)\]\((\d+)\)/g,
+        'cm-file-tag': /..\[#([^]]+)\]\(([^)]+)\)/g,
+        'cm-instruction-tag': /!\[([^\]]+)\]\((\d+)\)/g,
+        'cm-set-tag': /!\[set:([^\]]+)\]\((\d+)\)/g
+    };
+
     const content = cm.getValue();
-    let match;
-    while ((match = regex.exec(content)) !== null) {
-        const startPos = cm.posFromIndex(match.index);
-        const endPos = cm.posFromIndex(match.index + match[0].length);
-        cm.markText(startPos, endPos, {
-            className: 'cm-persona-tag',
-            atomic: true,
-        });
-    }
-}
-
-function createFileTagSuggestionsUI() {
-    if (!fileTagSuggestionsDiv) {
-        fileTagSuggestionsDiv = document.createElement('div');
-        fileTagSuggestionsDiv.id = 'fileTagSuggestions';
-        fileTagSuggestionsDiv.style.position = 'absolute';
-        fileTagSuggestionsDiv.style.display = 'none';
-        document.body.appendChild(fileTagSuggestionsDiv);
-    }
-}
-
-function hideFileTagSuggestions() {
-    if (fileTagSuggestionsDiv) {
-        fileTagSuggestionsDiv.style.display = 'none';
-        fileTagSuggestionsDiv.innerHTML = '';
-    }
-    fileTagState.active = false;
-    fileTagState.editor = null;
-    fileTagState.query = '';
-    fileTagState.startPos = null;
-    fileTagState.selectedIndex = -1;
-    fileTagState.currentResults = [];
-}
-
-async function displayFileTagSuggestions(cm, query) {
-    if (!fileTagState.active) return;
-
-    clearTimeout(fileTagDebounceTimer);
-    fileTagDebounceTimer = setTimeout(async () => {
-        try {
-            const results = await apiRequest(`/api/files/search?q=${encodeURIComponent(query)}`);
-            fileTagState.currentResults = results;
-            fileTagState.selectedIndex = -1;
-
-            fileTagSuggestionsDiv.innerHTML = '';
-            if (!results.length) {
-                const noResultsItem = document.createElement('div');
-                noResultsItem.textContent = 'No matching files';
-                noResultsItem.classList.add('suggestion-item', 'no-results');
-                fileTagSuggestionsDiv.appendChild(noResultsItem);
-            } else {
-                results.forEach((file, index) => {
-                    const item = document.createElement('div');
-                    item.textContent = file.display;
-                    item.classList.add('suggestion-item');
-                    item.dataset.path = file.path;
-                    item.addEventListener('click', () => insertFileTag(cm, file));
-                    fileTagSuggestionsDiv.appendChild(item);
-                });
-            }
-
-            const startCoords = cm.cursorCoords(fileTagState.startPos, 'local');
-            const editorWrapper = cm.getWrapperElement();
-            const editorRect = editorWrapper.getBoundingClientRect();
-            const bodyRect = document.body.getBoundingClientRect();
-
-            fileTagSuggestionsDiv.style.left = `${editorRect.left + startCoords.left - bodyRect.left}px`;
-            fileTagSuggestionsDiv.style.top = `${editorRect.top + startCoords.bottom - bodyRect.top + 5}px`;
-            fileTagSuggestionsDiv.style.display = 'block';
-            updateFileTagSuggestionsHighlight();
-
-        } catch (error) {
-            console.error("Error fetching file suggestions:", error);
-            hideFileTagSuggestions();
+    for (const className in tagRegexes) {
+        const regex = tagRegexes[className];
+        let match;
+        while ((match = regex.exec(content)) !== null) {
+            const startPos = cm.posFromIndex(match.index);
+            const endPos = cm.posFromIndex(match.index + match[0].length);
+            cm.markText(startPos, endPos, {
+                className: className,
+                atomic: true,
+            });
         }
-    }, 250);
-}
-
-function insertFileTag(cm, file) {
-    if (!fileTagState.startPos || !cm) {
-        hideFileTagSuggestions();
-        return;
-    }
-    const filename = file.path.split(/[\\/]/).pop();
-    const textToInsert = `[#${filename}](${file.path})`;
-    const currentCursor = cm.getCursor();
-    cm.replaceRange(textToInsert, fileTagState.startPos, currentCursor);
-    
-    const endPos = { line: fileTagState.startPos.line, ch: fileTagState.startPos.ch + textToInsert.length };
-    cm.markText(fileTagState.startPos, endPos, {
-        className: 'cm-file-tag',
-        atomic: true,
-    });
-
-    hideFileTagSuggestions();
-    cm.focus();
-}
-
-function updateFileTagSuggestionsHighlight(shouldScroll = true) {
-    if (!fileTagSuggestionsDiv || !fileTagState.active) return;
-    Array.from(fileTagSuggestionsDiv.children).forEach((child, index) => {
-        if (index === fileTagState.selectedIndex) {
-            child.classList.add('selected');
-            if (shouldScroll) child.scrollIntoView({ block: 'nearest' });
-        } else {
-            child.classList.remove('selected');
-        }
-    });
-}
-
-function highlightFileTags(cm) {
-    if (!cm) return;
-    const regex = /\[#([^\]]+)\]\(([^)]+)\)/g;
-    const content = cm.getValue();
-    let match;
-    while ((match = regex.exec(content)) !== null) {
-        const startPos = cm.posFromIndex(match.index);
-        const endPos = cm.posFromIndex(match.index + match[0].length);
-        cm.markText(startPos, endPos, {
-            className: 'cm-file-tag',
-            atomic: true,
-        });
     }
 }
 
@@ -442,15 +350,13 @@ export function createEditor(textAreaElement, editorType, initialValue = '') {
 
     const editor = new EasyMDE(config);
     initializeEditorTagging(editor);
-    initializeTokenBreakdownDisplay(editor, editorType);
+    initializeEditorStatusBars(editor, editorType);
 
     editor.codemirror.on("refresh", function(cm) {
-        highlightPersonaTags(cm);
-        highlightFileTags(cm);
+        highlightTags(cm);
     });
     
-    highlightPersonaTags(editor.codemirror);
-    highlightFileTags(editor.codemirror);
+    highlightTags(editor.codemirror);
 
     return editor;
 }
@@ -548,6 +454,12 @@ async function updateTokenBreakdown(editorInstance, editorType) {
         }
 
         const visualBar = document.getElementById(`${editorType}-token-visual-bar`);
+        if (!visualBar) {
+            // If the visual bar doesn't exist, we're likely not on a page with an active editor.
+            // This can happen if a subforum is changed while on the settings page.
+            // Silently exit to prevent errors.
+            return;
+        }
         let percentage = 0;
         if (data.model_context_window && data.model_context_window > 0) {
             percentage = (data.total_estimated_tokens / data.model_context_window) * 100;
@@ -568,31 +480,122 @@ async function updateTokenBreakdown(editorInstance, editorType) {
     }
 }
 
-function initializeTokenBreakdownDisplay(editorInstance, editorType) {
+async function updateInstructionsDisplay(editorInstance, editorType) {
+    if (!editorInstance) return;
+
+    const breakdownContainer = document.getElementById(`${editorType}-instruction-breakdown-container`);
+    if (!breakdownContainer) {
+        console.warn(`Instruction breakdown container not found for editor type: ${editorType}`);
+        return;
+    }
+
+    // Get context
+    const { currentSubforumId, currentSubforumName } = await import('./forum.js');
+    const subforumId = currentSubforumId;
+
+    // Get tagged instructions from editor
+    const content = editorInstance.value();
+    const taggedInstructionRegex = /!\[([^\]]+)\]\((\d+)\)/g;
+    const taggedSetRegex = /!\[set:([^\]]+)\]\((\d+)\)/g;
+    let match;
+    const tagged = [];
+
+    while ((match = taggedInstructionRegex.exec(content)) !== null) {
+        tagged.push({ name: match[1], id: match[2], type: 'instruction' });
+    }
+    // Reset regex from previous loop
+    taggedSetRegex.lastIndex = 0;
+    while ((match = taggedSetRegex.exec(content)) !== null) {
+        tagged.push({ name: match[1], id: match[2], type: 'set' });
+    }
+
+    try {
+        // Get default instructions from API
+        const defaultInstructions = await apiRequest(`/api/instructions/active-for-context?subforum_id=${subforumId || ''}`);
+
+        // --- Update UI ---
+        const { global: globalDefaults, subforum: subforumDefaults } = defaultInstructions;
+
+        // Clear previous content
+        breakdownContainer.innerHTML = '';
+
+        // Populate breakdown
+        if (globalDefaults.length > 0) {
+            const globalDiv = document.createElement('div');
+            globalDiv.innerHTML = `<strong>Global:</strong> ${globalDefaults.map(i => `<span>!${i.name}</span>`).join(', ')}`;
+            breakdownContainer.appendChild(globalDiv);
+        }
+        if (subforumDefaults.length > 0) {
+            const subforumDiv = document.createElement('div');
+            const subforumNameText = document.getElementById('current-subforum-name')?.textContent || 'Subforum';
+            subforumDiv.innerHTML = `<strong>${subforumNameText}:</strong> ${subforumDefaults.map(i => `<span>!${i.name}</span>`).join(', ')}`;
+            breakdownContainer.appendChild(subforumDiv);
+        }
+        if (tagged.length > 0) {
+            const taggedDiv = document.createElement('div');
+            taggedDiv.innerHTML = `<strong>Tagged:</strong> ${tagged.map(i => `<span>!${i.type === 'set' ? 'set:' : ''}${i.name}</span>`).join(', ')}`;
+            breakdownContainer.appendChild(taggedDiv);
+        }
+
+        // Update the collapsed status bar view
+        const allActive = [...globalDefaults, ...subforumDefaults, ...tagged];
+        const uniqueNames = [...new Set(allActive.map(i => `!${i.type === 'set' ? 'set:' : ''}${i.name}`))];
+
+        const easyMDEContainer = editorInstance.element.parentElement;
+        const statusBarList = easyMDEContainer.querySelector(`.${editorType}-statusbar-instruct-list`);
+        if (statusBarList) {
+            statusBarList.textContent = uniqueNames.slice(0, 3).join(', ') + (uniqueNames.length > 3 ? '...' : '');
+            statusBarList.title = uniqueNames.join(', ');
+        }
+
+    } catch (error) {
+        console.error('Failed to update instructions display:', error);
+        const easyMDEContainer = editorInstance.element.parentElement;
+        const statusBarList = easyMDEContainer.querySelector(`.${editorType}-statusbar-instruct-list`);
+        if (statusBarList) {
+            statusBarList.textContent = 'Error';
+        }
+    }
+}
+
+function initializeEditorStatusBars(editorInstance, editorType) {
     if (!editorInstance || !editorInstance.codemirror) return;
-    const breakdownContainer = document.getElementById(`${editorType}-token-breakdown-container`);
-    if (!breakdownContainer) return;
-    const easyMDEContainer = editorInstance.element.parentElement;
-    if (!easyMDEContainer) return;
 
     const setupEventListeners = (statusBar) => {
+        // --- Token Breakdown Logic ---
+        const tokenBreakdownContainer = document.getElementById(`${editorType}-token-breakdown-container`);
         const tokenControl = statusBar.querySelector(`.${editorType}-token-summary`);
-        if (!tokenControl) return;
+        if (tokenControl && tokenBreakdownContainer) {
+            tokenControl.addEventListener('click', (event) => {
+                event.stopPropagation();
+                const isExpanded = tokenBreakdownContainer.classList.toggle('expanded');
+                const toggleButton = tokenControl.querySelector('.toggle-button');
+                if (toggleButton) toggleButton.textContent = isExpanded ? '[-]' : '[+]';
+            });
+        }
 
-        tokenControl.addEventListener('click', (event) => {
-            event.stopPropagation();
-            const isExpanded = breakdownContainer.classList.toggle('expanded');
-            const toggleButton = tokenControl.querySelector('.toggle-button');
-            if (toggleButton) {
-                toggleButton.textContent = isExpanded ? '[-]' : '[+]';
-            }
+        // --- Instruction Breakdown Logic ---
+        const instructionBreakdownContainer = document.getElementById(`${editorType}-instruction-breakdown-container`);
+        const instructionControl = statusBar.querySelector(`.${editorType}-instruction-summary`);
+        if (instructionControl && instructionBreakdownContainer) {
+            instructionControl.addEventListener('click', (event) => {
+                event.stopPropagation();
+                const isExpanded = instructionBreakdownContainer.classList.toggle('expanded');
+                const toggleButton = instructionControl.querySelector('.toggle-button');
+                if (toggleButton) toggleButton.textContent = isExpanded ? '[-]' : '[+]';
+            });
+        }
+
+        // --- Debounced Update Calls ---
+        const debouncedTokenUpdate = debounce(() => updateTokenBreakdown(editorInstance, editorType), 750);
+        const debouncedInstructionUpdate = debounce(() => updateInstructionsDisplay(editorInstance, editorType), 250);
+
+        editorInstance.codemirror.on('change', () => {
+            debouncedTokenUpdate();
+            debouncedInstructionUpdate();
         });
 
-        const debouncedTokenBreakdownUpdate = debounce(() => {
-            updateTokenBreakdown(editorInstance, editorType);
-        }, 750);
-
-        editorInstance.codemirror.on('change', debouncedTokenBreakdownUpdate);
+        // --- External Event Listeners ---
         const personaSelector = document.getElementById('llm-persona-select');
         if (personaSelector) {
             personaSelector.addEventListener('change', () => updateTokenBreakdown(editorInstance, editorType));
@@ -641,8 +644,20 @@ function initializeTokenBreakdownDisplay(editorInstance, editorType) {
                 updateTokenBreakdown(editorInstance, editorType);
             });
         }
+        
+        // Listen for subforum changes to update instructions
+        document.addEventListener('subforumChanged', () => {
+            updateInstructionsDisplay(editorInstance, editorType);
+        });
+
+        // Initial updates
         updateTokenBreakdown(editorInstance, editorType);
+        updateInstructionsDisplay(editorInstance, editorType);
     };
+
+    // --- Observer to wait for status bar creation ---
+    const easyMDEContainer = editorInstance.element.parentElement;
+    if (!easyMDEContainer) return;
 
     const observer = new MutationObserver((mutationsList, obs) => {
         for (const mutation of mutationsList) {

@@ -93,6 +93,7 @@ graph TD
         *   `POST /api/personas/generate/subforum_experts_batch`: Queues batch generation of multiple subforum expert personas.
         *   `GET /api/personas/list_active`: Returns a list of active personas for UI suggestions.
         *   `POST /api/personas/preview`: (If this endpoint was kept for prompt previewing, it should be listed).
+    *   **`routes/custom_instruction_routes.py`**: Defines Flask Blueprint for all API endpoints related to Custom Instructions. Includes full CRUD for instructions and instruction sets, as well as endpoints for managing subforum default assignments and providing context-aware instruction lists to the editor.
     *   **`routes/activity_routes.py`**: Defines Flask Blueprint for API endpoints related to the Recent Activity Page. Includes:
         *   `GET /api/activity/recent_topics`: Fetches topics considered new to the user.
         *   `GET /api/activity/recent_replies`: Fetches replies considered new to the user.
@@ -120,7 +121,8 @@ graph TD
         *   **Modal Management:** Creates the draggable Theme Creator modal (`openThemeCreator`, `makeDraggable`) and the LLM link warning popup.
     *   **`forum.js`**: Encapsulates all logic related to the forum features. Includes the hook to call `ui.openSecondaryPane` when a user clicks the "open in new pane" icon on a topic. Initializes Tom Select for the persona override dropdown.
     *   **`schedule.js`**: Manages the scheduling functionality, including loading, rendering, and saving user-defined processing schedules, as well as displaying the next scheduled time and the current processor status.
-    *   **`settings.js`**: Deals with application-wide settings. Handles theme selection, file indexing settings UI, and includes the event listener to launch the Theme Creator via `theming.js`. Initializes Tom Select for the model and theme selection dropdowns.
+    *   **`settings.js`**: Deals with application-wide settings. Handles theme selection, file indexing settings UI, and includes the event listener to launch the Theme Creator via `theming.js`. Initializes Tom Select for the model and theme selection dropdowns. It orchestrates the loading of persona and custom instruction modules.
+    *   **`custom-instructions.js`**: (NEW) Implements all frontend logic for the Custom Instructions feature. It handles rendering the UI, managing modals for creating/editing instructions and sets, and uses a delegated event listener model to handle all user interactions robustly.
     *   **`theming.js`**: (NEW) Contains the client-side "live theming" engine. It introspects CSS variables from the current theme, dynamically builds the Theme Creator modal's UI, applies style changes in real-time for live preview, and handles exporting the generated CSS.
     *   **`queue.js`**: Manages the display of the LLM processing queue. Fetches and renders the list of queued tasks, showing a summary including the *total prompt tokens*. Now visually represents chained requests and their dependencies. Clicking a queue item opens a modal displaying the full prompt content and a detailed, formatted token breakdown in a separate metadata pane within the modal.
     *   **`activity.js`**: Contains the frontend JavaScript logic for the Recent Activity Page, including fetching data from the activity API endpoints (recent topics, replies, personas) and rendering it into the respective panels on the activity page. Manages navigation from activity items to their respective content areas.
@@ -165,6 +167,10 @@ graph TD
        *   `indexed_folders`: (NEW) Stores user-defined folder paths for the file indexer.
        *   `file_index_cache`: (NEW) Caches file paths from indexed locations for fast autocomplete searching.
        *   `file_filter_rules`: (NEW) Manages global and per-folder block/allow lists for file extensions.
+       *   `custom_instructions`: (NEW) Stores individual instruction details, including `name`, `prompt_text`, `priority`, and `is_global_default`.
+       *   `instruction_sets`: (NEW) Defines named groups of instructions.
+       *   `instruction_set_items`: (NEW) Association table linking instructions to sets.
+       *   `subforum_instruction_defaults`: (NEW) Association table linking instructions as defaults to specific subforums.
 
 ## 3. Phased Development Plan
 
@@ -304,6 +310,14 @@ graph TD
     *   `[DONE]` Both methods result in LLM requests being queued for the tagged persona(s), with dependencies correctly handled for chains. Rendered posts visually highlight these tags.
     *   `[TODO]` Future Enhancement: Make the rendered `@PersonaName` tags interactive, potentially linking to a dedicated persona view/edit page or modal.
 *   **File Tagging:** [COMPLETED] Users can reference local files in posts using a `#filename` syntax with autocomplete, similar to persona tagging. Indexed files are included as context in LLM prompts.
+*   **Custom Instructions:** [DONE] A comprehensive system for creating and managing reusable prompt snippets.
+    *   `[DONE]` Users can create instructions with custom names, prompt text, and a `priority` to control application order.
+    *   `[DONE]` Instructions can be set as "Global Defaults" to apply to all LLM requests.
+    *   `[DONE]` Instructions can be assigned as defaults to one or more specific subforums.
+    *   `[DONE]` Users can create "Instruction Sets" to group related instructions.
+    *   `[DONE]` Both individual instructions (`!instruction-name`) and sets (`!set:set-name`) can be tagged directly in the post editor with autocomplete support.
+    *   `[DONE]` The prompt processing logic correctly gathers, de-duplicates, and orders instructions from all sources (global, subforum, tagged) before prepending them to the final prompt.
+    *   `[DONE]` The editor includes a status bar panel that provides a real-time, context-aware breakdown of which instructions are currently active.
 *   **Optional Automated Persona Interaction:** [TODO] A setting (per-topic?) to allow enabled personas to automatically reply to each other's posts within certain limits (e.g., depth, time). *Requires careful design to avoid runaway computation.*
 *   **Summarization Tools:** [TODO] Add a feature to use an LLM to summarize a selected topic thread or a set of LLM replies.
 *   **Rich Text Editor (Optional):** [DONE] Replace plain text area with a simple WYSIWYG editor. (EasyMDE implemented)
