@@ -34,51 +34,48 @@ function closeInstructionModal() {
     }
 }
 
-function openSetModal(set = null) {
-    const setModal = document.getElementById('instruction-set-modal');
-    const setForm = document.getElementById('instruction-set-form');
-    const setModalTitle = document.getElementById('instruction-set-modal-title');
-    const setIdInput = document.getElementById('instruction-set-id-input');
-    const setNameInput = document.getElementById('instruction-set-name-input');
-    const setInstructionsSelect = document.getElementById('instruction-set-instructions-select');
-
-    const instructionOptions = instructionsCache.map(inst => ({ value: inst.id, text: inst.name }));
-    const tomSelect = setInstructionsSelect.tomselect;
-
-    tomSelect.clear();
-    tomSelect.clearOptions();
-    tomSelect.addOption(instructionOptions);
-
-    if (set) {
-        setModalTitle.textContent = 'Edit Instruction Set';
-        setIdInput.value = set.id;
-        setNameInput.value = set.name;
-        tomSelect.setValue(set.instruction_ids);
-    } else {
-        setModalTitle.textContent = 'Add Instruction Set';
-        setForm.reset();
-        setIdInput.value = '';
-    }
-    setModal.style.display = 'block';
-}
-
-function closeSetModal() {
-    const setModal = document.getElementById('instruction-set-modal');
-    if (setModal) {
-        setModal.style.display = 'none';
-    }
-}
+// function openSetModal(set = null) {
+//     const setModal = document.getElementById('instruction-set-modal');
+//     const setForm = document.getElementById('instruction-set-form');
+//     const setModalTitle = document.getElementById('instruction-set-modal-title');
+//     const setIdInput = document.getElementById('instruction-set-id-input');
+//     const setNameInput = document.getElementById('instruction-set-name-input');
+//     const setInstructionsSelect = document.getElementById('instruction-set-instructions-select');
+//
+//     const instructionOptions = instructionsCache.map(inst => ({ value: inst.id, text: inst.name }));
+//     const tomSelect = setInstructionsSelect.tomselect;
+//
+//     tomSelect.clear();
+//     tomSelect.clearOptions();
+//     tomSelect.addOption(instructionOptions);
+//
+//     if (set) {
+//         setModalTitle.textContent = 'Edit Instruction Set';
+//         setIdInput.value = set.id;
+//         setNameInput.value = set.name;
+//         tomSelect.setValue(set.instruction_ids);
+//     } else {
+//         setModalTitle.textContent = 'Add Instruction Set';
+//         setForm.reset();
+//         setIdInput.value = '';
+//     }
+//     setModal.style.display = 'block';
+// }
+//
+// function closeSetModal() {
+//     const setModal = document.getElementById('instruction-set-modal');
+//     if (setModal) {
+//         setModal.style.display = 'none';
+//     }
+// }
 
 // --- Data Fetching and Rendering ---
 export async function loadCustomInstructionsData(container) {
     try {
-        const [instructions, sets] = await Promise.all([
-            apiRequest('/api/custom-instructions'),
-            apiRequest('/api/instruction-sets')
-        ]);
+        const instructions = await apiRequest('/api/custom-instructions');
         instructionsCache = instructions;
-        setsCache = sets;
-        renderCustomInstructionsUI(instructions, sets, container);
+        // setsCache = sets; // Disabled sets
+        renderCustomInstructionsUI(instructions, [], container); // Pass empty array for sets
     } catch (error) {
         console.error("Error loading custom instructions data:", error);
         const instructionsContainer = container.querySelector('#instructions-list-container');
@@ -90,9 +87,9 @@ export async function loadCustomInstructionsData(container) {
 
 function renderCustomInstructionsUI(instructions, sets, container) {
     const instructionsContainer = container.querySelector('#instructions-list-container');
-    const setsContainer = container.querySelector('#instruction-sets-list-container');
+    // const setsContainer = container.querySelector('#instruction-sets-list-container');
 
-    if (!instructionsContainer || !setsContainer) return;
+    if (!instructionsContainer) return;
 
     instructionsContainer.innerHTML = '';
     instructions.forEach(inst => {
@@ -142,29 +139,29 @@ function renderCustomInstructionsUI(instructions, sets, container) {
         instructionsContainer.appendChild(instEl);
     });
 
-    setsContainer.innerHTML = '';
-    sets.forEach(set => {
-        const setEl = document.createElement('div');
-        setEl.className = 'instruction-set-item';
-        setEl.dataset.setId = set.id;
-
-        const instructionPills = set.instruction_ids.map(instId => {
-            const instruction = instructions.find(i => i.id === instId);
-            return `<span class="instruction-pill">${instruction ? instruction.name : 'Unknown'}</span>`;
-        }).join('');
-
-        setEl.innerHTML = `
-            <div class="instruction-set-header">
-                <strong>${set.name}</strong>
-                <div class="instruction-set-controls">
-                    <button class="button-secondary button-small edit-instruction-set-btn">Edit</button>
-                    <button class="button-danger button-small delete-instruction-set-btn">Delete</button>
-                </div>
-            </div>
-            <div class="instruction-set-body">${instructionPills}</div>
-        `;
-        setsContainer.appendChild(setEl);
-    });
+    // setsContainer.innerHTML = '';
+    // sets.forEach(set => {
+    //     const setEl = document.createElement('div');
+    //     setEl.className = 'instruction-set-item';
+    //     setEl.dataset.setId = set.id;
+    //
+    //     const instructionPills = set.instruction_ids.map(instId => {
+    //         const instruction = instructions.find(i => i.id === instId);
+    //         return `<span class="instruction-pill">${instruction ? instruction.name : 'Unknown'}</span>`;
+    //     }).join('');
+    //
+    //     setEl.innerHTML = `
+    //         <div class="instruction-set-header">
+    //             <strong>${set.name}</strong>
+    //             <div class="instruction-set-controls">
+    //                 <button class="button-secondary button-small edit-instruction-set-btn">Edit</button>
+    //                 <button class="button-danger button-small delete-instruction-set-btn">Delete</button>
+    //             </div>
+    //         </div>
+    //         <div class="instruction-set-body">${instructionPills}</div>
+    //     `;
+    //     setsContainer.appendChild(setEl);
+    // });
 
     // Initialize TomSelect for subforum search inputs
     container.querySelectorAll('.subforum-search-input').forEach(select => {
@@ -236,36 +233,36 @@ async function handleFormSubmit(event, container) {
         }
     }
 
-    if (event.target.id === 'instruction-set-form') {
-        event.preventDefault();
-        const id = event.target.querySelector('#instruction-set-id-input').value;
-        const setInstructionsSelect = document.getElementById('instruction-set-instructions-select');
-        const data = {
-            name: event.target.querySelector('#instruction-set-name-input').value,
-            instruction_ids: setInstructionsSelect.tomselect.getValue()
-        };
-        const method = id ? 'PUT' : 'POST';
-        const url = id ? `/api/instruction-sets/${id}` : '/api/instruction-sets';
-
-        try {
-            await apiRequest(url, method, data);
-            closeSetModal();
-            loadCustomInstructionsData(container);
-        } catch (error) {
-            alert(`Error: ${error.message}`);
-        }
-    }
+    // if (event.target.id === 'instruction-set-form') {
+    //     event.preventDefault();
+    //     const id = event.target.querySelector('#instruction-set-id-input').value;
+    //     const setInstructionsSelect = document.getElementById('instruction-set-instructions-select');
+    //     const data = {
+    //         name: event.target.querySelector('#instruction-set-name-input').value,
+    //         instruction_ids: setInstructionsSelect.tomselect.getValue()
+    //     };
+    //     const method = id ? 'PUT' : 'POST';
+    //     const url = id ? `/api/instruction-sets/${id}` : '/api/instruction-sets';
+    //
+    //     try {
+    //         await apiRequest(url, method, data);
+    //         closeSetModal();
+    //         loadCustomInstructionsData(container);
+    //     } catch (error) {
+    //         alert(`Error: ${error.message}`);
+    //     }
+    // }
 }
 
 async function handleClick(event, container) {
     // Modal open/close
     if (event.target.id === 'add-instruction-btn') openInstructionModal();
-    if (event.target.id === 'add-instruction-set-btn') openSetModal();
+    // if (event.target.id === 'add-instruction-set-btn') openSetModal();
     if (event.target.closest('.close-btn')) {
         if (event.target.closest('#instruction-modal')) closeInstructionModal();
-        if (event.target.closest('#instruction-set-modal')) closeSetModal();
+        // if (event.target.closest('#instruction-set-modal')) closeSetModal();
     }
-    if (event.target.matches('#instruction-modal, #instruction-set-modal')) {
+    if (event.target.matches('#instruction-modal')) { //, #instruction-set-modal
         event.target.style.display = 'none';
     }
 
@@ -299,23 +296,23 @@ async function handleClick(event, container) {
     }
 
     // Instruction set item controls
-    const setItem = event.target.closest('.instruction-set-item');
-    if (setItem) {
-        const setId = setItem.dataset.setId;
-        if (event.target.classList.contains('edit-instruction-set-btn')) {
-            const set = setsCache.find(s => s.id == setId);
-            if (set) openSetModal(set);
-        } else if (event.target.classList.contains('delete-instruction-set-btn')) {
-            if (confirm('Are you sure you want to delete this set?')) {
-                try {
-                    await apiRequest(`/api/instruction-sets/${setId}`, 'DELETE');
-                    loadCustomInstructionsData(container);
-                } catch (error) {
-                    alert(`Error deleting set: ${error.message}`);
-                }
-            }
-        }
-    }
+    // const setItem = event.target.closest('.instruction-set-item');
+    // if (setItem) {
+    //     const setId = setItem.dataset.setId;
+    //     if (event.target.classList.contains('edit-instruction-set-btn')) {
+    //         const set = setsCache.find(s => s.id == setId);
+    //         if (set) openSetModal(set);
+    //     } else if (event.target.classList.contains('delete-instruction-set-btn')) {
+    //         if (confirm('Are you sure you want to delete this set?')) {
+    //             try {
+    //                 await apiRequest(`/api/instruction-sets/${setId}`, 'DELETE');
+    //                 loadCustomInstructionsData(container);
+    //             } catch (error) {
+    //                 alert(`Error deleting set: ${error.message}`);
+    //             }
+    //         }
+    //     }
+    // }
 }
 
 async function handleChange(event, container) {
@@ -358,12 +355,12 @@ export function initializeCustomInstructions() {
     const getContainer = () => document.getElementById('settings-page-content') || document.getElementById('settings-modal');
 
     // Initialize TomSelect for the set modal once
-    const setInstructionsSelect = document.getElementById('instruction-set-instructions-select');
-    if (setInstructionsSelect && !setInstructionsSelect.tomselect) {
-        initializeTomSelect(setInstructionsSelect, {
-            plugins: ['remove_button'],
-        });
-    }
+    // const setInstructionsSelect = document.getElementById('instruction-set-instructions-select');
+    // if (setInstructionsSelect && !setInstructionsSelect.tomselect) {
+    //     initializeTomSelect(setInstructionsSelect, {
+    //         plugins: ['remove_button'],
+    //     });
+    // }
 
     document.addEventListener('submit', (event) => {
         if (event.target.closest('#settings-custom-instructions-section') || event.target.closest('.modal')) {

@@ -345,9 +345,11 @@ function renderContainerHTML(container) {
     <button id="add-instruction-btn" class="button-primary">Add Instruction</button>
     <div id="instructions-list-container"></div>
     <hr class="modal-hr">
+    <!--
     <h2>Instruction Sets</h2>
     <button id="add-instruction-set-btn" class="button-primary">Add Set</button>
     <div id="instruction-sets-list-container"></div>
+    -->
 </div>
 `;
     // Attach all event handlers and initialize components for this container
