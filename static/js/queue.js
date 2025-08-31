@@ -2,16 +2,98 @@
 
 import { apiRequest } from './api.js';
 import { queuePageContent, fullPromptModal, fullPromptContent, fullPromptClose, fullPromptMetadataPane, queuePaginationContainer } from './dom.js';
+import { showTopic } from './forum.js';
+import { openPersonaModal } from './personas.js';
+import { showToast } from './ui.js';
 
 // --- Helper function to escape HTML for displaying prompt content safely ---
-// Moved here to be accessible by other functions if needed, or can be kept local
 function escapeHTML(str) {
-    if (typeof str !== 'string') return ''; // Ensure str is a string
+    if (typeof str !== 'string') return '';
     const div = document.createElement('div');
     div.appendChild(document.createTextNode(str));
     return div.innerHTML;
 }
 
+function renderMetadata(item) {
+    if (!fullPromptMetadataPane) return;
+
+    fullPromptMetadataPane.innerHTML = ''; // Clear previous content
+
+    // 1. Context Link
+    const contextLinkContainer = document.createElement('div');
+    contextLinkContainer.className = 'context-link-container';
+    let linkHTML = '<p>No context link available.</p>';
+
+    if (item.status === 'complete_target_deleted') {
+        linkHTML = '<p><em>Original content was deleted.</em></p>';
+    } else if (item.request_type === 'generate_persona' && item.status === 'complete' && item.result_object_id) {
+        linkHTML = `<a href="#" data-persona-id="${item.result_object_id}" class="view-context-link">View Generated Persona</a>`;
+    } else if (item.topic_id) {
+        linkHTML = `<a href="#" data-topic-id="${item.topic_id}" class="view-context-link">View Topic</a>`;
+    } else if (item.status !== 'complete') {
+        linkHTML = '<p><em>Link will be available upon completion.</em></p>';
+    }
+    contextLinkContainer.innerHTML = linkHTML;
+    fullPromptMetadataPane.appendChild(contextLinkContainer);
+
+    // 2. Token Breakdown
+    const tokenContainer = document.createElement('div');
+    tokenContainer.className = 'token-breakdown-container';
+    renderTokenBreakdownForModal(item.prompt_token_breakdown, tokenContainer);
+    fullPromptMetadataPane.appendChild(tokenContainer);
+    
+    // 3. Actions Menu
+    const actionsContainer = document.createElement('div');
+    actionsContainer.className = 'queue-actions-container';
+    actionsContainer.innerHTML = `
+        <div class="kebab-menu">
+            <button class="kebab-button">...</button>
+            <div class="kebab-dropdown">
+                <a href="#" class="kebab-item delete-queue-item" data-request-id="${item.request_id}">Delete</a>
+            </div>
+        </div>
+    `;
+    fullPromptMetadataPane.appendChild(actionsContainer);
+
+    // Add event listeners
+    const link = fullPromptMetadataPane.querySelector('.view-context-link');
+    if (link) {
+        link.addEventListener('click', (e) => {
+            e.preventDefault();
+            const topicId = e.target.dataset.topicId;
+            const personaId = e.target.dataset.personaId;
+            if (topicId) {
+                showTopic(topicId);
+                fullPromptModal.style.display = 'none';
+            } else if (personaId) {
+                openPersonaModal(personaId);
+            }
+        });
+    }
+
+    const kebabButton = actionsContainer.querySelector('.kebab-button');
+    const kebabDropdown = actionsContainer.querySelector('.kebab-dropdown');
+    kebabButton.addEventListener('click', () => {
+        kebabDropdown.classList.toggle('visible');
+    });
+
+    const deleteButton = actionsContainer.querySelector('.delete-queue-item');
+    deleteButton.addEventListener('click', async (e) => {
+        e.preventDefault();
+        const requestId = e.target.dataset.requestId;
+        if (confirm(`Are you sure you want to delete queue item #${requestId}? This cannot be undone.`)) {
+            try {
+                await apiRequest(`/api/queue/${requestId}`, { method: 'DELETE' });
+                showToast('Queue item deleted.');
+                fullPromptModal.style.display = 'none';
+                loadQueueData(); // Refresh the queue view
+            } catch (error) {
+                console.error('Failed to delete queue item:', error);
+                showToast(`Error: ${error.message}`, 'error');
+            }
+        }
+    });
+}
 
 // --- New Token Breakdown Rendering Function for Modal ---
 function renderTokenBreakdownForModal(breakdownString, containerElement) {
@@ -19,83 +101,119 @@ function renderTokenBreakdownForModal(breakdownString, containerElement) {
     containerElement.innerHTML = ''; // Clear previous content
 
     if (!breakdownString) {
-        containerElement.innerHTML = '<p>No token breakdown available.</p>';
+        const p = document.createElement('p');
+        p.textContent = 'No token breakdown available.';
+        containerElement.appendChild(p);
         return;
     }
 
     try {
         const breakdown = JSON.parse(breakdownString);
-        const table = document.createElement('div'); // Using divs for table structure
+        const details = document.createElement('details');
+        details.className = 'token-breakdown-details';
+
+        const summary = document.createElement('summary');
+        summary.textContent = `Total Tokens: ${breakdown.total_prompt_tokens || 'N/A'}`;
+        details.appendChild(summary);
+
+        const table = document.createElement('div');
+        table.className = 'token-breakdown-table';
         table.style.display = 'table';
-        table.style.width = '100%'; // Use full width of the pane
+        table.style.width = '100%';
 
         const keyMapping = {
-            total_prompt_tokens: "Total Final Prompt Tokens",
             persona_prompt_tokens: "Persona Instructions",
             user_post_tokens: "User Post",
             attachments_token_count: "Attachments",
             primary_chat_history_tokens: "Primary Chat History",
             ambient_chat_history_tokens: "Ambient Chat History",
             headers_tokens: "History Headers",
-            chat_history_tokens: "Chat History (Legacy)" // Keep for older records
+            chat_history_tokens: "Chat History (Legacy)"
         };
 
-        // Order of display, total first
         const displayOrder = [
-            'total_prompt_tokens',
-            'persona_prompt_tokens',
-            'user_post_tokens',
-            'attachments_token_count',
-            'primary_chat_history_tokens',
-            'ambient_chat_history_tokens',
-            'headers_tokens',
-            'chat_history_tokens'
+            'persona_prompt_tokens', 'user_post_tokens', 'attachments_token_count',
+            'primary_chat_history_tokens', 'ambient_chat_history_tokens', 'headers_tokens', 'chat_history_tokens'
         ];
 
         displayOrder.forEach(key => {
-            if (breakdown[key] !== undefined && breakdown[key] !== null) {
-                const isTotal = key === 'total_prompt_tokens';
-                // Only display if value is not zero, OR if it's the total tokens
-                if (isTotal || parseFloat(breakdown[key]) !== 0) {
-                    const row = document.createElement('div');
-                    row.style.display = 'table-row';
-
-                    const labelCell = document.createElement('div');
-                    labelCell.style.display = 'table-cell';
-                    labelCell.style.textAlign = 'left';
-                    labelCell.style.padding = '2px 5px';
-                    labelCell.textContent = keyMapping[key] || key;
-
-                    const valueCell = document.createElement('div');
-                    valueCell.style.display = 'table-cell';
-                    valueCell.style.textAlign = 'right';
-                    valueCell.style.padding = '2px 5px';
-                    valueCell.textContent = breakdown[key];
-
-                    if (!isTotal) {
-                        labelCell.style.fontSize = '0.9em';
-                        valueCell.style.fontSize = '0.9em';
-                    } else {
-                        labelCell.style.fontWeight = 'bold';
-                        valueCell.style.fontWeight = 'bold';
-                    }
-                    row.appendChild(labelCell);
-                    row.appendChild(valueCell);
-                    table.appendChild(row);
-                }
+            if (breakdown[key] !== undefined && breakdown[key] !== null && parseFloat(breakdown[key]) !== 0) {
+                const row = document.createElement('div');
+                row.style.display = 'table-row';
+                const labelCell = document.createElement('div');
+                labelCell.style.display = 'table-cell';
+                labelCell.textContent = keyMapping[key] || key;
+                const valueCell = document.createElement('div');
+                valueCell.style.display = 'table-cell';
+                valueCell.style.textAlign = 'right';
+                valueCell.textContent = breakdown[key];
+                row.appendChild(labelCell);
+                row.appendChild(valueCell);
+                table.appendChild(row);
             }
         });
 
         if (table.children.length > 0) {
-            containerElement.appendChild(table);
-        } else {
-            containerElement.innerHTML = '<p>Token breakdown contains no data or only zero values.</p>';
+            details.appendChild(table);
         }
+        containerElement.appendChild(details);
 
     } catch (e) {
         console.error('Error parsing or rendering token breakdown for modal:', e);
         containerElement.innerHTML = '<p class="error-message">Error displaying token breakdown.</p>';
     }
+}
+
+
+// --- Persona Generation Modal Function ---
+function showPersonaGenerationDetails(item) {
+    if (!fullPromptModal || !fullPromptContent || !fullPromptMetadataPane) return;
+
+    let params;
+    try {
+        params = JSON.parse(item.request_params);
+    } catch (e) {
+        console.error("Failed to parse request_params for persona generation item:", item);
+        fullPromptContent.innerHTML = `<p class="error-message">Could not parse request details.</p>`;
+        fullPromptMetadataPane.innerHTML = '';
+        fullPromptModal.style.display = 'block';
+        return;
+    }
+
+    const stage1Prompt = params.stage1_full_prompt || "Stage 1 prompt not available.";
+    const stage2Template = params.stage2_prompt_template || "Stage 2 template not available.";
+
+    const modalHTML = `
+        <div class="collapsible-prompt-container">
+            <details class="prompt-section" open>
+                <summary>Stage 1: Expansion Prompt</summary>
+                <pre>${escapeHTML(stage1Prompt)}</pre>
+            </details>
+            <details class="prompt-section">
+                <summary>Stage 2: Refinement Template</summary>
+                <pre>${escapeHTML(stage2Template)}</pre>
+            </details>
+        </div>
+    `;
+    fullPromptContent.innerHTML = modalHTML;
+    
+    renderMetadata(item);
+    
+    // Accordion logic
+    const detailsElements = fullPromptContent.querySelectorAll('.prompt-section');
+    detailsElements.forEach(details => {
+        details.addEventListener('toggle', (event) => {
+            if (event.target.open) {
+                detailsElements.forEach(otherDetails => {
+                    if (otherDetails !== event.target) {
+                        otherDetails.open = false;
+                    }
+                });
+            }
+        });
+    });
+
+    fullPromptModal.style.display = 'block';
 }
 
 
@@ -120,20 +238,38 @@ export function renderQueueList(queueItems) {
         const queuedAt = item.requested_at ? new Date(item.requested_at).toLocaleString() : 'Unknown time';
         const status = item.status || 'unknown';
         const model = item.llm_model || 'default';
-        let personaDisplay = 'default';
-        if (item.llm_persona) {
-            if (item.persona_name) {
-                personaDisplay = `${item.persona_name} (ID: ${item.llm_persona})`;
-            } else {
-                personaDisplay = `ID: ${item.llm_persona} (Name not found)`;
-            }
-        }
         
         let snippet;
         let summaryContent;
 
-        if (status === 'pending_dependency' && item.parent_request_id) {
+        if (item.request_type === 'generate_persona') {
+            li.classList.add('persona-generation-item');
+            let nameHint = 'New Persona';
+            try {
+                const params = JSON.parse(item.request_params);
+                nameHint = params?.input_details?.name_hint || params?.target_persona_name_override || nameHint;
+            } catch (e) { /* Use default */ }
+
+            summaryContent = `
+                <strong>Request ID: ${item.request_id}</strong><br>
+                Status: <span class="queue-status status-${status}">${status}</span><br>
+                Type: Persona Generation<br>
+                Model: ${model}<br>
+                Queued: <span class="queue-meta">${queuedAt}</span>
+            `;
+            snippet = `Generating persona with name hint: "${escapeHTML(nameHint)}"`;
+            li.addEventListener('click', () => showPersonaGenerationDetails(item));
+
+        } else if (status === 'pending_dependency' && item.parent_request_id) {
             li.classList.add('chained-request');
+            let personaDisplay = 'default';
+             if (item.llm_persona) {
+                if (item.persona_name) {
+                    personaDisplay = `${item.persona_name} (ID: ${item.llm_persona})`;
+                } else {
+                    personaDisplay = `ID: ${item.llm_persona} (Name not found)`;
+                }
+            }
             snippet = `This is a chained reply, waiting for response to request <span class="parent-request-link">#${item.parent_request_id}</span>.`;
             summaryContent = `
                 <strong>Request ID: ${item.request_id}</strong><br>
@@ -141,7 +277,17 @@ export function renderQueueList(queueItems) {
                 Model: ${model}, Persona: ${personaDisplay}<br>
                 Queued: <span class="queue-meta">${queuedAt}</span>
             `;
-        } else {
+            li.addEventListener('click', () => showFullPromptModal(item));
+
+        } else { // Standard post response
+            let personaDisplay = 'default';
+            if (item.llm_persona) {
+                if (item.persona_name) {
+                    personaDisplay = `${item.persona_name} (ID: ${item.llm_persona})`;
+                } else {
+                    personaDisplay = `ID: ${item.llm_persona} (Name not found)`;
+                }
+            }
             snippet = item.post_snippet ? escapeHTML(item.post_snippet.substring(0, 150) + '...') : 'No snippet available';
             snippet = `Original Post Snippet: "${snippet}"`;
 
@@ -164,6 +310,7 @@ export function renderQueueList(queueItems) {
                 Queued: <span class="queue-meta">${queuedAt}</span><br>
                 Total Tokens: <span class="queue-meta">${totalTokensDisplay}</span>
             `;
+            li.addEventListener('click', () => showFullPromptModal(item));
         }
 
 
@@ -176,9 +323,6 @@ export function renderQueueList(queueItems) {
             </div>
         `;
 
-        // Add click listener to show full prompt and pass token breakdown string
-        li.addEventListener('click', () => showFullPromptModal(item.request_id, item.prompt_token_breakdown));
-
         list.appendChild(li);
     });
 
@@ -186,28 +330,34 @@ export function renderQueueList(queueItems) {
 }
 
 // --- Full Prompt Modal Functions ---
-async function showFullPromptModal(requestId, tokenBreakdownString) { // Added tokenBreakdownString parameter
+async function showFullPromptModal(item) { 
     if (!fullPromptModal || !fullPromptContent || !fullPromptMetadataPane) return;
 
+    // Delegate to the new function if it's a persona generation request
+    if (item.request_type === 'generate_persona') {
+        showPersonaGenerationDetails(item);
+        return;
+    }
+
     fullPromptContent.innerHTML = '<p>Loading prompt...</p>';
-    fullPromptMetadataPane.innerHTML = ''; // Clear metadata pane initially
     fullPromptModal.style.display = 'block'; // Show the modal
 
     try {
-        const response = await apiRequest(`/api/queue/${requestId}/prompt`);
+        const response = await apiRequest(`/api/queue/${item.request_id}/prompt`);
         if (response && response.prompt) {
             fullPromptContent.innerHTML = `<pre>${escapeHTML(response.prompt)}</pre>`;
         } else {
             fullPromptContent.innerHTML = '<p class="error-message">Failed to load prompt.</p>';
         }
     } catch (error) {
-        console.error(`Error loading prompt for request ${requestId}:`, error);
+        console.error(`Error loading prompt for request ${item.request_id}:`, error);
         fullPromptContent.innerHTML = `<p class="error-message">Failed to load prompt: ${error.message}</p>`;
     }
 
     // Render the token breakdown in the metadata pane
-    renderTokenBreakdownForModal(tokenBreakdownString, fullPromptMetadataPane);
+    renderMetadata(item);
 }
+
 
 
 // --- Queue Loading Function ---

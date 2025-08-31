@@ -99,7 +99,7 @@ def init_db():
                 request_id INTEGER PRIMARY KEY AUTOINCREMENT,
                 post_id_to_respond_to INTEGER, -- Made nullable
                 requested_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                status TEXT NOT NULL DEFAULT 'pending', -- pending, processing, complete, error, pending_dependency
+                status TEXT NOT NULL DEFAULT 'pending', -- pending, processing, complete, error, pending_dependency, complete_target_deleted
                 llm_model TEXT,
                 llm_persona TEXT,
                 processed_at TIMESTAMP,
@@ -108,6 +108,7 @@ def init_db():
                 request_type TEXT,     -- New field
                 request_params TEXT,   -- New field
                 requested_by_user_id INTEGER, -- New field for tracking who triggered the LLM
+                result_object_id INTEGER, -- New field for linking to the created post or persona
                 FOREIGN KEY (post_id_to_respond_to) REFERENCES posts(post_id),
                 FOREIGN KEY (requested_by_user_id) REFERENCES users(user_id)
             )
