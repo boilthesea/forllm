@@ -391,7 +391,7 @@ const personas = {
 // Export the personas object
 export default personas;
 
-export async function openPersonaInModal(personaId, settingsContainer) {
+export async function openPersonaModal(personaId, settingsContainer) {
   editingPersonaId = parseInt(personaId);
   debugLog('openPersonaInModal', `Editing persona ID: ${editingPersonaId}`);
 

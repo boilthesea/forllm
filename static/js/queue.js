@@ -2,7 +2,7 @@
 
 import { apiRequest } from './api.js';
 import { queuePageContent, fullPromptModal, fullPromptContent, fullPromptClose, fullPromptMetadataPane, queuePaginationContainer } from './dom.js';
-import { showTopic } from './forum.js';
+import { loadPosts } from './forum.js';
 import { openPersonaModal } from './personas.js';
 import { showToast } from './ui.js';
 

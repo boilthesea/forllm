@@ -131,9 +131,11 @@ def get_queue():
             lr.result_object_id,
             p_orig.content AS post_snippet,
             p_orig.topic_id AS topic_id,
+            t.title AS topic_title, # Added topic title
             pers.name AS persona_name # Fetch persona name
         FROM llm_requests lr
         LEFT JOIN posts p_orig ON lr.post_id_to_respond_to = p_orig.post_id
+        LEFT JOIN topics t ON p_orig.topic_id = t.topic_id # Added join to topics
         LEFT JOIN personas pers ON lr.llm_persona = pers.persona_id
         ORDER BY lr.requested_at DESC
         LIMIT ? OFFSET ?
