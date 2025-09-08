@@ -185,7 +185,7 @@ export function attachHandlers(container) {
     if (target.matches('.edit-persona-btn')) {
       e.preventDefault();
       const personaId = target.dataset.id;
-      openPersonaInModal(personaId, container);
+      openPersonaModal(personaId, container);
       return;
     }
 
