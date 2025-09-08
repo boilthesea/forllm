@@ -45,17 +45,28 @@ function renderMetadata(item) {
     // 3. Actions Menu
     const actionsContainer = document.createElement('div');
     actionsContainer.className = 'queue-actions-container';
-    actionsContainer.innerHTML = `
-        <div class="kebab-menu">
-            <button class="kebab-button">...</button>
-            <div class="kebab-dropdown">
-                <a href="#" class="kebab-item delete-queue-item" data-request-id="${item.request_id}">Delete</a>
-            </div>
-        </div>
-    `;
+
+    const optionsButton = document.createElement('button');
+    optionsButton.className = 'queue-options-btn';
+    optionsButton.innerHTML = '&hellip;';
+
+    const optionsMenu = document.createElement('div');
+    optionsMenu.className = 'queue-options-menu';
+
+    const deleteLink = document.createElement('a');
+    deleteLink.href = '#';
+    deleteLink.className = 'delete-queue-item';
+    deleteLink.textContent = 'Delete';
+    deleteLink.dataset.requestId = item.request_id;
+    optionsMenu.appendChild(deleteLink);
+
+    actionsContainer.appendChild(optionsButton);
+    actionsContainer.appendChild(optionsMenu);
     fullPromptMetadataPane.appendChild(actionsContainer);
 
-    // Add event listeners
+    // --- Event Listeners ---
+
+    // Listener for the context link
     const link = fullPromptMetadataPane.querySelector('.view-context-link');
     if (link) {
         link.addEventListener('click', (e) => {
@@ -63,7 +74,9 @@ function renderMetadata(item) {
             const topicId = e.target.dataset.topicId;
             const personaId = e.target.dataset.personaId;
             if (topicId) {
-                showTopic(topicId);
+                // Assuming a function exists to navigate to a topic
+                // showTopic(topicId);
+                console.log(`Would navigate to topic ${topicId}`);
                 fullPromptModal.style.display = 'none';
             } else if (personaId) {
                 openPersonaModal(personaId);
@@ -71,19 +84,25 @@ function renderMetadata(item) {
         });
     }
 
-    const kebabButton = actionsContainer.querySelector('.kebab-button');
-    const kebabDropdown = actionsContainer.querySelector('.kebab-dropdown');
-    kebabButton.addEventListener('click', () => {
-        kebabDropdown.classList.toggle('visible');
+    // Listener for the new options menu
+    optionsButton.addEventListener('click', (e) => {
+        e.stopPropagation();
+        // Hide other menus if any were open
+        document.querySelectorAll('.queue-options-menu').forEach(menu => {
+            if (menu !== optionsMenu) {
+                menu.style.display = 'none';
+            }
+        });
+        optionsMenu.style.display = optionsMenu.style.display === 'block' ? 'none' : 'block';
     });
 
-    const deleteButton = actionsContainer.querySelector('.delete-queue-item');
-    deleteButton.addEventListener('click', async (e) => {
+    // Listener for the delete action
+    deleteLink.addEventListener('click', async (e) => {
         e.preventDefault();
         const requestId = e.target.dataset.requestId;
         if (confirm(`Are you sure you want to delete queue item #${requestId}? This cannot be undone.`)) {
             try {
-                await apiRequest(`/api/queue/${requestId}`, { method: 'DELETE' });
+                await apiRequest(`/api/queue/${requestId}`, 'DELETE');
                 showToast('Queue item deleted.');
                 fullPromptModal.style.display = 'none';
                 loadQueueData(); // Refresh the queue view
