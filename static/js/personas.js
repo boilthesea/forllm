@@ -381,7 +381,8 @@ export function attachHandlers(container) {
 const personas = {
   loadPersonasList, // Now expects container
   showMessage,      // Now expects container
-  attachHandlers    // Now expects container
+  attachHandlers,   // Now expects container
+  openPersonaModal
 };
 
 // Attach handlers when module loads
