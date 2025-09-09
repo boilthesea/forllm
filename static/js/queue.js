@@ -19,9 +19,15 @@ function renderMetadata(item) {
 
     fullPromptMetadataPane.innerHTML = ''; // Clear previous content
 
-    // 1. Context Link
+    // 1. Token Breakdown
+    const tokenContainer = document.createElement('div');
+    tokenContainer.className = 'token-breakdown-container';
+    renderTokenBreakdownForModal(item.prompt_token_breakdown, tokenContainer);
+    fullPromptMetadataPane.appendChild(tokenContainer);
+
+    // 2. Context Link
     const contextLinkContainer = document.createElement('div');
-    contextLinkContainer.className = 'context-link-container';
+    contextLinkContainer.className = 'context-link-container queue-context-link'; // Added class for styling
     let linkHTML = '<p>No context link available.</p>';
 
     if (item.status === 'complete_target_deleted') {
@@ -29,18 +35,12 @@ function renderMetadata(item) {
     } else if (item.request_type === 'generate_persona' && item.status === 'complete' && item.result_object_id) {
         linkHTML = `<a href="#" data-persona-id="${item.result_object_id}" class="view-context-link">View Generated Persona</a>`;
     } else if (item.topic_id) {
-        linkHTML = `<a href="#" data-topic-id="${item.topic_id}" class="view-context-link">View Topic</a>`;
+        linkHTML = `<a href="#" data-topic-id="${item.topic_id}" data-topic-title="${escapeHTML(item.topic_title || '')}" class="view-context-link">View Topic</a>`;
     } else if (item.status !== 'complete') {
         linkHTML = '<p><em>Link will be available upon completion.</em></p>';
     }
     contextLinkContainer.innerHTML = linkHTML;
     fullPromptMetadataPane.appendChild(contextLinkContainer);
-
-    // 2. Token Breakdown
-    const tokenContainer = document.createElement('div');
-    tokenContainer.className = 'token-breakdown-container';
-    renderTokenBreakdownForModal(item.prompt_token_breakdown, tokenContainer);
-    fullPromptMetadataPane.appendChild(tokenContainer);
     
     // 3. Actions Menu
     const actionsContainer = document.createElement('div');
@@ -72,11 +72,11 @@ function renderMetadata(item) {
         link.addEventListener('click', (e) => {
             e.preventDefault();
             const topicId = e.target.dataset.topicId;
+            const topicTitle = link.dataset.topicTitle; // Get title from the link
             const personaId = e.target.dataset.personaId;
             if (topicId) {
-                // Assuming a function exists to navigate to a topic
-                // showTopic(topicId);
-                console.log(`Would navigate to topic ${topicId}`);
+                // Navigate to the topic by calling loadPosts from forum.js
+                loadPosts(topicId, topicTitle); // Pass both id and title
                 fullPromptModal.style.display = 'none';
             } else if (personaId) {
                 openPersonaModal(personaId);
@@ -176,6 +176,17 @@ function renderTokenBreakdownForModal(breakdownString, containerElement) {
             details.appendChild(table);
         }
         containerElement.appendChild(details);
+
+        // --- Dynamic Overlap Logic ---
+        details.addEventListener('toggle', () => {
+            const contextLink = fullPromptMetadataPane.querySelector('.queue-context-link');
+            if (details.open && contextLink) {
+                const linkHeight = contextLink.offsetHeight;
+                details.style.marginBottom = `-${linkHeight}px`;
+            } else {
+                details.style.marginBottom = '0';
+            }
+        });
 
     } catch (e) {
         console.error('Error parsing or rendering token breakdown for modal:', e);

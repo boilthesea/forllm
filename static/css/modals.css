@@ -442,3 +442,20 @@
     background-color: var(--accent-color);
     color: var(--background-color-primary);
 }
+
+/* --- Queue Modal Metadata Pane --- */
+.token-breakdown-container {
+    position: relative; /* Needed for z-index to work */
+    z-index: 2; /* Ensure it's above the context link */
+    background-color: var(--color-bg-modal); /* Match modal background */
+}
+
+.token-breakdown-details[open] {
+    padding-bottom: 10px; /* Add some space when open */
+}
+
+.queue-context-link {
+    position: relative;
+    z-index: 1; /* Ensure it's below the token breakdown */
+    padding-top: 5px;
+}
