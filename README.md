@@ -111,11 +111,12 @@ This project is under active development. Future plans include:
 *   [x] Edit and delete posts and topics.
 *   [x] Custom instructions.
 *   [x] File tagging.
-*   [ ] Persona model over-ride.
+*   [x] Queue improvements (show queued persona generation, delete items, links/embeds of replies).
+*   [ ] Grouping of personas and custom instructions (through tags).
+*   [ ] Specify a persona's default model, over-riding other defaults.
 *   [ ] Better Firefox support.
 *   [ ] Tripane overhaul, there's much to do to fully realize the potential.
 *   [ ] Improved persona generation (functions, but needs refining).
-*   [ ] Queue improvements (show queued persona generation, delete items).
 *   [ ] Notes section.
 *   [ ] Alternate unthreaded (vbulletin style) view of posts.
 *   [ ] Direct message/live chat option for smaller models, quick answers.
