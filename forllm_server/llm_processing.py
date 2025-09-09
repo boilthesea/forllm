@@ -362,8 +362,7 @@ def process_llm_request(request_details, flask_app):
                         except Exception as e:
                             file_content = f"Error reading file: {str(e)}"
                         attachments_text_parts.append(
-                            f"--- BEGIN ATTACHED FILE ---\nFilename: {att['filename']}\nUser prompt: {att['user_prompt'] or 'Associated file content.'}\nContent:\n{file_content}\n--- END ATTACHED FILE ---"
-                        )
+                            f"--- BEGIN ATTACHED FILE ---\nFilename: {att['filename']}\nUser prompt: {att['user_prompt'] or 'Associated file content.'}\nContent:\n{file_content}\n--- END ATTACHED FILE ---")
         
         attachments_string = "\n\n".join(attachments_text_parts)
         if attachments_string:
@@ -381,8 +380,7 @@ def process_llm_request(request_details, flask_app):
                             with open(file_path, 'r', encoding='utf-8') as f:
                                 file_content = f.read()
                             tagged_files_parts.append(
-                                f"--- BEGIN INCLUDED FILE ---\nFile Path: {file_path}\nContent:\n{file_content}\n--- END INCLUDED FILE ---"
-                            )
+                                f"--- BEGIN INCLUDED FILE ---\nFile Path: {file_path}\nContent:\n{file_content}\n--- END INCLUDED FILE ---")
                         except Exception as e:
                             tagged_files_parts.append(f"--- ERROR: Could not read file at path {file_path}: {e} ---")
                     if tagged_files_parts:
@@ -563,20 +561,22 @@ def process_llm_request(request_details, flask_app):
                  if not full_response_content:
                      raise ValueError("Ollama stream ended unexpectedly with no content and no 'done' flag.")
 
-            cursor.execute("""
+            cursor.execute(
+                """
                 INSERT INTO posts (topic_id, user_id, parent_post_id, content, is_llm_response, llm_model_id, llm_persona_id)
                 SELECT topic_id, ?, ?, ?, TRUE, ?, ?
                 FROM posts WHERE post_id = ?
-            """, (CURRENT_USER_ID, post_id, full_response_content, model, persona_id, post_id))
+                """, (CURRENT_USER_ID, post_id, full_response_content, model, persona_id, post_id))
             new_post_id = cursor.lastrowid
 
-            cursor.execute("UPDATE llm_requests SET status = 'complete', processed_at = CURRENT_TIMESTAMP WHERE request_id = ?", (request_id,))
+            cursor.execute("UPDATE llm_requests SET status = 'complete', processed_at = CURRENT_TIMESTAMP, result_object_id = ? WHERE request_id = ?", (new_post_id, request_id,))
             
-            cursor.execute("""
+            cursor.execute(
+                """
                 UPDATE llm_requests
                 SET status = 'pending', post_id_to_respond_to = ?
                 WHERE parent_request_id = ? AND status = 'pending_dependency'
-            """, (new_post_id, request_id))
+                """, (new_post_id, request_id))
             
             if cursor.rowcount > 0:
                 print(f"Request {request_id}: Activated {cursor.rowcount} dependent request(s).")

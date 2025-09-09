@@ -390,3 +390,72 @@
     transform: scale(1.1);
     border-color: #000;
 }
+/* --- Queue Modal Action Menu --- */
+.queue-actions-container {
+    position: absolute;
+    top: 1rem;
+    right: 2.5rem; 
+}
+
+.queue-options-btn {
+    background: none;
+    border: 1px solid transparent;
+    color: var(--text-color-secondary);
+    font-size: 1.2rem;
+    cursor: pointer;
+    padding: 0 0.5rem;
+    border-radius: 4px;
+}
+
+.queue-options-btn:hover {
+    color: var(--text-color-primary);
+    background-color: var(--background-color-secondary-hover);
+    border-color: var(--border-color);
+}
+
+.queue-options-menu {
+    display: none;
+    position: absolute;
+    right: 0;
+    top: 100%;
+    background-color: var(--section-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+    z-index: 1010; /* Higher than modal content */
+    min-width: 120px;
+    list-style: none;
+    padding: 5px 0;
+    margin: 2px 0 0 0;
+}
+
+.queue-options-menu a {
+    display: block;
+    padding: 8px 12px;
+    color: var(--text-color-primary);
+    text-decoration: none;
+    font-size: 0.9rem;
+    white-space: nowrap;
+}
+
+.queue-options-menu a:hover {
+    background-color: var(--accent-color);
+    color: var(--background-color-primary);
+}
+
+/* --- Queue Modal Metadata Pane --- */
+.token-breakdown-container {
+    position: relative; /* Needed for z-index to work */
+    z-index: 2; /* Ensure it's above the context link */
+    background-color: var(--color-bg-modal); /* Match modal background */
+}
+
+.token-breakdown-details[open] {
+    padding-bottom: 10px; /* Add some space when open */
+}
+
+.queue-context-link {
+    position: relative;
+    z-index: 1; /* Ensure it's below the token breakdown */
+    padding-top: 5px;
+}

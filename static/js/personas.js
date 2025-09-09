@@ -185,7 +185,7 @@ export function attachHandlers(container) {
     if (target.matches('.edit-persona-btn')) {
       e.preventDefault();
       const personaId = target.dataset.id;
-      openPersonaInModal(personaId, container);
+      openPersonaModal(personaId, container);
       return;
     }
 
@@ -381,7 +381,8 @@ export function attachHandlers(container) {
 const personas = {
   loadPersonasList, // Now expects container
   showMessage,      // Now expects container
-  attachHandlers    // Now expects container
+  attachHandlers,   // Now expects container
+  openPersonaModal
 };
 
 // Attach handlers when module loads
@@ -391,7 +392,7 @@ const personas = {
 // Export the personas object
 export default personas;
 
-export async function openPersonaInModal(personaId, settingsContainer) {
+export async function openPersonaModal(personaId, settingsContainer) {
   editingPersonaId = parseInt(personaId);
   debugLog('openPersonaInModal', `Editing persona ID: ${editingPersonaId}`);
 

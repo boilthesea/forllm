@@ -788,8 +788,8 @@ export function openPersonaForEditing(personaId) {
     setTimeout(() => {
         const settingsContentContainer = document.getElementById('settings-page-content');
         const personasTabContentContainer = settingsContentContainer?.querySelector('#settings-personas-section');
-        if (window.personasModule?.openPersonaInModal && personasTabContentContainer) {
-            window.personasModule.openPersonaInModal(personaId, personasTabContentContainer);
+        if (window.personasModule?.openPersonaModal && personasTabContentContainer) {
+            window.personasModule.openPersonaModal(personaId, personasTabContentContainer);
         } else {
             console.error('[Settings] Could not open persona for editing.');
             alert('Error: Could not open persona editor.');

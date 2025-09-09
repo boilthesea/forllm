@@ -465,6 +465,11 @@ export async function loadPosts(topicId, topicTitle) {
     currentTopicId = topicId;
     try {
         const posts = await apiRequest(`/api/topics/${topicId}/posts`);
+        // If topicTitle is not provided, try to find it from the topic list link
+        if (!topicTitle) {
+            const topicLink = document.querySelector(`#topic-list a[data-topic-id='${topicId}']`);
+            topicTitle = topicLink ? topicLink.dataset.topicTitle : 'Topic';
+        }
         currentTopicTitle.textContent = topicTitle;
         renderPosts(posts);
         showSection('topic-view-section');

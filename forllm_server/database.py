@@ -99,7 +99,7 @@ def init_db():
                 request_id INTEGER PRIMARY KEY AUTOINCREMENT,
                 post_id_to_respond_to INTEGER, -- Made nullable
                 requested_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                status TEXT NOT NULL DEFAULT 'pending', -- pending, processing, complete, error, pending_dependency
+                status TEXT NOT NULL DEFAULT 'pending', -- pending, processing, complete, error, pending_dependency, complete_target_deleted
                 llm_model TEXT,
                 llm_persona TEXT,
                 processed_at TIMESTAMP,
@@ -108,6 +108,7 @@ def init_db():
                 request_type TEXT,     -- New field
                 request_params TEXT,   -- New field
                 requested_by_user_id INTEGER, -- New field for tracking who triggered the LLM
+                result_object_id INTEGER, -- New field for linking to the created post or persona
                 FOREIGN KEY (post_id_to_respond_to) REFERENCES posts(post_id),
                 FOREIGN KEY (requested_by_user_id) REFERENCES users(user_id)
             )
@@ -393,6 +394,20 @@ def init_db():
             print("'parent_request_id' column added to llm_requests.")
         except Exception as e:
             print(f"Error adding 'parent_request_id' column to llm_requests: {e}")
+            db.rollback()
+
+    # --- Check and add 'result_object_id' to 'llm_requests' if it doesn't exist ---
+    # This is a critical migration for the queue refactor.
+    cursor.execute("PRAGMA table_info(llm_requests)")
+    columns = [col[1] for col in cursor.fetchall()]
+    if 'result_object_id' not in columns:
+        print("Updating llm_requests table: Adding 'result_object_id' column...")
+        try:
+            cursor.execute("ALTER TABLE llm_requests ADD COLUMN result_object_id INTEGER")
+            db.commit()
+            print("'result_object_id' column added to llm_requests.")
+        except Exception as e:
+            print(f"Error adding 'result_object_id' column to llm_requests: {e}")
             db.rollback()
 
 
@@ -735,6 +750,13 @@ def soft_delete_post(post_id):
             cursor.execute("""
                 DELETE FROM llm_requests
                 WHERE post_id_to_respond_to = ? AND status IN ('pending', 'pending_dependency')
+            """, (post_id,))
+
+            # Update the status of completed llm_requests that point to this post
+            cursor.execute("""
+                UPDATE llm_requests
+                SET status = 'complete_target_deleted'
+                WHERE request_type = 'respond_to_post' AND result_object_id = ? AND status = 'complete'
             """, (post_id,))
 
         return True
@@ -1476,6 +1498,14 @@ def soft_delete_persona(persona_id):
     try:
         cursor = db.cursor()
         cursor.execute('UPDATE personas SET is_active = 0 WHERE persona_id = ?', (persona_id,))
+
+        # Update the status of completed llm_requests that generated this persona
+        cursor.execute("""
+            UPDATE llm_requests
+            SET status = 'complete_target_deleted'
+            WHERE request_type = 'generate_persona' AND result_object_id = ? AND status = 'complete'
+        """, (persona_id,))
+
         db.commit()
         return cursor.rowcount > 0
     except sqlite3.Error as e:

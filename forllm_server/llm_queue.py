@@ -47,7 +47,7 @@ def _handle_persona_generation_request(request_id, request_params_json, flask_ap
 
             if new_persona_id:
                 print(f"Persona '{persona_name}' (ID: {new_persona_id}) saved successfully for request {request_id}.")
-                cursor.execute("UPDATE llm_requests SET status = 'complete', processed_at = CURRENT_TIMESTAMP WHERE request_id = ?", (request_id,))
+                cursor.execute("UPDATE llm_requests SET status = 'complete', processed_at = CURRENT_TIMESTAMP, result_object_id = ? WHERE request_id = ?", (new_persona_id, request_id,))
             else:
                 print(f"Error: Failed to save generated persona for request {request_id}.")
                 cursor.execute("UPDATE llm_requests SET status = 'error', error_message = 'Failed to save persona to DB', processed_at = CURRENT_TIMESTAMP WHERE request_id = ?", (request_id,))

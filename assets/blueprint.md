@@ -57,7 +57,7 @@ graph TD
 
 *   **`forllm_server/`** (Core Server Logic Package):
     *   **`config.py`**: Manages all static configuration values and constants for the application (database paths, API URLs, default settings, etc.).
-    *   **`forllm_server/database.py`**: Handles all aspects of database interaction: provides connection objects (`get_db`), manages connection teardown (`close_db`), and contains the initial database schema creation and migration logic (`init_db`). Also includes logic for persona CRUD, versioning, assignment, and fallback. Contains helper functions for the user activity feature, model metadata caching, `get_post_ancestors` for fetching primary conversation threads. Includes functions for advanced chat history construction, such as `get_sibling_branch_roots` and `get_recent_posts_from_branch` for fetching ambient conversational context. Manages settings like `default_llm_context_window`, chat history parameters (`ch_max_ambient_posts`, `ch_max_posts_per_sibling_branch`, `ch_primary_history_budget_ratio`), and the `llm_requests.prompt_token_breakdown` column.
+    *   **`forllm_server/database.py`**: Handles all aspects of database interaction: provides connection objects (`get_db`), manages connection teardown (`close_db`), and contains the initial database schema creation and migration logic (`init_db`). Also includes logic for persona CRUD, versioning, assignment, and fallback. Contains helper functions for the user activity feature, model metadata caching, `get_post_ancestors` for fetching primary conversation threads. Includes functions for advanced chat history construction, such as `get_sibling_branch_roots` and `get_recent_posts_from_branch` for fetching ambient conversational context. Manages settings like `default_llm_context_window`, chat history parameters (`ch_max_ambient_posts`, `ch_max_posts_per_sibling_branch`, `ch_primary_history_budget_ratio`), and the `llm_requests.prompt_token_breakdown` and `llm_requests.result_object_id` columns. Contains logic in deletion functions (`soft_delete_post`, `soft_delete_persona`) to update completed queue items to a `complete_target_deleted` status.
     *   **`markdown_config.py`**: Configures and provides the `MarkdownIt` instance used for rendering Markdown content to HTML, including custom Pygments syntax highlighting.
     *   **`tokenizer_utils.py`**: Implements token counting functionality using the `tiktoken` library. Provides a `count_tokens` function to estimate the number of tokens in a given text string.
     *   **`ollama_utils.py`**: (NEW) Contains utility functions for interacting directly with the Ollama API, such as fetching detailed model information (including context window size) and parsing it.
@@ -83,11 +83,11 @@ graph TD
         *   `POST /api/prompts/estimate_tokens`: Calculates and returns a detailed breakdown of estimated token counts. Now simulates the full, complex, and configurable chat history (primary + ambient + pruning using database settings) to provide a more accurate token breakdown, comparing against the current model's context window.
         *   `GET /api/utils/browse-folder`: Opens a native OS folder selection dialog on the server machine and returns the selected path. Used for adding folders to the file indexer.
     *   **`routes/forum_routes.py`**: Defines Flask Blueprint for API endpoints related to forum management: subforums, topics, and posts (CRUD operations, listing). Includes endpoints for assigning/unassigning multiple personas per subforum and setting the per-subforum default persona. Handles parsing of `@[Persona Name](persona_id)` and `[#filename.ext](path/to/file)` tags from post content, stores extracted IDs/paths in `posts.tagged_personas_in_content` and `posts.tagged_files_in_content`, and queues `llm_requests` for tagged personas.
-    *   **`routes/llm_routes.py`**: Defines Flask Blueprint for API endpoints related to LLM interactions: requesting an LLM response for a post and fetching available Ollama models. Allows persona override at LLM request time. `POST /api/posts/<int:post_id>/tag_persona`: Allows users to tag an existing post with a persona, creating an entry in `post_persona_tags` and queuing an `llm_request`.
+    *   **`routes/llm_routes.py`**: Defines Flask Blueprint for API endpoints related to LLM interactions: requesting an LLM response for a post and fetching available Ollama models. Allows persona override at LLM request time. `POST /api/posts/<int:post_id>/tag_persona`: Allows users to tag an existing post with a persona, creating an entry in `post_persona_tags` and queuing an `llm_request`. Includes queue routes (`GET /api/queue`, `GET /api/queue/<id>/prompt`, `DELETE /api/queue/<id>`).
     *   **`routes/schedule_routes.py`**: Defines Flask Blueprint for API endpoints managing LLM processing schedules: CRUD operations for schedules, and status/next schedule information.
     *   **`routes/settings_routes.py`**: Defines Flask Blueprint for API endpoints to get and update application-wide settings. Includes endpoints for persona management, global default persona, chat history configuration, and file indexing settings (CRUD for indexed folders, filter rules, and re-indexing).
     *   **`routes/file_routes.py`**: (NEW) Defines Flask Blueprint for file-related API endpoints, primarily the `/api/files/search` endpoint for editor autocomplete.
-    *   **`routes/persona_routes.py`**: Defines Flask Blueprint for API endpoints related to persona generation. Includes:
+    *   **`routes/persona_routes.py`**: Defines Flask Blueprint for API endpoints related to persona generation. All generation endpoints now pre-construct the full Stage 1 (expansion) prompt and the Stage 2 (refinement) template, storing them in the `llm_requests.request_params` field for immediate frontend visibility. Includes:
         *   `POST /api/personas/generate/from_details`: Queues generation of a persona from name/description hints.
         *   `POST /api/personas/generate/subforum_expert`: Queues generation of a subforum expert persona.
         *   `POST /api/personas/generate/subforum_experts_batch`: Queues batch generation of multiple subforum expert personas.
@@ -124,7 +124,10 @@ graph TD
     *   **`settings.js`**: Deals with application-wide settings. Handles theme selection, file indexing settings UI, and includes the event listener to launch the Theme Creator via `theming.js`. Initializes Tom Select for the model and theme selection dropdowns. It orchestrates the loading of persona and custom instruction modules.
     *   **`custom-instructions.js`**: (NEW) Implements all frontend logic for the Custom Instructions feature. It handles rendering the UI, managing modals for creating/editing instructions and sets, and uses a delegated event listener model to handle all user interactions robustly.
     *   **`theming.js`**: (NEW) Contains the client-side "live theming" engine. It introspects CSS variables from the current theme, dynamically builds the Theme Creator modal's UI, applies style changes in real-time for live preview, and handles exporting the generated CSS.
-    *   **`queue.js`**: Manages the display of the LLM processing queue. Fetches and renders the list of queued tasks, showing a summary including the *total prompt tokens*. Now visually represents chained requests and their dependencies. Clicking a queue item opens a modal displaying the full prompt content and a detailed, formatted token breakdown in a separate metadata pane within the modal.
+    *   **`queue.js`**: Manages the display of the LLM processing queue. Fetches and renders the list of queued tasks, showing a summary including the *total prompt tokens*. Now visually represents chained requests and their dependencies. Clicking a queue item opens a modal with advanced features:
+        *   For persona generation requests, it displays a two-stage accordion view for the "Expansion" and "Refinement" prompts.
+        *   For all requests, it features an enhanced metadata pane with a collapsible token breakdown and a context link to view the resulting post or persona.
+        *   Includes a "..." options menu allowing users to delete queue items.
     *   **`activity.js`**: Contains the frontend JavaScript logic for the Recent Activity Page, including fetching data from the activity API endpoints (recent topics, replies, personas) and rendering it into the respective panels on the activity page. Manages navigation from activity items to their respective content areas.
     *   **`editor.js`**: Responsible for initializing and configuring the EasyMDE Markdown editor instances. Integrates with `/api/prompts/estimate_tokens` to display a detailed token breakdown. Handles autocomplete and tag insertion for both `@persona` and `#file` mentions.
 
@@ -146,7 +149,7 @@ graph TD
         *   `posts`: User-generated content and LLM responses, forming threaded discussions.
             *   `tagged_personas_in_content` (TEXT, storing a JSON array of persona IDs from @mentions in content).
             *   `tagged_files_in_content` (TEXT, storing a JSON array of file paths from #mentions in content).
-        *   `llm_requests`: Queue for LLM processing, tracking `status` (e.g., 'pending', 'processing', 'complete', 'error', 'pending_dependency'), `model`, `persona`, `request_type` (e.g., 'respond_to_post', 'generate_persona'), `request_params` (JSON string), `parent_request_id` (for chained requests), and `prompt_token_breakdown`.
+        *   `llm_requests`: Queue for LLM processing, tracking `status` (e.g., 'pending', 'processing', 'complete', 'error', 'pending_dependency', 'complete_target_deleted'), `model`, `persona`, `request_type` (e.g., 'respond_to_post', 'generate_persona'), `request_params` (JSON string), `parent_request_id` (for chained requests), `result_object_id` (linking to the created post/persona), and `prompt_token_breakdown`.
             *   `prompt_token_breakdown TEXT`: JSON string storing a breakdown of token counts for different parts of the prompt (e.g., persona, user post, attachments, `primary_chat_history_tokens`, `ambient_chat_history_tokens`, `headers_tokens`, total).
         *   `llm_model_metadata`: (NEW) Caches metadata about LLM models, primarily their context window size.
             *   `model_name` (TEXT PRIMARY KEY): The unique name of the model.
@@ -279,7 +282,7 @@ graph TD
     *   `[TODO] Real-time updates or a manual refresh button for the activity page (currently refreshes on page visit).`
     *   `[TODO] Minimized version of the activity page as a potential top toolbar element.`
     *   `[TODO] Integration of Direct Messages or other future activity types.`
-*   **Progress Indicators:** [TODO] Basic visual feedback in the UI showing which requests are queued or actively being processed by the background worker.
+*   **Progress Indicators:** [DONE] The enhanced Queue page now provides detailed status and progress for all background LLM tasks.
 *   **Search Functionality:** [TODO] Implement basic text search across topics and posts.
 *   **Voting/Ranking (Optional):** [TODO] Simple up/down voting mechanism for posts/replies.
 *   **UI Polish:** [DONE] General improvements to CSS, layout, and responsiveness. Replaced native dropdowns with the Tom Select library for theme-compliant, customizable select controls.
@@ -288,6 +291,11 @@ graph TD
     *   `[DONE] Modernized the UI with a flat design, removing gradients and establishing a clear visual hierarchy for buttons and interactive elements.`
     *   `[DONE] Overhauled the mobile experience with a new fixed top-navigation bar and a "bottom sheet" implementation for the secondary pane.`
     *   `[DONE] Developed an interactive, client-side Theme Creator for real-time color scheme customization and export.`
+    *   **Queue UI/UX Overhaul:** [DONE] A comprehensive refactor of the queue interface to improve transparency and user control.
+        *   `[DONE]` Implemented a detailed, two-stage modal for persona generation requests, showing the exact "Expansion" and "Refinement" prompts.
+        *   `[DONE]` Enhanced the queue modal's metadata pane with a direct "View Content" link to the relevant topic or persona editor.
+        *   `[DONE]` Refactored the token breakdown display into a compact, collapsible component.
+        *   `[DONE]` Added the ability for users to delete items from the queue via the UI.
 
 ### Phase 4: Advanced LLM Interactions & Integrations
 

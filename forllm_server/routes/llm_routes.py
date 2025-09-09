@@ -126,10 +126,15 @@ def get_queue():
             lr.llm_model,
             lr.llm_persona, -- This is the persona_id
             lr.prompt_token_breakdown,
+            lr.request_type,
+            lr.request_params,
+            lr.result_object_id,
             p_orig.content AS post_snippet,
+            p_orig.topic_id AS topic_id,
+            (SELECT title FROM topics WHERE topic_id = p_orig.topic_id) AS topic_title,
             pers.name AS persona_name -- Fetch persona name
         FROM llm_requests lr
-        JOIN posts p_orig ON lr.post_id_to_respond_to = p_orig.post_id
+        LEFT JOIN posts p_orig ON lr.post_id_to_respond_to = p_orig.post_id
         LEFT JOIN personas pers ON lr.llm_persona = pers.persona_id
         ORDER BY lr.requested_at DESC
         LIMIT ? OFFSET ?
@@ -209,6 +214,22 @@ def get_queue_prompt(request_id):
     except Exception as e:
         print(f"Error fetching prompt for request {request_id}: {e}")
         return jsonify({'error': f'Failed to fetch prompt: {str(e)}'}), 500
+
+@llm_api_bp.route('/queue/<int:request_id>', methods=['DELETE'])
+def delete_queue_item(request_id):
+    db = get_db()
+    try:
+        with db:
+            cursor = db.cursor()
+            # First, delete any dependent (chained) requests
+            cursor.execute("DELETE FROM llm_requests WHERE parent_request_id = ?", (request_id,))
+            # Then, delete the request itself
+            cursor.execute("DELETE FROM llm_requests WHERE request_id = ?", (request_id,))
+            if cursor.rowcount == 0:
+                return jsonify({'error': 'Request not found'}), 404
+        return jsonify({'message': 'Request and any dependent items deleted successfully'}), 200
+    except sqlite3.Error as e:
+        return jsonify({'error': f'Database error: {e}'}), 500
 
 # --- Persona Override for LLM Request ---
 @llm_api_bp.route('/subforums/<int:subforum_id>/effective-persona', methods=['GET'])
