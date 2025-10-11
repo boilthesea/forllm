@@ -1,8 +1,9 @@
 import sqlite3
 import datetime
-import logging # ADDED
+import logging
 import os
-from flask import g, current_app # Added current_app for logger access
+import json
+from flask import g, current_app
 from .config import DATABASE, CURRENT_USER_ID, CURRENT_USERNAME, DEFAULT_MODEL
 
 def get_db():
@@ -681,6 +682,51 @@ def init_db():
     except sqlite3.Error as e:
         print(f"Error creating/verifying Custom Instructions Feature tables: {e}")
         db.rollback()
+
+    # --- Multimodal Integration Tables (Phase 1) ---
+    print("Verifying/Creating Multimodal Feature tables...")
+    try:
+        # New table to track all generated media
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS generated_media (
+                media_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                llm_request_id INTEGER NOT NULL,
+                source_app TEXT NOT NULL, -- 'forum', 'audiobook', 'music', 'image_app', 'video_app'
+                media_type TEXT NOT NULL, -- 'image', 'audio', 'video'
+                file_path TEXT NOT NULL,
+                prompt TEXT, -- The final prompt used for generation
+                project_id INTEGER, -- Optional, links to a project in a miniapp's DB
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (llm_request_id) REFERENCES llm_requests(request_id)
+            );
+        """)
+
+        # Add 'content_structured' to 'posts' table if it doesn't exist
+        cursor.execute("PRAGMA table_info(posts)")
+        columns = [col for col in cursor.fetchall()]
+        if 'content_structured' not in columns:
+            print("Updating posts table: Adding 'content_structured' column...")
+            cursor.execute("ALTER TABLE posts ADD COLUMN content_structured TEXT")
+            print("'content_structured' column added to posts.")
+
+            # One-time migration of existing post content
+            print("Performing one-time migration of post content to structured format...")
+            cursor.execute("SELECT post_id, content FROM posts WHERE content_structured IS NULL")
+            posts_to_migrate = cursor.fetchall()
+            for post in posts_to_migrate:
+                structured_content = json.dumps([{"type": "text", "data": post['content']}])
+                cursor.execute(
+                    "UPDATE posts SET content_structured = ? WHERE post_id = ?",
+                    (structured_content, post['post_id'])
+                )
+            print(f"Migrated {len(posts_to_migrate)} posts.")
+
+        db.commit()
+        print("Multimodal Feature tables verified/created and data migrated.")
+    except sqlite3.Error as e:
+        print(f"Error creating/verifying Multimodal Feature tables: {e}")
+        db.rollback()
+
 
     db.close()
 

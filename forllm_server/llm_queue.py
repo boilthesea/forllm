@@ -2,12 +2,18 @@ import threading
 import queue
 import time
 import sqlite3
-import json # Added
-from .config import DATABASE, CURRENT_USER_ID # Added CURRENT_USER_ID
-from .llm_processing import process_llm_request
+import json
+from .config import DATABASE, CURRENT_USER_ID
 from .scheduler import is_processing_time
-from .persona_generator import generate_persona_from_details # Added
-from .database import save_generated_persona # Added
+from .persona_generator import generate_persona_from_details
+from .database import save_generated_persona
+
+# Generator Imports
+from .generators.ollama_connector import OllamaConnector
+# from .generators.diffusers_connector import DiffusersConnector # Placeholder
+# from .generators.tts_connector import TTSConnector # Placeholder
+# from .generators.music_connector import MusicConnector # Placeholder
+# from .generators.video_connector import VideoConnector # Placeholder
 
 llm_request_queue = queue.Queue()
 processing_active = threading.Event() # To signal if processing is allowed by schedule
@@ -74,86 +80,96 @@ def _handle_persona_generation_request(request_id, request_params_json, flask_ap
         if db_conn:
             db_conn.close()
 
-def llm_worker(flask_app): # Added flask_app parameter
+def llm_worker(flask_app):
     """Background worker thread to process LLM requests from the queue."""
-    print(f"LLM Worker thread started. Received Flask app: {flask_app}") # Log the received app
+    print(f"LLM Worker thread started. Received Flask app: {flask_app}")
+
+    generator_map = {
+        'respond_to_post': OllamaConnector,
+        'respond_to_post_tag': OllamaConnector,
+        # 'generate_image': DiffusersConnector, # Placeholder
+        # 'generate_tts': TTSConnector, # Placeholder
+        # 'generate_music': MusicConnector, # Placeholder
+        # 'generate_video': VideoConnector, # Placeholder
+    }
+
     while True:
-        if is_processing_time():
-            processing_active.set() # Signal that processing is allowed
-            print("Processing time active. Checking queue...")
-            try:
-                # Prioritize getting items from the software queue first
-                request_details = llm_request_queue.get(timeout=5) # Wait 5 seconds for an item
-                # Pass flask_app to process_llm_request (this is for requests from the software queue)
-                process_llm_request(request_details, flask_app)
-                llm_request_queue.task_done()
-            except queue.Empty:
-                print("Software queue empty, checking DB queue...")
-                db_conn_poll = None 
-                try:
-                    db_conn_poll = sqlite3.connect(DATABASE)
-                    db_conn_poll.row_factory = sqlite3.Row
-                    cursor_poll = db_conn_poll.cursor()
+        if not is_processing_time():
+            processing_active.clear()
+            print("Outside processing hours. Worker sleeping... (Will check again in 60s)")
+            time.sleep(60)
+            continue
+
+        processing_active.set()
+        db_conn = None
+        try:
+            db_conn = sqlite3.connect(DATABASE)
+            db_conn.row_factory = sqlite3.Row
+            cursor = db_conn.cursor()
+
+            cursor.execute("SELECT * FROM llm_requests WHERE status = 'pending' ORDER BY requested_at ASC LIMIT 1")
+            request_data = cursor.fetchone()
+
+            if not request_data:
+                time.sleep(5)
+                continue
+
+            request_id = request_data['request_id']
+            request_type = request_data['request_type'] or 'respond_to_post'
+            
+            cursor.execute("UPDATE llm_requests SET status = 'processing', processed_at = CURRENT_TIMESTAMP WHERE request_id = ?", (request_id,))
+            db_conn.commit()
+
+            result = None
+            if request_type == 'generate_persona':
+                print(f"LLM Worker: Delegating persona generation for request_id {request_id}")
+                _handle_persona_generation_request(request_id, request_data['request_params'], flask_app)
+            
+            elif request_type in generator_map:
+                generator_class = generator_map[request_type]
+                generator_instance = generator_class()
+                print(f"LLM Worker: Dispatching request {request_id} to {generator_class.__name__}")
+                result = generator_instance.generate(dict(request_data), flask_app)
+            
+            else:
+                print(f"Unknown request_type: {request_type} for request_id {request_id}. Marking as error.")
+                result = {'status': 'error', 'error_message': f"Unknown request_type: {request_type}"}
+
+            if result:
+                if result.get('status') == 'complete':
+                    cursor.execute("UPDATE llm_requests SET status = 'complete', processed_at = CURRENT_TIMESTAMP, result_object_id = ? WHERE request_id = ?", (result.get('result_object_id'), request_id,))
                     
-                    cursor_poll.execute("SELECT request_id, post_id_to_respond_to, llm_model, llm_persona, request_type, request_params FROM llm_requests WHERE status = 'pending' ORDER BY requested_at ASC LIMIT 1")
-                    db_request_data = cursor_poll.fetchone()
+                    # Activate dependent requests
+                    cursor.execute(
+                        """
+                        UPDATE llm_requests
+                        SET status = 'pending', post_id_to_respond_to = ?
+                        WHERE parent_request_id = ? AND status = 'pending_dependency'
+                        """, (result.get('result_object_id'), request_id))
+                    if cursor.rowcount > 0:
+                        print(f"Request {request_id}: Activated {cursor.rowcount} dependent request(s).")
 
-                    if db_request_data:
-                        request_id = db_request_data['request_id']
-                        post_id_to_respond_to = db_request_data['post_id_to_respond_to']
-                        llm_model_for_response = db_request_data['llm_model'] 
-                        llm_persona_for_response = db_request_data['llm_persona']
-                        
-                        request_type = db_request_data['request_type'] if 'request_type' in db_request_data.keys() and db_request_data['request_type'] else 'respond_to_post'
-                        request_params_json = db_request_data['request_params'] if 'request_params' in db_request_data.keys() and db_request_data['request_params'] else None
-
-                        cursor_poll.execute("UPDATE llm_requests SET status = 'processing', processed_at = CURRENT_TIMESTAMP WHERE request_id = ?", (request_id,))
-                        db_conn_poll.commit()
-                        
-                        # Dispatching: handlers manage their own DB connections for final status updates.
-                        if request_type == 'generate_persona':
-                            print(f"LLM Worker: Delegating persona generation for request_id {request_id}")
-                            _handle_persona_generation_request(request_id, request_params_json, flask_app)
-                        elif request_type == 'respond_to_post' or request_type == 'respond_to_post_tag': # Modified condition
-                            if post_id_to_respond_to is None:
-                                print(f"Error: post_id_to_respond_to is missing for {request_type} request_id {request_id}. Marking as error.")
-                                # This error case needs its own DB connection to update status
-                                temp_db_err = sqlite3.connect(DATABASE)
-                                temp_cur_err = temp_db_err.cursor()
-                                temp_cur_err.execute("UPDATE llm_requests SET status = 'error', error_message = ?, processed_at = CURRENT_TIMESTAMP WHERE request_id = ?", (f"Missing post_id_to_respond_to for {request_type} type", request_id))
-                                temp_db_err.commit()
-                                temp_db_err.close()
-                            else:
-                                print(f"LLM Worker: Delegating {request_type} for request_id {request_id}")
-                                process_llm_request({
-                                    'request_id': request_id,
-                                    'post_id': post_id_to_respond_to,
-                                    'model': llm_model_for_response, # Keep as is, process_llm_request will handle default
-                                    'persona': llm_persona_for_response
-                                }, flask_app)
-                        else:
-                            print(f"Unknown request_type: {request_type} for request_id {request_id}. Marking as error.")
-                            temp_db_err = sqlite3.connect(DATABASE)
-                            temp_cur_err = temp_db_err.cursor()
-                            temp_cur_err.execute("UPDATE llm_requests SET status = 'error', error_message = ?, processed_at = CURRENT_TIMESTAMP WHERE request_id = ?", (f"Unknown request_type: {request_type}", request_id))
-                            temp_db_err.commit()
-                            temp_db_err.close()
-                    else: 
-                        print("DB queue also empty. Sleeping...")
-                        time.sleep(10) 
+                elif result.get('status') == 'error':
+                    cursor.execute("UPDATE llm_requests SET status = 'error', error_message = ?, processed_at = CURRENT_TIMESTAMP WHERE request_id = ?", (result.get('error_message', 'Unknown error'), request_id))
                 
-                except sqlite3.Error as e:
-                    print(f"SQLite error in LLM worker (DB queue processing): {e}")
-                    # Potentially add a longer sleep or specific error handling here
-                    time.sleep(10) 
-                except Exception as e:
-                    # Catching generic Exception to log and prevent worker thread crash
-                    print(f"General error in LLM worker (DB queue processing): {e.__class__.__name__}: {e}")
-                    time.sleep(10) 
-                finally:
-                    if db_conn_poll:
-                        db_conn_poll.close()
-        else:
-            processing_active.clear() # Signal that processing is paused
-            print(f"Outside processing hours. Worker sleeping... (Will check again in 60s)")
-            time.sleep(60) # Sleep longer when outside processing hours
+                db_conn.commit()
+
+        except sqlite3.Error as e:
+            print(f"SQLite error in LLM worker: {e}")
+            time.sleep(10)
+        except Exception as e:
+            print(f"General error in LLM worker: {e.__class__.__name__}: {e}")
+            # If a request was being processed, mark it as an error
+            if 'request_id' in locals():
+                try:
+                    err_db_conn = sqlite3.connect(DATABASE)
+                    err_cursor = err_db_conn.cursor()
+                    err_cursor.execute("UPDATE llm_requests SET status = 'error', error_message = ? WHERE request_id = ?", (f"Worker crash: {str(e)}", request_id))
+                    err_db_conn.commit()
+                    err_db_conn.close()
+                except Exception as db_e:
+                    print(f"Could not mark request {request_id} as error after worker crash: {db_e}")
+            time.sleep(10)
+        finally:
+            if db_conn:
+                db_conn.close()
