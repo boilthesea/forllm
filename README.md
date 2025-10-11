@@ -124,7 +124,9 @@ This project is under active development. Future plans include:
 *   [ ] Automated inter-persona communication and debates.
 *   [ ] LLM-powered topic summarization tools.
 *   [ ] Enhanced UI for subforum expert persona generation.
-*   [ ] Image generation, inline and persona avatars (let me know what diffusion backend you prefer).
+*   [ ] Image/video generation, inline, standalone and persona avatars (diffusors library).
+*   [ ] TTS/audiobook generation (kakoro).
+*   [ ] Music generation (probably Ace-step)
 *   [ ] Rich export functionality.
 *   [ ] Truncated chat history summarization to preserve more context.
 *   [ ] 1001 other tweaks and fixes.
