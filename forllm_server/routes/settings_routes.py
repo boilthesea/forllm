@@ -27,7 +27,12 @@ def handle_settings():
         'ch_max_ambient_posts': '5',
         'ch_max_posts_per_sibling_branch': '2',
         'ch_primary_history_budget_ratio': '0.7',
-        'theme': 'theme-hc-black'
+        'theme': 'theme-hc-black',
+        'settings_images_model': '',
+        'settings_video_api_url': '',
+        'settings_tts_model': '',
+        'settings_music_model': '',
+        'prompt_optimizer_override': ''
     }
 
     if request.method == 'PUT':
@@ -75,9 +80,9 @@ def handle_settings():
                     except ValueError:
                         print(f"Warning: Invalid float value for {key}: {value}. Skipping.")
                         continue
-                else: # Should not be reached if all known_settings are handled above
-                    print(f"Warning: Unhandled known setting key: {key}. This is a bug.")
-                    continue
+                else:
+                    # Handle new multimodal settings as simple strings
+                    processed_value = str(value).strip()
 
                 if processed_value is not None:
                     cursor.execute("INSERT OR REPLACE INTO settings (setting_key, setting_value) VALUES (?, ?)", (key, processed_value))

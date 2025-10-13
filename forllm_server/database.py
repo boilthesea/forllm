@@ -703,7 +703,7 @@ def init_db():
 
         # Add 'content_structured' to 'posts' table if it doesn't exist
         cursor.execute("PRAGMA table_info(posts)")
-        columns = [col for col in cursor.fetchall()]
+        columns = [col['name'] for col in cursor.fetchall()]
         if 'content_structured' not in columns:
             print("Updating posts table: Adding 'content_structured' column...")
             cursor.execute("ALTER TABLE posts ADD COLUMN content_structured TEXT")
