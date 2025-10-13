@@ -14,6 +14,7 @@ import {
 } from './dom.js';
 
 import { currentSettings } from './settings.js'; // Need currentSettings for link security
+import { loadSubforums } from './forum.js';
 
 let lastVisibleSectionId = 'activity-page-section'; // Default to activity page
 
@@ -408,8 +409,7 @@ function renderSecondaryNav(appName) {
         secondaryNavContainer.innerHTML = secondaryNavs[appName];
         if (appName === 'forum') {
             // Re-fetch or re-show subforums if needed
-            // For now, we assume the subforum list is populated on page load
-            // and the HTML from the template is sufficient.
+            loadSubforums(false); // Call loadSubforums to repopulate the list. Pass false to not change the main view.
             // We need to re-query for the subforum list and form.
             const subforumListElement = document.getElementById('subforum-list');
             const addSubforumBtn = document.getElementById('add-subforum-btn');

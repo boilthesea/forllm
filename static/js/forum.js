@@ -44,7 +44,12 @@ let nextStagedAttachmentId = 0; // Counter for unique IDs for staged attachments
 import { subforumNav } from './dom.js';
 
 export function renderSubforumList(subforums) {
-    subforumList.innerHTML = '';
+    const currentSubforumList = document.getElementById('subforum-list');
+    if (!currentSubforumList) {
+        console.error("Could not find subforum list element to render into.");
+        return;
+    }
+    currentSubforumList.innerHTML = '';
     if (!Array.isArray(subforums)) {
         console.error("Invalid subforums data:", subforums);
         return;
@@ -75,7 +80,7 @@ export function renderSubforumList(subforums) {
             a.appendChild(badge); // Append to the link itself to keep it inline
         }
 
-        subforumList.appendChild(li);
+        currentSubforumList.appendChild(li);
     });
 }
 
