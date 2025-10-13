@@ -3,7 +3,10 @@ import { showSection } from './ui.js';
 import {
     activityNewTopicsList,
     activityNewRepliesList,
-    activityNewPersonasList
+    activityNewPersonasList,
+    activityNewImagesList,
+    activityNewVideosList,
+    activityNewAudioList
 } from './dom.js';
 import { loadPosts, loadTopics, setCurrentTopicAndSubforum } from './forum.js'; // Assuming loadPosts will show the section
 import { showSettingsPage, openPersonaForEditing } from './settings.js'; // Assuming settings.js will expose a way to open a persona
@@ -122,6 +125,69 @@ export async function loadActivityData() {
     await Promise.all([
         renderNewTopics(),
         renderNewReplies(),
-        renderNewPersonas()
+        renderNewPersonas(),
+        renderNewMedia()
     ]);
+}
+
+async function renderNewMedia() {
+   if (!activityNewImagesList && !activityNewVideosList && !activityNewAudioList) return;
+
+   // Clear existing content
+   if (activityNewImagesList) activityNewImagesList.innerHTML = '';
+   if (activityNewVideosList) activityNewVideosList.innerHTML = '';
+   if (activityNewAudioList) activityNewAudioList.innerHTML = '';
+
+   try {
+       const mediaItems = await apiRequest('/api/activity/recent_media', 'GET');
+
+       if (mediaItems && mediaItems.length > 0) {
+           mediaItems.forEach(item => {
+               let element;
+               switch (item.media_type) {
+                   case 'image':
+                       if (!activityNewImagesList) return;
+                       element = document.createElement('div');
+                       element.className = 'media-item';
+                       element.innerHTML = `<a href="#" data-topic-id="${item.topic_id}" data-post-id="${item.post_id}"><img src="${item.file_path}" alt="${item.prompt}" title="Prompt: ${item.prompt}"></a>`;
+                       activityNewImagesList.appendChild(element);
+                       break;
+                   case 'video':
+                       if (!activityNewVideosList) return;
+                       element = document.createElement('div');
+                       element.className = 'media-item';
+                       element.innerHTML = `<a href="#" data-topic-id="${item.topic_id}" data-post-id="${item.post_id}"><video src="${item.file_path}" title="Prompt: ${item.prompt}"></video></a>`;
+                       activityNewVideosList.appendChild(element);
+                       break;
+                   case 'audio':
+                        if (!activityNewAudioList) return;
+                       element = document.createElement('li');
+                       element.innerHTML = `<a href="#" data-topic-id="${item.topic_id}" data-post-id="${item.post_id}">Audio: ${item.prompt}</a>`;
+                       activityNewAudioList.appendChild(element);
+                       break;
+               }
+
+               if (element) {
+                   const link = element.querySelector('a');
+                   if (link) {
+                       link.addEventListener('click', async (e) => {
+                           e.preventDefault();
+                           setCurrentTopicAndSubforum(item.subforum_id, item.topic_id, item.subforum_name, item.topic_title);
+                           await loadPosts(item.topic_id);
+                           const postElement = document.getElementById(`post-${item.post_id}`);
+                           if (postElement) {
+                               postElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                               postElement.classList.add('highlighted-post');
+                               setTimeout(() => postElement.classList.remove('highlighted-post'), 3000);
+                           }
+                       });
+                   }
+               }
+           });
+       } else {
+           // Handle no media items if necessary
+       }
+   } catch (error) {
+       console.error('Error loading recent media:', error);
+   }
 }

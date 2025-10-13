@@ -368,3 +368,80 @@ function createToastContainer() {
     document.body.appendChild(container);
     return container;
 }
+// App navigation logic
+const appSwitcher = document.getElementById('app-switcher');
+const appSwitcherDropdown = document.getElementById('app-switcher-dropdown');
+const currentAppName = document.getElementById('current-app-name');
+const secondaryNavContainer = document.getElementById('secondary-nav-container');
+const subforumList = document.getElementById('subforum-list');
+const addSubforumForm = document.querySelector('#secondary-nav-container .add-item-form');
+
+const secondaryNavs = {
+    forum: `
+        <h2>Subforums</h2>
+        <ul id="subforum-list">
+            <!-- Subforums will be loaded here -->
+        </ul>
+        <div class="add-item-form">
+            <input type="text" id="new-subforum-name" placeholder="New subforum name">
+            <button id="add-subforum-btn">Add Subforum</button>
+        </div>
+    `,
+    audio: `
+        <h2>Audio</h2>
+        <ul id="audio-nav-list">
+            <li><a href="#" id="audiobooks-nav-btn">Audiobooks</a></li>
+            <li><a href="#" id="music-nav-btn">Music</a></li>
+        </ul>
+    `,
+    visual: `
+        <h2>Visual</h2>
+        <ul id="visual-nav-list">
+            <li><a href="#" id="images-nav-btn">Images</a></li>
+            <li><a href="#" id="videos-nav-btn">Videos</a></li>
+        </ul>
+    `
+};
+
+function renderSecondaryNav(appName) {
+    if (secondaryNavs[appName]) {
+        secondaryNavContainer.innerHTML = secondaryNavs[appName];
+        if (appName === 'forum') {
+            // Re-fetch or re-show subforums if needed
+            // For now, we assume the subforum list is populated on page load
+            // and the HTML from the template is sufficient.
+            // We need to re-query for the subforum list and form.
+            const subforumListElement = document.getElementById('subforum-list');
+            const addSubforumBtn = document.getElementById('add-subforum-btn');
+            // You would re-attach event listeners here if they were specific to these elements
+            // and get blown away by innerHTML.
+            // e.g., addSubforumBtn.addEventListener('click', handleAddSubforum);
+        }
+    }
+}
+
+if (appSwitcher) {
+    appSwitcher.addEventListener('click', () => {
+        appSwitcherDropdown.style.display = appSwitcherDropdown.style.display === 'none' ? 'block' : 'none';
+    });
+}
+
+if (appSwitcherDropdown) {
+    appSwitcherDropdown.addEventListener('click', (event) => {
+        if (event.target.tagName === 'A') {
+            const appName = event.target.dataset.app;
+            currentAppName.textContent = event.target.textContent;
+            renderSecondaryNav(appName);
+            appSwitcherDropdown.style.display = 'none';
+            // Potentially call a function to load the main content for the selected app
+            // e.g., loadMainContentForApp(appName);
+        }
+    });
+}
+
+// Close dropdown if clicking outside
+document.addEventListener('click', (event) => {
+    if (appSwitcher && !appSwitcher.contains(event.target) && appSwitcherDropdown.style.display === 'block') {
+        appSwitcherDropdown.style.display = 'none';
+    }
+});

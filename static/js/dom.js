@@ -71,6 +71,9 @@ export const exitActivityBtn = document.getElementById('exit-activity-btn');
 export const activityNewTopicsList = document.getElementById('activity-new-topics-list');
 export const activityNewRepliesList = document.getElementById('activity-new-replies-list');
 export const activityNewPersonasList = document.getElementById('activity-new-personas-list');
+export const activityNewImagesList = document.getElementById('activity-new-images-list');
+export const activityNewVideosList = document.getElementById('activity-new-videos-list');
+export const activityNewAudioList = document.getElementById('activity-new-audio-list');
 
 // Mobile Nav Buttons
 export const mobileScheduleBtn = document.getElementById('mobile-schedule-btn');

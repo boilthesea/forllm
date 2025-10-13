@@ -66,7 +66,10 @@
     <li id="settings-nav-schedule">Schedule</li>
     <li id="settings-nav-personas">Personas</li>
     <li id="settings-nav-custom-instructions">Custom Instructions</li>
-    <li id="settings-nav-custom-instructions">Custom Instructions</li>
+    <li id="settings-nav-images">Images</li>
+    <li id="settings-nav-video">Video</li>
+    <li id="settings-nav-tts">Text to Speech</li>
+    <li id="settings-nav-music">Music</li>
   </ul>
 </nav>
 <div id="settings-general-section" class="settings-tab-section">
@@ -150,6 +153,44 @@
     <!-- <button id="add-instruction-set-btn">Add Set</button> -->
     <!-- <div id="instruction-sets-list-container"></div> -->
 </div>
+<div id="settings-images-section" class="settings-tab-section" style="display:none">
+   <h4>Image Generation (Diffusers)</h4>
+   <div class="setting-item">
+       <label for="settings-images-model">Hugging Face Model:</label>
+       <input type="text" id="settings-images-model" name="settings_images_model" class="text-input">
+       <span class="tooltip-icon" title="e.g., stabilityai/stable-diffusion-xl-base-1.0">?</span>
+   </div>
+</div>
+<div id="settings-video-section" class="settings-tab-section" style="display:none">
+   <h4>Video Generation</h4>
+   <div class="setting-item">
+       <label for="settings-video-api-url">API URL:</label>
+       <input type="text" id="settings-video-api-url" name="settings_video_api_url" class="text-input">
+   </div>
+</div>
+<div id="settings-tts-section" class="settings-tab-section" style="display:none">
+   <h4>Text to Speech (TTS)</h4>
+   <div class="setting-item">
+       <label for="settings-tts-model">TTS Model:</label>
+       <input type="text" id="settings-tts-model" name="settings_tts_model" class="text-input">
+   </div>
+</div>
+<div id="settings-music-section" class="settings-tab-section" style="display:none">
+   <h4>Music Generation</h4>
+   <div class="setting-item">
+       <label for="settings-music-model">Music Model:</label>
+       <input type="text" id="settings-music-model" name="settings_music_model" class="text-input">
+   </div>
+</div>
+<div class="settings-subsection">
+   <h4>Prompt Optimizer</h4>
+   <div class="setting-item">
+       <label for="prompt-optimizer-override">Optimizer Prompt Override:</label>
+       <textarea id="prompt-optimizer-override" name="prompt_optimizer_override" class="textarea-input" rows="4"></textarea>
+       <span class="tooltip-icon" title="Override the default system prompt for the @optimize command.">?</span>
+   </div>
+   <button id="restore-default-optimizer-btn">Restore Default</button>
+</div>
         </div>
     </div>
     <!-- End Settings Modal -->
@@ -213,16 +254,29 @@
             </ul>
         </nav>
         <hr class="sidebar-separator">
-        <h2>Subforums</h2>
-        <ul id="subforum-list">
-            <!-- Subforums will be loaded here -->
-             {% for subforum in subforums %}
-                <li><a href="#" data-subforum-id="{{ subforum.subforum_id }}">{{ subforum.name }}</a></li>
-             {% endfor %}
-        </ul>
-        <div class="add-item-form">
-            <input type="text" id="new-subforum-name" placeholder="New subforum name">
-            <button id="add-subforum-btn">Add Subforum</button>
+        <div id="app-switcher-container">
+            <div id="app-switcher" class="app-switcher">
+                <span id="current-app-name">Forum</span>
+                <span class="app-switcher-arrow">&#9662;</span>
+            </div>
+            <div id="app-switcher-dropdown" class="app-switcher-dropdown" style="display: none;">
+                <a href="#" data-app="forum">Forum</a>
+                <a href="#" data-app="audio">Audio</a>
+                <a href="#" data-app="visual">Visual</a>
+            </div>
+        </div>
+        <div id="secondary-nav-container">
+            <!-- Secondary navigation will be dynamically inserted here -->
+            <ul id="subforum-list">
+                <!-- Subforums will be loaded here -->
+                 {% for subforum in subforums %}
+                    <li><a href="#" data-subforum-id="{{ subforum.subforum_id }}">{{ subforum.name }}</a></li>
+                 {% endfor %}
+            </ul>
+            <div class="add-item-form">
+                <input type="text" id="new-subforum-name" placeholder="New subforum name">
+                <button id="add-subforum-btn">Add Subforum</button>
+            </div>
         </div>
     </nav>
     <main>
@@ -370,6 +424,12 @@
                             <li>Placeholder...</li>
                         </ul>
                     </div>
+                   <div id="activity-new-media-panel">
+                       <h3>Recent Media</h3>
+                       <div id="activity-new-images-list" class="media-grid"></div>
+                       <div id="activity-new-videos-list" class="media-grid"></div>
+                       <div id="activity-new-audio-list"></div>
+                   </div>
                 </section>
             </div>
         </div>

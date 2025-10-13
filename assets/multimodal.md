@@ -2,7 +2,7 @@
 
 This document outlines the phased development plan for integrating image, video, and audio generation (eventually both text to speech and music) capabilities into the FORLLM application. The plan is based on a detailed analysis of the existing architecture and a series of design decisions.
 
-## Phase 1: Backend Refactoring and Core API
+## Phase 1: Backend Refactoring and Core API [DONE]
 
 **Goal:** Rearchitect the backend to support multiple, diverse content generators and establish the foundational database changes and API endpoints. This phase is non-visual but critical for all subsequent work.
 
@@ -41,7 +41,7 @@ This document outlines the phased development plan for integrating image, video,
     *   Create a new file `forllm_server/routes/generation_routes.py` and register its Blueprint.
     *   Implement the API endpoint for post-generation actions (e.g., `POST /api/generation/queue_from_post`). This endpoint will take a `post_id`, `generation_type`, prompt, and parameters, and create the corresponding entry in the `llm_requests` table.
 
-## Phase 2: UI for Core Navigation and Settings
+## Phase 2: UI for Core Navigation and Settings [DONE]
 
 **Goal:** Implement the user-facing UI for navigating between different application modes and configuring the new services.
 
@@ -66,7 +66,10 @@ This document outlines the phased development plan for integrating image, video,
     *   Implement areas on the main recent activity page to show new types of content, such as recent pictures, videos, audiobooks, and music, by querying the new central `generated_media` table.
     *   The page should be constructed to show the desired sections depending on whether it's the main landing page or a view within a specific miniapp.
 
-## Phase 3: Inline Generation and Post-Generation Actions
+5.  **Update Documentation Plan:**
+    *   Add subphase 8.2 to Phase 8, outlining the `blueprint.md` sections that will need to be updated to reflect the new UI navigation and settings configurations.
+
+## Phase 3: Inline Generation and Post-Generation Actions [TODO]
 
 **Goal:** Implement the core user workflows for generating multimodal content directly within the forum interface.
 
@@ -84,7 +87,10 @@ This document outlines the phased development plan for integrating image, video,
     *   Create a new, reusable modal component for generation parameters.
     *   In the `postList` event listener, add handlers for the new menu options that open this modal, pre-filled with the post's content.
 
-## Phase 4: Full Service Integration and First-Use Experience
+4.  **Update Documentation Plan:**
+    *   Add subphase 8.3 to Phase 8, outlining the `blueprint.md` sections that will need to be updated to reflect the new inline generation commands and post-generation action UI.
+
+## Phase 4: Full Service Integration and First-Use Experience [TODO]
 
 **Goal:** Complete the integration with the external generation services and ensure the features are fully functional end-to-end.
 
@@ -101,7 +107,10 @@ This document outlines the phased development plan for integrating image, video,
 3.  **Implement `@optimize` Logic:**
     *   In the `ollama_connector.py`, add logic to handle requests where the `request_type` is `optimize_prompt`. It will use the system prompt (or the user's override) to transform the input text.
 
-## Phase 5: Audiobook Miniapp Integration
+4.  **Update Documentation Plan:**
+    *   Add subphase 8.4 to Phase 8, outlining the `blueprint.md` sections that will need to be updated to reflect the full integration of the `diffusers` and `kokoro` services.
+
+## Phase 5: Audiobook Miniapp Integration [TODO]
 
 **Goal:** Implement a self-contained "Audiobook" miniapp within forllm, leveraging the kokoro engine to convert user-provided ebooks into playable audiobooks.
 
@@ -215,7 +224,10 @@ This leverages the existing `llm_requests` queue with a parent/child dependency 
         *   A chapter selection dropdown/list to navigate the audiobook.
         *   The player will use the `output_file_path` from the database to load the correct `.m4b` file.
 
-## Phase 6: Music Miniapp Integration
+### 5.7  **Update Documentation Plan:**
+    *   Add subphase 8.5 to Phase 8, outlining the `blueprint.md` sections that will need to be updated to describe the new Audiobook miniapp's architecture, database schema, and UI/UX flow.
+
+## Phase 6: Music Miniapp Integration [TODO]
 
 **Goal:** Implement a self-contained "Music" miniapp within forllm, leveraging a generative music model to create audio from user prompts.
 
@@ -269,7 +281,10 @@ This will leverage the existing `llm_requests` queue.
         2.  Save the resulting audio file to the `media/music/` directory.
         3.  Create an entry in the central `generated_media` table, including the `llm_request_id`, `source_app` ('music'), `media_type` ('audio'), `file_path`, and `project_id` (if applicable).
 
-## Phase 7: Visual Miniapp Integration
+### 6.5  **Update Documentation Plan:**
+    *   Add subphase 8.6 to Phase 8, outlining the `blueprint.md` sections that will need to be updated to describe the new Music miniapp's architecture, database schema, and UI/UX flow.
+
+## Phase 7: Visual Miniapp Integration [TODO]
 
 **Goal:** Implement a self-contained "Visual" miniapp for image and video generation, mirroring the hybrid simple/project-based structure.
 
@@ -327,6 +342,30 @@ The "Visual" app, a top-level entry in the App Switcher, will have secondary nav
 *   **Phase 3 (Inline Generation):**
     *   The backend command parsing will be updated to handle the `$video(...)` command.
     *   The "..." menu on posts will get a "Generate Video from Post" option.
+
+### 7.6  **Update Documentation Plan:**
+    *   Add subphase 8.7 to Phase 8, outlining the `blueprint.md` sections that will need to be updated to describe the new Visual miniapp's architecture, database schema, and UI/UX flow.
+
+## Phase 8: Update assets/Blueprint.md to reflect the new multimodal update
+
+Review blueprint.md and compare it to this phased development plan, read whatever code is necessary to update blueprint.md to reflect the changes this multimodal update has made to the codebase.
+
+1.  **Phase 8.1: Document Phase 1 Changes**
+    *   **`forllm_server/database.py`**: Update the description to include the new `generated_media` table and the `content_structured` column in the `posts` table. Mention the one-time data migration.
+    *   **`forllm_server/llm_processing.py`**: Update its responsibility to focus only on history-building logic, noting that the core request processing has been moved.
+    *   **`forllm_server/llm_queue.py`**: Update the `llm_worker` description to reflect its new role as a dispatcher that maps `request_type` to generator classes.
+    *   **`forllm_data.db`**: In the database file description, add entries for the new `generated_media` table and the `content_structured` column under the `posts` table.
+    *   **New Files/Directories**: Add entries for the new `forllm_server/generators/` directory and its contents (`base.py`, `ollama_connector.py`, etc.), and for `forllm_server/routes/generation_routes.py`. Describe their primary responsibilities.
+
+2.  **Phase 8.2: Document Phase 2 Changes**
+    *   **`templates/index.html`**: Update the description of the `#subforum-nav` element to reflect its new role as a dynamic two-tier navigation container, managed by the "App Switcher."
+    *   **`static/js/ui.js`**: Update its description to include the management of the new App Switcher and the dynamic rendering of secondary navigation links.
+    *   **`static/js/settings.js`**: Update its description to mention handling the new settings tabs and form fields for Images, Video, Text to Speech, Music, and the Prompt Optimizer.
+    *   **`forllm_server/config.py`**: Add a note about the new `DEFAULT_OPTIMIZER_PROMPT` constant for the `@optimize` feature.
+    *   **`forllm_server/llm_queue.py`**: Update its description to include the validation that prevents a user from creating a persona with the reserved name "optimize".
+    *   **`forllm_server/routes/activity_routes.py`**: Update its description to include the new `/api/activity/recent_media` endpoint for fetching recently generated media.
+    *   **`forllm_server/database.py`**: Update its description to include the new `get_recent_media` function.
+    *   **`static/js/activity.js`**: Update its description to mention fetching and rendering data from the new recent media endpoint.
 
 ---
 

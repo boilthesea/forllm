@@ -20,7 +20,12 @@ export let currentSettings = { // Store loaded settings
     theme: 'theme-silvery',
     ch_max_ambient_posts: '5',
     ch_max_posts_per_sibling_branch: '2',
-    ch_primary_history_budget_ratio: '0.7'
+    ch_primary_history_budget_ratio: '0.7',
+    settings_images_model: '',
+    settings_video_api_url: '',
+    settings_tts_model: '',
+    settings_music_model: '',
+    prompt_optimizer_override: ''
 };
 
 // --- DEBUG: Global click logger ---
@@ -83,7 +88,12 @@ export async function initializeSettings() {
             theme: settings.theme || 'theme-silvery',
             ch_max_ambient_posts: settings.ch_max_ambient_posts || '5',
             ch_max_posts_per_sibling_branch: settings.ch_max_posts_per_sibling_branch || '2',
-            ch_primary_history_budget_ratio: settings.ch_primary_history_budget_ratio || '0.7'
+            ch_primary_history_budget_ratio: settings.ch_primary_history_budget_ratio || '0.7',
+            settings_images_model: settings.settings_images_model || '',
+            settings_video_api_url: settings.settings_video_api_url || '',
+            settings_tts_model: settings.settings_tts_model || '',
+            settings_music_model: settings.settings_music_model || '',
+            prompt_optimizer_override: settings.prompt_optimizer_override || ''
         };
         applyTheme(currentSettings.theme);
 
@@ -185,6 +195,21 @@ function updateSettingsUI() {
 
         const primaryRatioInput = container.querySelector('#ch-primary-history-budget-ratio');
         if (primaryRatioInput) primaryRatioInput.value = currentSettings.ch_primary_history_budget_ratio;
+
+        const imagesModelInput = container.querySelector('#settings-images-model');
+        if (imagesModelInput) imagesModelInput.value = currentSettings.settings_images_model;
+
+        const videoApiUrlInput = container.querySelector('#settings-video-api-url');
+        if (videoApiUrlInput) videoApiUrlInput.value = currentSettings.settings_video_api_url;
+
+        const ttsModelInput = container.querySelector('#settings-tts-model');
+        if (ttsModelInput) ttsModelInput.value = currentSettings.settings_tts_model;
+
+        const musicModelInput = container.querySelector('#settings-music-model');
+        if (musicModelInput) musicModelInput.value = currentSettings.settings_music_model;
+
+        const optimizerOverrideInput = container.querySelector('#prompt-optimizer-override');
+        if (optimizerOverrideInput) optimizerOverrideInput.value = currentSettings.prompt_optimizer_override;
     });
 }
 
@@ -223,6 +248,10 @@ function renderContainerHTML(container) {
     <li id="settings-nav-schedule">Schedule</li>
     <li id="settings-nav-personas">Personas</li>
     <li id="settings-nav-custom-instructions">Custom Instructions</li>
+    <li id="settings-nav-images">Images</li>
+    <li id="settings-nav-video">Video</li>
+    <li id="settings-nav-tts">Text to Speech</li>
+    <li id="settings-nav-music">Music</li>
   </ul>
 </nav>
 <div id="settings-general-section" class="settings-tab-section">
@@ -351,6 +380,44 @@ function renderContainerHTML(container) {
     <div id="instruction-sets-list-container"></div>
     -->
 </div>
+<div id="settings-images-section" class="settings-tab-section" style="display:none">
+   <h4>Image Generation (Diffusers)</h4>
+   <div class="setting-item">
+       <label for="settings-images-model">Hugging Face Model:</label>
+       <input type="text" id="settings-images-model" name="settings_images_model" class="text-input">
+       <span class="tooltip-icon" title="e.g., stabilityai/stable-diffusion-xl-base-1.0">?</span>
+   </div>
+</div>
+<div id="settings-video-section" class="settings-tab-section" style="display:none">
+   <h4>Video Generation</h4>
+   <div class="setting-item">
+       <label for="settings-video-api-url">API URL:</label>
+       <input type="text" id="settings-video-api-url" name="settings_video_api_url" class="text-input">
+   </div>
+</div>
+<div id="settings-tts-section" class="settings-tab-section" style="display:none">
+   <h4>Text to Speech (TTS)</h4>
+   <div class="setting-item">
+       <label for="settings-tts-model">TTS Model:</label>
+       <input type="text" id="settings-tts-model" name="settings_tts_model" class="text-input">
+   </div>
+</div>
+<div id="settings-music-section" class="settings-tab-section" style="display:none">
+   <h4>Music Generation</h4>
+   <div class="setting-item">
+       <label for="settings-music-model">Music Model:</label>
+       <input type="text" id="settings-music-model" name="settings_music_model" class="text-input">
+   </div>
+</div>
+<div class="settings-subsection">
+   <h4>Prompt Optimizer</h4>
+   <div class="setting-item">
+       <label for="prompt-optimizer-override">Optimizer Prompt Override:</label>
+       <textarea id="prompt-optimizer-override" name="prompt_optimizer_override" class="textarea-input" rows="4"></textarea>
+       <span class="tooltip-icon" title="Override the default system prompt for the @optimize command.">?</span>
+   </div>
+   <button id="restore-default-optimizer-btn">Restore Default</button>
+</div>
 `;
     // Attach all event handlers and initialize components for this container
     attachContainerEventHandlers(container);
@@ -406,6 +473,19 @@ function attachContainerEventHandlers(container) {
             alert("Error: Theme creator module could not be loaded.");
         }
     });
+
+    container.querySelector('#restore-default-optimizer-btn')?.addEventListener('click', async () => {
+       try {
+           const response = await apiRequest('/api/settings/optimizer/default');
+           const optimizerOverrideInput = container.querySelector('#prompt-optimizer-override');
+           if (optimizerOverrideInput) {
+               optimizerOverrideInput.value = response.default_prompt;
+           }
+       } catch (error) {
+           console.error("Error restoring default optimizer prompt:", error);
+           alert(`Error: ${error.message}`);
+       }
+   });
 
    // File Indexing Handlers
    container.querySelector('#browse-folder-btn')?.addEventListener('click', () => browseForFolder(container));
@@ -718,6 +798,11 @@ export async function saveSettings(container) {
     const chMaxAmbientPostsInput = container.querySelector('#ch-max-ambient-posts');
     const chMaxPostsPerSiblingBranchInput = container.querySelector('#ch-max-posts-per-sibling-branch');
     const chPrimaryHistoryBudgetRatioInput = container.querySelector('#ch-primary-history-budget-ratio');
+    const imagesModelInput = container.querySelector('#settings-images-model');
+    const videoApiUrlInput = container.querySelector('#settings-video-api-url');
+    const ttsModelInput = container.querySelector('#settings-tts-model');
+    const musicModelInput = container.querySelector('#settings-music-model');
+    const optimizerOverrideInput = container.querySelector('#prompt-optimizer-override');
     const saveButton = container.querySelector('#save-settings-btn');
     const settingsErrorElement = container.querySelector('#settings-error');
 
@@ -735,7 +820,12 @@ export async function saveSettings(container) {
         theme: themeSelect.value,
         ch_max_ambient_posts: chMaxAmbientPostsInput.value,
         ch_max_posts_per_sibling_branch: chMaxPostsPerSiblingBranchInput.value,
-        ch_primary_history_budget_ratio: chPrimaryHistoryBudgetRatioInput.value
+        ch_primary_history_budget_ratio: chPrimaryHistoryBudgetRatioInput.value,
+        settings_images_model: imagesModelInput.value,
+        settings_video_api_url: videoApiUrlInput.value,
+        settings_tts_model: ttsModelInput.value,
+        settings_music_model: musicModelInput.value,
+        prompt_optimizer_override: optimizerOverrideInput.value
     };
 
     // Further validation can be added here...

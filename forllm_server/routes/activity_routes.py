@@ -1,6 +1,6 @@
 from flask import Blueprint, jsonify
 from ..config import CURRENT_USER_ID
-from ..database import get_recent_topics, get_recent_replies, get_recent_personas
+from ..database import get_recent_topics, get_recent_replies, get_recent_personas, get_recent_media
 
 activity_bp = Blueprint('activity', __name__, url_prefix='/api/activity')
 
@@ -30,3 +30,11 @@ def api_get_recent_personas():
     # user_id is not needed for get_recent_personas as per current definition
     recent_personas_data = get_recent_personas()
     return jsonify(recent_personas_data)
+
+@activity_bp.route('/recent_media', methods=['GET'])
+def api_get_recent_media():
+   """
+   API endpoint to fetch the most recently generated media.
+   """
+   recent_media_data = get_recent_media()
+   return jsonify(recent_media_data)

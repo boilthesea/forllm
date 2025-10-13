@@ -8,7 +8,7 @@ from requests.exceptions import ConnectionError, RequestException
 import logging
 
 from .base import BaseGenerator
-from ..config import DATABASE, OLLAMA_GENERATE_URL, DEFAULT_MODEL, CURRENT_USER_ID, UPLOAD_FOLDER
+from ..config import DATABASE, OLLAMA_GENERATE_URL, DEFAULT_MODEL, CURRENT_USER_ID, UPLOAD_FOLDER, DEFAULT_OPTIMIZER_PROMPT
 from ..database import get_persona
 from ..ollama_utils import get_model_context_window
 from ..llm_processing import _get_raw_history_strings, _prune_history_sections, FINAL_INSTRUCTION, PRIMARY_HISTORY_HEADER, AMBIENT_HISTORY_HEADER, get_chat_history_settings
@@ -24,6 +24,7 @@ class OllamaConnector(BaseGenerator):
         """Handles the actual LLM interaction for a given request."""
         request_id = request_details['request_id']
         post_id = request_details.get('post_id_to_respond_to')
+        request_type = request_details.get('request_type', 'respond_to_post')
 
         if not post_id:
             return {'status': 'error', 'error_message': f"Request {request_id} is missing 'post_id_to_respond_to'."}
@@ -89,17 +90,25 @@ class OllamaConnector(BaseGenerator):
             
             print(f"Processing request {request_id} for post {post_id} with selected model '{model}'. Attempting to use persona_id: '{persona_id_str}' (parsed as {persona_id}).")
 
-            persona_instructions = "You are a helpful assistant."
-            with flask_app.app_context():
-                if persona_id:
-                    persona_data = get_persona(persona_id)
-                    if persona_data and persona_data['prompt_instructions']:
-                        persona_instructions = persona_data['prompt_instructions']
-                        print(f"Successfully fetched instructions for persona_id {persona_id} for request {request_id}.")
-                    else:
-                        print(f"Warning: Could not fetch instructions for persona_id {persona_id} (or instructions were empty) for request {request_id}. Using default instructions.")
+            if request_type == 'optimize_prompt':
+                cursor.execute("SELECT setting_value FROM settings WHERE setting_key = 'prompt_optimizer_override'")
+                optimizer_override = cursor.fetchone()
+                if optimizer_override and optimizer_override['setting_value']:
+                    persona_instructions = optimizer_override['setting_value']
                 else:
-                    print(f"No valid persona_id provided or parsed for request {request_id}. Using default instructions.")
+                    persona_instructions = DEFAULT_OPTIMIZER_PROMPT
+            else:
+                persona_instructions = "You are a helpful assistant."
+                with flask_app.app_context():
+                    if persona_id:
+                        persona_data = get_persona(persona_id)
+                        if persona_data and persona_data['prompt_instructions']:
+                            persona_instructions = persona_data['prompt_instructions']
+                            print(f"Successfully fetched instructions for persona_id {persona_id} for request {request_id}.")
+                        else:
+                            print(f"Warning: Could not fetch instructions for persona_id {persona_id} (or instructions were empty) for request {request_id}. Using default instructions.")
+                    else:
+                        print(f"No valid persona_id provided or parsed for request {request_id}. Using default instructions.")
 
             cursor.execute("SELECT content, tagged_files_in_content FROM posts WHERE post_id = ?", (post_id,))
             original_post = cursor.fetchone()

@@ -1472,6 +1472,33 @@ def get_recent_personas(limit=10):
         print(f"Database error in get_recent_personas: {e}")
         return []
 
+def get_recent_media(limit=10):
+   """
+   Fetches the most recently generated media items.
+   """
+   db = get_db()
+   cursor = db.cursor()
+   try:
+       query = """
+           SELECT
+               gm.media_id, gm.media_type, gm.file_path, gm.prompt,
+               p.post_id, t.topic_id, t.title AS topic_title,
+               s.subforum_id, s.name AS subforum_name
+           FROM generated_media gm
+           JOIN llm_requests lr ON gm.llm_request_id = lr.request_id
+           JOIN posts p ON lr.result_object_id = p.post_id OR lr.post_id_to_respond_to = p.post_id
+           JOIN topics t ON p.topic_id = t.topic_id
+           JOIN subforums s ON t.subforum_id = s.subforum_id
+           ORDER BY gm.created_at DESC
+           LIMIT :limit
+       """
+       cursor.execute(query, {"limit": limit})
+       recent_media = [dict(row) for row in cursor.fetchall()]
+       return recent_media
+   except sqlite3.Error as e:
+       print(f"Database error in get_recent_media: {e}")
+       return []
+
 def get_subforum_details(subforum_id):
     try:
         db = get_db()

@@ -37,6 +37,13 @@ def _handle_persona_generation_request(request_id, request_params_json, flask_ap
 
         if generation_result and generation_result.get('status') == 'success':
             persona_name = generation_result['persona_name']
+
+            if persona_name.lower() == 'optimize':
+               print(f"Error: Attempted to create a persona with the reserved name 'optimize' for request {request_id}.")
+               cursor.execute("UPDATE llm_requests SET status = 'error', error_message = 'Cannot create a persona with the reserved name ''optimize''.' WHERE request_id = ?", (request_id,))
+               db_conn.commit()
+               return
+
             prompt_instructions = generation_result['prompt_instructions']
             gen_type_from_params = request_params_dict.get('generation_type', 'unknown_type')
             generation_source = f"llm_generated_{gen_type_from_params}"
@@ -87,6 +94,7 @@ def llm_worker(flask_app):
     generator_map = {
         'respond_to_post': OllamaConnector,
         'respond_to_post_tag': OllamaConnector,
+        'optimize_prompt': OllamaConnector,
         # 'generate_image': DiffusersConnector, # Placeholder
         # 'generate_tts': TTSConnector, # Placeholder
         # 'generate_music': MusicConnector, # Placeholder
