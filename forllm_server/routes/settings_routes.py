@@ -4,12 +4,19 @@ from ..database import (
     list_personas, get_persona, create_persona, update_persona, soft_delete_persona,
     revert_persona_to_version, list_persona_versions, get_global_default_persona_id, set_global_default_persona_id
 )
-from ..config import CURRENT_USER_ID, DEFAULT_MODEL
+from ..config import CURRENT_USER_ID, DEFAULT_MODEL, DEFAULT_OPTIMIZER_PROMPT
 from ..database import get_db
 from ..file_indexer import scan_and_cache_files
 import os
 
 settings_bp = Blueprint('settings', __name__, url_prefix='/api')
+
+@settings_bp.route('/settings/optimizer/default', methods=['GET'])
+def get_default_optimizer_prompt():
+    """
+    Returns the default prompt optimizer string from the config.
+    """
+    return jsonify({'default_prompt': DEFAULT_OPTIMIZER_PROMPT})
 
 @settings_bp.route('/settings', methods=['GET', 'PUT'])
 def handle_settings():
@@ -171,6 +178,10 @@ def api_create_persona():
         prompt_instructions = data.get('prompt_instructions')
         if not name or not prompt_instructions:
             return jsonify({'error': 'Name and prompt_instructions required'}), 400
+
+        # Add validation for reserved names
+        if name.lower() == 'optimize':
+            return jsonify({'error': 'The name "optimize" is reserved and cannot be used for a persona.'}), 400
         
         success, result = create_persona(name, prompt_instructions, CURRENT_USER_ID)
         if success:
@@ -195,6 +206,10 @@ def api_update_persona(persona_id):
         prompt_instructions = data.get('prompt_instructions')
         if not name or not prompt_instructions:
             return jsonify({'error': 'Name and prompt_instructions required'}), 400
+
+        # Add validation for reserved names
+        if name.lower() == 'optimize':
+            return jsonify({'error': 'The name "optimize" is reserved and cannot be used for a persona.'}), 400
         
         # First check if persona exists to give a 404 if it doesn't
         existing_persona = get_persona(persona_id, active_only=False)
@@ -220,6 +235,8 @@ def api_delete_persona(persona_id):
         existing_persona = get_persona(persona_id, active_only=False)
         if existing_persona is None:
             return jsonify({'error': 'Persona not found or database error checking existence.'}), 404
+
+        # NOTE: Add any other permanent deletion validation here in the future.
             
         success = soft_delete_persona(persona_id)
         if not success:

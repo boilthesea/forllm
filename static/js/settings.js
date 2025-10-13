@@ -53,6 +53,14 @@ async function fetchOllamaModels() {
 }
 
 /**
+ * Fetches the default optimizer prompt from the server.
+ * @returns {Promise<object>} A promise that resolves to an object like { default_prompt: "..." }.
+ */
+async function fetchDefaultOptimizerPrompt() {
+    return apiRequest('/api/settings/optimizer/default');
+}
+
+/**
  * The main entry point for initializing the settings system.
  * Fetches all required data concurrently and then renders the UI.
  */
@@ -73,10 +81,11 @@ export async function initializeSettings() {
     });
 
     try {
-        // Step 1: Fetch settings and models in parallel
-        const [settings, modelsResult] = await Promise.all([
+        // Step 1: Fetch settings, models, and default optimizer prompt in parallel
+        const [settings, modelsResult, optimizerDefault] = await Promise.all([
             fetchSettings(),
-            fetchOllamaModels()
+            fetchOllamaModels(),
+            fetchDefaultOptimizerPrompt()
         ]);
 
         // Step 2: Process the fetched settings and update the global state
@@ -93,7 +102,8 @@ export async function initializeSettings() {
             settings_video_api_url: settings.settings_video_api_url || '',
             settings_tts_model: settings.settings_tts_model || '',
             settings_music_model: settings.settings_music_model || '',
-            prompt_optimizer_override: settings.prompt_optimizer_override || ''
+            // Use the override if it exists, otherwise use the fetched default
+            prompt_optimizer_override: settings.prompt_optimizer_override || optimizerDefault.default_prompt || ''
         };
         applyTheme(currentSettings.theme);
 
