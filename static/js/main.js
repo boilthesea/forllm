@@ -198,6 +198,63 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 });
 
+// --- Generation Modal Listener ---
+document.addEventListener('DOMContentLoaded', () => {
+    const generationForm = document.getElementById('generation-form');
+    if (generationForm) {
+        generationForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const modal = document.getElementById('generation-modal');
+            const postId = document.getElementById('generation-post-id-input').value;
+            const generationType = document.getElementById('generation-type-input').value;
+            const prompt = document.getElementById('generation-prompt-input').value;
+
+            let params = {};
+            if (generationType === 'image') {
+                const aspectRatioSelect = document.getElementById('aspect-ratio-select');
+                if (aspectRatioSelect) {
+                    params.aspect_ratio = aspectRatioSelect.value;
+                }
+            }
+            // Add logic to gather other params for video, tts, music
+
+            if (!postId || !generationType || !prompt) {
+                alert('Missing required information for generation.');
+                return;
+            }
+
+            try {
+                const payload = {
+                    post_id: parseInt(postId, 10),
+                    generation_type: generationType,
+                    prompt: prompt,
+                    params: params
+                };
+                
+                // Using a new endpoint from generation_routes.py
+                await apiRequest('/api/generation/queue_from_post', 'POST', payload);
+                
+                alert(`Request to generate ${generationType} has been queued successfully.`);
+                modal.style.display = 'none'; // Close modal on success
+            } catch (error) {
+                alert(`Failed to queue generation request: ${error.message || 'Unknown error'}`);
+            }
+        });
+    }
+
+    // Also handle closing the modal
+    const genModal = document.getElementById('generation-modal');
+    if (genModal) {
+        const closeBtn = genModal.querySelector('.close-btn');
+        if (closeBtn) {
+            closeBtn.addEventListener('click', () => {
+                genModal.style.display = 'none';
+            });
+        }
+    }
+});
+
+
 // window click listener for modals is now in ui.js
 // postList click listener for link interception is now in forum.js
 

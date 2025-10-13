@@ -114,54 +114,85 @@ def handle_topics(subforum_id):
         if not title or not content:
             return jsonify({'error': 'Title and content are required for a new topic'}), 400
         
-        # --- Persona Tagging Logic ---
+        # --- Combined Tagging & Generation Logic ---
         all_tagged_persona_ids = []
         llm_requests_to_create = []
-        if content:
-            # Regex to find all full chains of one or more colon-separated persona tags.
-            # e.g., "@[p1](1)" or "@[p1](1):@[p2](2):@[p3](3)"
-            chain_regex = re.compile(r'@\[[^\]]+\]\(\d+\)(?::@\[[^\]]+\]\(\d+\))*')
 
-            # Regex to parse a single tag and extract its ID.
+        if content:
+            # Regex for @persona chains, now also including @optimize
+            # It can handle @optimize, @[Persona](1), and chains like @[P1](1):@[P2](2):@optimize
+            persona_chain_regex = re.compile(r'(@(?:\[[^\]]+\]\(\d+\)|optimize))(?::(@(?:\[[^\]]+\]\(\d+\)|optimize)))*')
+            
+            # Regex for inline generation commands like $image(prompt)
+            inline_gen_regex = re.compile(r'(\$(image|video|tts|music))\((.*?)\)')
+            
+            # Regex for simple, post-level commands like $image
+            post_level_gen_regex = re.compile(r'^\s*(\$(image|video|tts|music))\s*$', re.MULTILINE)
+
+            # Regex to parse a single persona tag and extract its ID
             persona_id_regex = re.compile(r'@\[[^\]]+\]\((\d+)\)')
 
-            # Find all chains in the content.
-            all_chains = chain_regex.findall(content)
-
-            for chain_str in all_chains:
-                # Split the found chain string into individual tags.
+            # --- Handle Persona and @optimize Chains ---
+            all_chains = persona_chain_regex.finditer(content)
+            for chain_match in all_chains:
+                chain_str = chain_match.group(0)
                 chain_tags = chain_str.split(':')
-
-                # Keep track of the previous persona's ID in this specific chain.
-                last_persona_id_in_chain = None
+                last_request_key = None # Use a unique key for parent tracking
 
                 for i, tag_str in enumerate(chain_tags):
-                    match = persona_id_regex.match(tag_str.strip())
-                    if match:
+                    tag_str = tag_str.strip()
+                    current_request_key = f"{chain_match.start()}-{i}"
+                    
+                    req_info = {
+                        'key': current_request_key,
+                        'status': 'pending_dependency' if i > 0 else 'pending',
+                        'parent_key': last_request_key,
+                        'request_params': {}
+                    }
+
+                    if tag_str == '@optimize':
+                        req_info['request_type'] = 'optimize_prompt'
+                        req_info['p_id'] = None # No specific persona for optimize
+                    elif persona_id_regex.match(tag_str):
+                        match = persona_id_regex.match(tag_str)
                         persona_id = int(match.group(1))
                         all_tagged_persona_ids.append(persona_id)
+                        req_info['request_type'] = 'respond_to_post_tag'
+                        req_info['p_id'] = persona_id
+                    
+                    llm_requests_to_create.append(req_info)
+                    last_request_key = current_request_key
 
-                        if i == 0:
-                            # First persona in the chain (or a single tag)
-                            llm_requests_to_create.append({
-                                'p_id': persona_id,
-                                'status': 'pending',
-                                'parent_id': None
-                            })
-                        else:
-                            # Subsequent persona in the chain, dependent on the previous one.
-                            llm_requests_to_create.append({
-                                'p_id': persona_id,
-                                'status': 'pending_dependency',
-                                'parent_id': last_persona_id_in_chain
-                            })
+            # --- Handle Inline Generation Commands ---
+            for match in inline_gen_regex.finditer(content):
+                command, gen_type, prompt = match.groups()
+                # Simple inline generation, no dependency for now
+                llm_requests_to_create.append({
+                    'key': f"inline-{match.start()}",
+                    'request_type': f'generate_{gen_type}',
+                    'status': 'pending',
+                    'parent_key': None,
+                    'p_id': None,
+                    'request_params': {'prompt': prompt.strip()}
+                })
 
-                        # Update the last persona ID for the next iteration in this chain.
-                        last_persona_id_in_chain = persona_id
+            # --- Handle Post-Level Generation Commands ---
+            for match in post_level_gen_regex.finditer(content):
+                command, gen_type = match.groups()
+                # The prompt is the entire post content, which will be handled by the worker
+                llm_requests_to_create.append({
+                    'key': f"post-level-{match.start()}",
+                    'request_type': f'generate_{gen_type}',
+                    'status': 'pending',
+                    'parent_key': None,
+                    'p_id': None,
+                    'request_params': {'prompt_from_post': True}
+                })
+
 
         unique_tagged_persona_ids = sorted(list(set(all_tagged_persona_ids)))
         tagged_personas_json = json.dumps(unique_tagged_persona_ids)
-        # --- End Persona Tagging Logic ---
+        # --- End Combined Tagging & Generation Logic ---
 
         # --- File Tagging Logic ---
         file_path_regex = re.compile(r'\[#([^\]]+)\]\(([^)]+)\)')
@@ -188,33 +219,36 @@ def handle_topics(subforum_id):
             post_id = cursor.lastrowid
 
             # --- Create LLM Requests for tagged personas ---
-            parent_request_id_map = {} # Maps persona_id to its created llm_request_id
+            parent_request_id_map = {} # Maps our temporary key to the created llm_request_id
             for req_info in llm_requests_to_create:
-                p_id = req_info['p_id']
+                p_id = req_info.get('p_id')
                 status = req_info['status']
-                parent_p_id = req_info['parent_id']
-                
-                persona_check = get_persona(p_id, active_only=True)
-                if not persona_check:
-                    current_app.logger.warning(f"Persona ID {p_id} not found or not active. Skipping LLM request.")
-                    continue
+                parent_key = req_info.get('parent_key')
+                req_type = req_info['request_type']
+                req_params = req_info.get('request_params', {})
 
-                parent_request_id = None
-                if parent_p_id:
-                    parent_request_id = parent_request_id_map.get(parent_p_id)
-                    if not parent_request_id:
-                        current_app.logger.error(f"Could not find parent request for chained tag with child {p_id}. Skipping.")
+                # Validation for persona-based requests
+                if p_id:
+                    persona_check = get_persona(p_id, active_only=True)
+                    if not persona_check:
+                        current_app.logger.warning(f"Persona ID {p_id} not found or not active. Skipping LLM request.")
                         continue
                 
+                parent_request_id = None
+                if parent_key:
+                    parent_request_id = parent_request_id_map.get(parent_key)
+                    if not parent_request_id:
+                        current_app.logger.error(f"Could not find parent request for chained tag with key {req_info['key']}. Skipping.")
+                        continue
+
                 cursor.execute("""
                     INSERT INTO llm_requests
-                    (post_id_to_respond_to, llm_persona, requested_by_user_id, request_type, status, llm_model, parent_request_id)
-                    VALUES (?, ?, ?, ?, ?, ?, ?)
-                """, (post_id, p_id, CURRENT_USER_ID, 'respond_to_post_tag', status, None, parent_request_id))
+                    (post_id_to_respond_to, llm_persona, requested_by_user_id, request_type, status, llm_model, parent_request_id, request_params)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """, (post_id, p_id, CURRENT_USER_ID, req_type, status, None, parent_request_id, json.dumps(req_params)))
                 
-                # Always map the persona_id to the newly created request_id
-                # so it can be found by subsequent children in the same chain.
-                parent_request_id_map[p_id] = cursor.lastrowid
+                # Map the current request's key to its new DB ID for potential children
+                parent_request_id_map[req_info['key']] = cursor.lastrowid
             # --- End LLM Requests ---
 
             db.commit()
@@ -262,54 +296,81 @@ def handle_posts(topic_id):
         if not cursor.fetchone():
             return jsonify({'error': 'Parent post not found in this topic'}), 404
 
-        # --- Persona Tagging Logic ---
+        # --- Combined Tagging & Generation Logic ---
         all_tagged_persona_ids = []
         llm_requests_to_create = []
-        if content:
-            # Regex to find all full chains of one or more colon-separated persona tags.
-            # e.g., "@[p1](1)" or "@[p1](1):@[p2](2):@[p3](3)"
-            chain_regex = re.compile(r'@\[[^\]]+\]\(\d+\)(?::@\[[^\]]+\]\(\d+\))*')
 
-            # Regex to parse a single tag and extract its ID.
+        if content:
+            # Regex for @persona chains, now also including @optimize
+            persona_chain_regex = re.compile(r'(@(?:\[[^\]]+\]\(\d+\)|optimize))(?::(@(?:\[[^\]]+\]\(\d+\)|optimize)))*')
+            
+            # Regex for inline generation commands like $image(prompt)
+            inline_gen_regex = re.compile(r'(\$(image|video|tts|music))\((.*?)\)')
+            
+            # Regex for simple, post-level commands like $image
+            post_level_gen_regex = re.compile(r'^\s*(\$(image|video|tts|music))\s*$', re.MULTILINE)
+
+            # Regex to parse a single persona tag and extract its ID
             persona_id_regex = re.compile(r'@\[[^\]]+\]\((\d+)\)')
 
-            # Find all chains in the content.
-            all_chains = chain_regex.findall(content)
-
-            for chain_str in all_chains:
-                # Split the found chain string into individual tags.
+            # --- Handle Persona and @optimize Chains ---
+            all_chains = persona_chain_regex.finditer(content)
+            for chain_match in all_chains:
+                chain_str = chain_match.group(0)
                 chain_tags = chain_str.split(':')
-
-                # Keep track of the previous persona's ID in this specific chain.
-                last_persona_id_in_chain = None
+                last_request_key = None # Use a unique key for parent tracking
 
                 for i, tag_str in enumerate(chain_tags):
-                    match = persona_id_regex.match(tag_str.strip())
-                    if match:
+                    tag_str = tag_str.strip()
+                    current_request_key = f"{chain_match.start()}-{i}"
+                    
+                    req_info = {
+                        'key': current_request_key,
+                        'status': 'pending_dependency' if i > 0 else 'pending',
+                        'parent_key': last_request_key,
+                        'request_params': {}
+                    }
+
+                    if tag_str == '@optimize':
+                        req_info['request_type'] = 'optimize_prompt'
+                        req_info['p_id'] = None # No specific persona for optimize
+                    elif persona_id_regex.match(tag_str):
+                        match = persona_id_regex.match(tag_str)
                         persona_id = int(match.group(1))
                         all_tagged_persona_ids.append(persona_id)
+                        req_info['request_type'] = 'respond_to_post_tag'
+                        req_info['p_id'] = persona_id
+                    
+                    llm_requests_to_create.append(req_info)
+                    last_request_key = current_request_key
 
-                        if i == 0:
-                            # First persona in the chain (or a single tag)
-                            llm_requests_to_create.append({
-                                'p_id': persona_id,
-                                'status': 'pending',
-                                'parent_id': None
-                            })
-                        else:
-                            # Subsequent persona in the chain, dependent on the previous one.
-                            llm_requests_to_create.append({
-                                'p_id': persona_id,
-                                'status': 'pending_dependency',
-                                'parent_id': last_persona_id_in_chain
-                            })
+            # --- Handle Inline Generation Commands ---
+            for match in inline_gen_regex.finditer(content):
+                command, gen_type, prompt = match.groups()
+                llm_requests_to_create.append({
+                    'key': f"inline-{match.start()}",
+                    'request_type': f'generate_{gen_type}',
+                    'status': 'pending',
+                    'parent_key': None,
+                    'p_id': None,
+                    'request_params': {'prompt': prompt.strip()}
+                })
 
-                        # Update the last persona ID for the next iteration in this chain.
-                        last_persona_id_in_chain = persona_id
-        
+            # --- Handle Post-Level Generation Commands ---
+            for match in post_level_gen_regex.finditer(content):
+                command, gen_type = match.groups()
+                llm_requests_to_create.append({
+                    'key': f"post-level-{match.start()}",
+                    'request_type': f'generate_{gen_type}',
+                    'status': 'pending',
+                    'parent_key': None,
+                    'p_id': None,
+                    'request_params': {'prompt_from_post': True}
+                })
+
         unique_tagged_persona_ids = sorted(list(set(all_tagged_persona_ids)))
         tagged_personas_json = json.dumps(unique_tagged_persona_ids)
-        # --- End Persona Tagging Logic ---
+        # --- End Combined Tagging & Generation Logic ---
 
         # --- File Tagging Logic ---
         file_path_regex = re.compile(r'\[#([^\]]+)\]\(([^)]+)\)')
@@ -331,34 +392,35 @@ def handle_posts(topic_id):
                            (topic_id, CURRENT_USER_ID, parent_post_id, content, tagged_personas_json, tagged_files_json, tagged_instructions_json, tagged_sets_json))
             post_id = cursor.lastrowid
 
-            # --- Create LLM Requests for tagged personas ---
-            parent_request_id_map = {}
+            # --- Create LLM Requests ---
+            parent_request_id_map = {} # Maps our temporary key to the created llm_request_id
             for req_info in llm_requests_to_create:
-                p_id = req_info['p_id']
+                p_id = req_info.get('p_id')
                 status = req_info['status']
-                parent_p_id = req_info['parent_id']
+                parent_key = req_info.get('parent_key')
+                req_type = req_info['request_type']
+                req_params = req_info.get('request_params', {})
 
-                persona_check = get_persona(p_id, active_only=True)
-                if not persona_check:
-                    current_app.logger.warning(f"Persona ID {p_id} not found or not active. Skipping LLM request.")
-                    continue
-
-                parent_request_id = None
-                if parent_p_id:
-                    parent_request_id = parent_request_id_map.get(parent_p_id)
-                    if not parent_request_id:
-                        current_app.logger.error(f"Could not find parent request for chained tag with child {p_id}. Skipping.")
+                if p_id:
+                    persona_check = get_persona(p_id, active_only=True)
+                    if not persona_check:
+                        current_app.logger.warning(f"Persona ID {p_id} not found or not active. Skipping LLM request.")
                         continue
                 
+                parent_request_id = None
+                if parent_key:
+                    parent_request_id = parent_request_id_map.get(parent_key)
+                    if not parent_request_id:
+                        current_app.logger.error(f"Could not find parent request for chained tag with key {req_info['key']}. Skipping.")
+                        continue
+
                 cursor.execute("""
                     INSERT INTO llm_requests
-                    (post_id_to_respond_to, llm_persona, requested_by_user_id, request_type, status, llm_model, parent_request_id)
-                    VALUES (?, ?, ?, ?, ?, ?, ?)
-                """, (post_id, p_id, CURRENT_USER_ID, 'respond_to_post_tag', status, None, parent_request_id))
+                    (post_id_to_respond_to, llm_persona, requested_by_user_id, request_type, status, llm_model, parent_request_id, request_params)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """, (post_id, p_id, CURRENT_USER_ID, req_type, status, None, parent_request_id, json.dumps(req_params)))
                 
-                # Always map the persona_id to the newly created request_id
-                # so it can be found by subsequent children in the same chain.
-                parent_request_id_map[p_id] = cursor.lastrowid
+                parent_request_id_map[req_info['key']] = cursor.lastrowid
             # --- End LLM Requests ---
             
             db.commit()

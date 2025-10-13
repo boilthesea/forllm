@@ -69,7 +69,7 @@ This document outlines the phased development plan for integrating image, video,
 5.  **Update Documentation Plan:**
     *   Add subphase 8.2 to Phase 8, outlining the `blueprint.md` sections that will need to be updated to reflect the new UI navigation and settings configurations.
 
-## Phase 3: Inline Generation and Post-Generation Actions [TODO]
+## Phase 3: Inline Generation and Post-Generation Actions [DONE]
 
 **Goal:** Implement the core user workflows for generating multimodal content directly within the forum interface.
 
@@ -366,6 +366,12 @@ Review blueprint.md and compare it to this phased development plan, read whateve
     *   **`forllm_server/routes/activity_routes.py`**: Update its description to include the new `/api/activity/recent_media` endpoint for fetching recently generated media.
     *   **`forllm_server/database.py`**: Update its description to include the new `get_recent_media` function.
     *   **`static/js/activity.js`**: Update its description to mention fetching and rendering data from the new recent media endpoint.
+
+3.  **Phase 8.3: Document Phase 3 Changes**
+    *   **`forllm_server/routes/forum_routes.py`**: Update its description to include parsing for new generation commands (`$image`, `$video`, etc.) and chained commands with `@optimize`.
+    *   **`static/js/forum.js`**: Update the `renderPostNode` function's description to mention handling the `content_structured` JSON format for rendering multimodal content, including pending/error states. Also, mention the addition of "Generate..." options to the post menu and the new `openGenerationModal` function.
+    *   **`templates/index.html`**: Add a description for the new reusable `#generation-modal` component.
+    *   **`static/js/main.js`**: Update its description to include the new event listener for handling submissions from the generation modal.
 
 ---
 

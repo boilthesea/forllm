@@ -326,6 +326,36 @@ function renderPostNode(post, parentElement, depth) {
         optionsMenu.appendChild(deletePostBtn);
     }
 
+    // --- Add Post-Generation Action Buttons ---
+    const genImageBtn = document.createElement('a');
+    genImageBtn.href = '#';
+    genImageBtn.className = 'generate-image-btn';
+    genImageBtn.textContent = 'Generate Image from Post';
+    genImageBtn.dataset.postId = post.post_id;
+    optionsMenu.appendChild(genImageBtn);
+
+    const genVideoBtn = document.createElement('a');
+    genVideoBtn.href = '#';
+    genVideoBtn.className = 'generate-video-btn';
+    genVideoBtn.textContent = 'Generate Video from Post';
+    genVideoBtn.dataset.postId = post.post_id;
+    optionsMenu.appendChild(genVideoBtn);
+
+    const genTtsBtn = document.createElement('a');
+    genTtsBtn.href = '#';
+    genTtsBtn.className = 'generate-tts-btn';
+    genTtsBtn.textContent = 'Generate TTS Audio from Post';
+    genTtsBtn.dataset.postId = post.post_id;
+    optionsMenu.appendChild(genTtsBtn);
+
+    const genMusicBtn = document.createElement('a');
+    genMusicBtn.href = '#';
+    genMusicBtn.className = 'generate-music-btn';
+    genMusicBtn.textContent = 'Generate Music from Post';
+    genMusicBtn.dataset.postId = post.post_id;
+    optionsMenu.appendChild(genMusicBtn);
+    // --- End Post-Generation Action Buttons ---
+
     metaActions.appendChild(optionsButton);
     metaActions.appendChild(optionsMenu);
 
@@ -346,12 +376,100 @@ function renderPostNode(post, parentElement, depth) {
     const contentDiv = document.createElement('div');
     contentDiv.className = 'post-content';
     contentDiv.id = `post-content-${post.post_id}`;
-    contentDiv.innerHTML = post.content;
 
-    contentDiv.innerHTML = contentDiv.innerHTML.replace(
-        /@\[([^\]]+)\]\((\d+)\)/g, 
-        '<span class="persona-tag" data-persona-id="$2" title="Persona: $1 (ID: $2)">@$1</span>'
-    );
+    // --- New Structured Content Rendering ---
+    if (post.content_structured) {
+        try {
+            const blocks = JSON.parse(post.content_structured);
+            blocks.forEach(block => {
+                let element;
+                switch (block.type) {
+                    case 'text':
+                        element = document.createElement('p');
+                        // This is a simplified text rendering. The original markdown-to-html
+                        // happens on the backend. Here we just display pre-rendered html or plain text.
+                        // The backend should ideally send HTML in the data field for text blocks.
+                        element.innerHTML = block.data;
+                        break;
+                    case 'image':
+                        if (block.status === 'pending') {
+                            element = document.createElement('div');
+                            element.className = 'generated-content pending';
+                            element.dataset.requestId = block.request_id;
+                            element.innerHTML = `Generating image... <div class="spinner"></div>`;
+                        } else if (block.status === 'error') {
+                            element = document.createElement('div');
+                            element.className = 'generated-content error';
+                            element.innerHTML = `Failed to generate image: ${block.error_message} <button class="retry-btn" data-request-id="${block.request_id}">Retry</button>`;
+                        } else {
+                            element = document.createElement('img');
+                            element.src = block.data.file_path;
+                            element.alt = block.data.prompt;
+                            element.className = 'generated-content';
+                        }
+                        break;
+                    case 'audio':
+                         if (block.status === 'pending') {
+                            element = document.createElement('div');
+                            element.className = 'generated-content pending';
+                            element.dataset.requestId = block.request_id;
+                            element.innerHTML = `Generating audio... <div class="spinner"></div>`;
+                        } else if (block.status === 'error') {
+                            element = document.createElement('div');
+                            element.className = 'generated-content error';
+                            element.innerHTML = `Failed to generate audio: ${block.error_message} <button class="retry-btn" data-request-id="${block.request_id}">Retry</button>`;
+                        } else {
+                            element = document.createElement('audio');
+                            element.controls = true;
+                            element.src = block.data.file_path;
+                            element.className = 'generated-content';
+                        }
+                        break;
+                    case 'video':
+                        if (block.status === 'pending') {
+                            element = document.createElement('div');
+                            element.className = 'generated-content pending';
+                            element.dataset.requestId = block.request_id;
+                            element.innerHTML = `Generating video... <div class="spinner"></div>`;
+                        } else if (block.status === 'error') {
+                            element = document.createElement('div');
+                            element.className = 'generated-content error';
+                            element.innerHTML = `Failed to generate video: ${block.error_message} <button class="retry-btn" data-request-id="${block.request_id}">Retry</button>`;
+                        } else {
+                            element = document.createElement('video');
+                            element.controls = true;
+                            element.src = block.data.file_path;
+                            element.className = 'generated-content';
+                        }
+                        break;
+                    default:
+                        element = document.createElement('p');
+                        element.textContent = `[Unsupported content type: ${block.type}]`;
+                }
+                if (element) {
+                    contentDiv.appendChild(element);
+                }
+            });
+        } catch (e) {
+            console.error('Failed to parse content_structured:', e);
+            // Fallback to old content if parsing fails
+            contentDiv.innerHTML = post.content;
+        }
+    } else {
+        // Fallback for older posts without structured content
+        contentDiv.innerHTML = post.content;
+    }
+    // --- End Structured Content Rendering ---
+
+
+    // The persona tag replacement should now happen on the backend during HTML generation for text blocks.
+    // If we need to support it on old-style content, we can do this:
+    if (!post.content_structured) {
+        contentDiv.innerHTML = contentDiv.innerHTML.replace(
+            /@\[([^\]]+)\]\((\d+)\)/g,
+            '<span class="persona-tag" data-persona-id="$2" title="Persona: $1 (ID: $2)">@$1</span>'
+        );
+    }
 
     const actionsDiv = document.createElement('div');
     actionsDiv.className = 'post-actions';
@@ -445,7 +563,8 @@ export async function loadSubforums(shouldShowSection = true) {
         const subforums = await apiRequest('/api/subforums');
         renderSubforumList(subforums);
         if (shouldShowSection) {
-            showSection('subforum-nav'); // This might need adjustment in main.js
+            // This logic might be handled by the App Switcher now, but keeping for direct calls.
+            showSection('subforum-nav');
         }
     } catch (error) {
         // Error logged by apiRequest
@@ -863,6 +982,26 @@ postList.addEventListener('click', async (event) => {
         return; // Stop further processing
     }
 
+    // --- Handle Post-Generation Actions ---
+    if (target.classList.contains('generate-image-btn')) {
+        event.preventDefault();
+        const postId = target.dataset.postId;
+        openGenerationModal('image', postId);
+    } else if (target.classList.contains('generate-video-btn')) {
+        event.preventDefault();
+        const postId = target.dataset.postId;
+        openGenerationModal('video', postId);
+    } else if (target.classList.contains('generate-tts-btn')) {
+        event.preventDefault();
+        const postId = target.dataset.postId;
+        openGenerationModal('tts', postId);
+    } else if (target.classList.contains('generate-music-btn')) {
+        event.preventDefault();
+        const postId = target.dataset.postId;
+        openGenerationModal('music', postId);
+    }
+
+
     // Handle Delete Post
     if (target.classList.contains('delete-post-btn')) {
         event.preventDefault();
@@ -915,6 +1054,59 @@ postList.addEventListener('click', async (event) => {
         enterEditMode(postId);
     }
 });
+
+async function openGenerationModal(type, postId) {
+    const post = currentPosts.find(p => p.post_id == postId);
+    if (!post) {
+        alert('Could not find post data.');
+        return;
+    }
+
+    // Fetch raw content to ensure we have the original text, not rendered HTML
+    let rawContent;
+    try {
+        const response = await apiRequest(`/api/posts/${postId}/raw`);
+        if (!response || typeof response.content === 'undefined') {
+            throw new Error('Invalid response from raw content endpoint.');
+        }
+        rawContent = response.content;
+    } catch (error) {
+        alert('Failed to load post content for generation. Please try again.');
+        console.error('Error fetching raw post content:', error);
+        return;
+    }
+
+
+    const modal = document.getElementById('generation-modal');
+    const title = document.getElementById('generation-modal-title');
+    const postIdInput = document.getElementById('generation-post-id-input');
+    const typeInput = document.getElementById('generation-type-input');
+    const promptInput = document.getElementById('generation-prompt-input');
+    const paramsContainer = document.getElementById('generation-params-container');
+
+    title.textContent = `Generate ${type.charAt(0).toUpperCase() + type.slice(1)} from Post`;
+    postIdInput.value = postId;
+    typeInput.value = type;
+    promptInput.value = rawContent; // Use raw content
+    paramsContainer.innerHTML = ''; // Clear old params
+
+    // Add specific parameters based on type
+    if (type === 'image') {
+        paramsContainer.innerHTML = `
+            <div class="setting-item">
+                <label for="aspect-ratio-select">Aspect Ratio:</label>
+                <select id="aspect-ratio-select" class="form-input">
+                    <option value="1:1">Square (1:1)</option>
+                    <option value="16:9">Widescreen (16:9)</option>
+                    <option value="9:16">Portrait (9:16)</option>
+                </select>
+            </div>
+        `;
+    }
+    // Add other params for video, tts, music as needed
+
+    modal.style.display = 'block';
+}
 
 // --- Attachment Handling Functions ---
 
