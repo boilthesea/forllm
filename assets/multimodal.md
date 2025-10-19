@@ -98,17 +98,25 @@ This document outlines the phased development plan for integrating image, video,
     *   In `diffusers_connector.py`, write the code to integrate with the Hugging Face `diffusers` library.
     *   This involves importing a pipeline, loading the specified model from settings, and calling it with the prompt.
     *   The result will be a PIL Image object, which the connector must then save to a file in the `media/images/` directory before creating the corresponding entry in the central `generated_media` table.
-    *   The connector should be designed to load the model into memory once on startup to avoid long load times for each request.
+    *   The connector should be designed to optionally (in settings) allow the load a model into memory once on startup of the image or video app to avoid long load times for each request. This should not load a model on the start of the forllm app overall since most inference is queued and inference occurs across different model types, mostly through ollama.
 
 2.  **Implement `kokoro` (TTS) Connector:**
     *   In `tts_connector.py`, write the code to connect to the kokoro library, submit text, and handle the audio file result.
     *   The connector will save the generated audio to `media/audio/` and update the `generated_media` table.
 
-3.  **Implement `@optimize` Logic:**
+3.  **Implement `Ace-step` (music) Connector:**
+    *   In `music_connector.py`, write the code to integrate with Ace-step.
+    *   Assume Ace-step will be installed to /forllm_server/generators/Ace-step/ via the pip install git+https://github.com/ace-step/ACE-Step.git method.
+    *   The connector will save generated music to `media/music/` directory and create the corresponding entry in the central `generated_media` table.
+
+4.  **Implement `@optimize` Logic:**
     *   In the `ollama_connector.py`, add logic to handle requests where the `request_type` is `optimize_prompt`. It will use the system prompt (or the user's override) to transform the input text.
 
-4.  **Update Documentation Plan:**
-    *   Add subphase 8.4 to Phase 8, outlining the `blueprint.md` sections that will need to be updated to reflect the full integration of the `diffusers` and `kokoro` services.
+5.  **Update Documentation Plan:**
+    *   Add subphase 8.4.1 to Phase 8, outlining the `blueprint.md` sections that will need to be updated to reflect the full integration of the `diffusers` and `kokoro` services. 
+
+6.  **Update `readme.md` installation instructions:**
+    *   Diffusers, kokoro, ace-step all have installation requirements that need to be documented.
 
 ## Phase 5: Audiobook Miniapp Integration [TODO]
 
@@ -204,7 +212,7 @@ This leverages the existing `llm_requests` queue with a parent/child dependency 
     *   The `llm_worker` will have a new handler for `generate_audiobook_chapter`.
     *   The `tts_connector` will:
         1.  Use the `chapter_id` to query `forllm_audio.db` and retrieve the `extracted_text`.
-        2.  Implement the refined, in-memory streaming architecture discussed in `kokoro_core.md`. Text will be fed sentence-by-sentence to the TTS engine, and the resulting audio chunks will be piped directly to a single `ffmpeg` process via `stdin`.
+        2.  Implement the refined, in-memory streaming architecture discussed in `kokoro_core.md`. Text will be fed segment-by-segment (where a segment is a user adjustable number of sentences anywhere from 1 to 5) to the TTS engine, and the resulting audio chunks will be piped directly to a single `ffmpeg` process via `stdin`.
         3.  Each chapter will be saved as a temporary `.wav` or `.mp3` file.
 5.  **Final Assembly:**
     *   Once all child jobs for a parent are `complete`, the `llm_worker` will trigger a final assembly job.
