@@ -6,7 +6,7 @@ import numpy as np
 import subprocess
 from forllm_server.database import get_db_connection, create_generated_media_entry
 from forllm_server.generators.base import BaseGenerator
-from forllm_server.audio_database import get_chapter_by_id, get_audiobook_by_id
+from forllm_server.audio_database import get_chapters_for_book, update_audiobook_status, get_chapter_by_id, get_audiobook_by_id
 
 class TTSConnector(BaseGenerator):
     def __init__(self, *args, **kwargs):

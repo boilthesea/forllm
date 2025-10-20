@@ -70,10 +70,13 @@ def get_chapters_for_book(book_id):
     conn.close()
     return chapters
 
-def update_audiobook_status(book_id, status):
+def update_audiobook_status(book_id, status, output_file_path=None):
     conn = get_audio_db_connection()
     cursor = conn.cursor()
-    cursor.execute("UPDATE audiobooks SET status = ? WHERE book_id = ?", (status, book_id))
+    if output_file_path:
+        cursor.execute("UPDATE audiobooks SET status = ?, output_file_path = ? WHERE book_id = ?", (status, output_file_path, book_id))
+    else:
+        cursor.execute("UPDATE audiobooks SET status = ? WHERE book_id = ?", (status, book_id))
     conn.commit()
     conn.close()
 
