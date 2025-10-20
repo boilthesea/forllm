@@ -90,17 +90,17 @@ This document outlines the phased development plan for integrating image, video,
 4.  **Update Documentation Plan:**
     *   Add subphase 8.3 to Phase 8, outlining the `blueprint.md` sections that will need to be updated to reflect the new inline generation commands and post-generation action UI.
 
-## Phase 4: Full Service Integration and First-Use Experience [TODO]
+## Phase 4: Full Service Integration and First-Use Experience [WIP]
 
 **Goal:** Complete the integration with the external generation services and ensure the features are fully functional end-to-end.
 
-1.  **Implement `diffusers` Connector:**
+1.  **Implement `diffusers` Connector:** 
     *   In `diffusers_connector.py`, write the code to integrate with the Hugging Face `diffusers` library.
     *   This involves importing a pipeline, loading the specified model from settings, and calling it with the prompt.
     *   The result will be a PIL Image object, which the connector must then save to a file in the `media/images/` directory before creating the corresponding entry in the central `generated_media` table.
     *   The connector should be designed to optionally (in settings) allow the load a model into memory once on startup of the image or video app to avoid long load times for each request. This should not load a model on the start of the forllm app overall since most inference is queued and inference occurs across different model types, mostly through ollama.
 
-2.  **Implement `kokoro` (TTS) Connector:**
+2.  **Implement `kokoro` (TTS) Connector:** [DONE]
     *   In `tts_connector.py`, write the code to connect to the kokoro library, submit text, and handle the audio file result.
     *   The connector will save the generated audio to `media/audio/` and update the `generated_media` table.
 
@@ -118,11 +118,11 @@ This document outlines the phased development plan for integrating image, video,
 6.  **Update `readme.md` installation instructions:**
     *   Diffusers, kokoro, ace-step all have installation requirements that need to be documented.
 
-## Phase 5: Audiobook Miniapp Integration [TODO]
+## Phase 5: Audiobook Miniapp Integration [WIP]
 
 **Goal:** Implement a self-contained "Audiobook" miniapp within forllm, leveraging the kokoro engine to convert user-provided ebooks into playable audiobooks.
 
-### 5.1. Database and File Structure
+### 5.1. Database and File Structure [DONE]
 
 *   **New Database (`forllm_audio.db`):**
     *   A separate SQLite database will be created to manage audiobook-specific metadata.
@@ -156,7 +156,7 @@ CREATE TABLE IF NOT EXISTS audiobook_chapters (
 );
 ```
 
-### 5.3. Ebook Ingestion and Processing Workflow
+### 5.3. Ebook Ingestion and Processing Workflow [DONE]
 
 This workflow is designed to be robust and decoupled from the original source file.
 
@@ -173,7 +173,7 @@ This workflow is designed to be robust and decoupled from the original source fi
     *   Each extracted chapter's title and cleaned text is saved as a new entry in the `audiobook_chapters` table, linked to the parent book.
 5.  **UI Population:** The extracted data is sent back to the frontend, which populates the two-pane generation UI for user review.
 
-### 5.4. Generation UI (Two-Pane Layout)
+### 5.4. Generation UI (Two-Pane Layout) [DONE]
 
 Once a book is processed, the user is presented with a dedicated two-pane interface:
 
@@ -192,7 +192,7 @@ Once a book is processed, the user is presented with a dedicated two-pane interf
     *   **Top Section:** Displays the book's cover image, title, and author.
     *   **Bottom Section:** A large, scrollable text area that displays the full text of the chapter currently selected in the left pane, allowing the user to verify the content.
 
-### 5.5. Background Queuing and Processing
+### 5.5. Background Queuing and Processing [TODO]
 
 This leverages the existing `llm_requests` queue with a parent/child dependency model.
 
@@ -219,7 +219,7 @@ This leverages the existing `llm_requests` queue with a parent/child dependency 
     *   This job will use `ffmpeg` to concatenate all temporary chapter audio files, embed the book's metadata and cover image, and write the final `.m4b` file to the `media/audiobooks/` directory.
     *   The `audiobooks.output_file_path` and `status` will be updated in `forllm_audio.db`. The final file path will also be recorded in the main `generated_media` table.
 
-### 5.6. Audiobook Library and Player UI
+### 5.6. Audiobook Library and Player UI [TODO]
 
 *   **Library View:**
     *   The main view of the "Audiobooks" app will be a grid or list displaying the cover, title, and author of all `completed` audiobooks.
@@ -232,7 +232,7 @@ This leverages the existing `llm_requests` queue with a parent/child dependency 
         *   A chapter selection dropdown/list to navigate the audiobook.
         *   The player will use the `output_file_path` from the database to load the correct `.m4b` file.
 
-### 5.7  **Update Documentation Plan:**
+### 5.7  **Update Documentation Plan:** [TODO]
     *   Add subphase 8.5 to Phase 8, outlining the `blueprint.md` sections that will need to be updated to describe the new Audiobook miniapp's architecture, database schema, and UI/UX flow.
 
 ## Phase 6: Music Miniapp Integration [TODO]

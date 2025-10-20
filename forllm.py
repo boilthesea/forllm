@@ -7,6 +7,7 @@ from waitress import serve
 # Import functionalities from the new forllm_server package
 from forllm_server.config import DATABASE, UPLOAD_FOLDER
 from forllm_server.database import init_db, close_db, update_setting
+from forllm_server.audio_database import init_audio_db
 from forllm_server.llm_queue import llm_worker
 from forllm_server.file_indexer import scan_and_cache_files
 
@@ -22,6 +23,7 @@ from forllm_server.routes.utility_routes import utility_bp # Added for utility r
 from forllm_server.routes.file_routes import file_routes
 from forllm_server.routes.custom_instruction_routes import custom_instruction_routes
 from forllm_server.routes.generation_routes import generation_bp
+from forllm_server.routes.audio_routes import audio_bp
 
 # --- Flask App Initialization ---
 app = Flask(__name__, template_folder='templates', static_folder='static')
@@ -40,6 +42,7 @@ app.register_blueprint(utility_bp) # Added for utility routes
 app.register_blueprint(file_routes)
 app.register_blueprint(custom_instruction_routes)
 app.register_blueprint(generation_bp)
+app.register_blueprint(audio_bp)
 
 
 # Register database close function
@@ -77,6 +80,7 @@ if __name__ == '__main__':
 
     print("Initializing database...")
     init_db() # Ensure DB exists and schema is created/verified
+    init_audio_db()
 
     print("Starting LLM Worker thread...")
     # Pass the Flask 'app' instance to the llm_worker thread

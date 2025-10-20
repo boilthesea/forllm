@@ -452,6 +452,52 @@
                        <div id="activity-new-audio-list"></div>
                    </div>
                 </section>
+
+                <section id="audiobook-generation-section" class="miniapp-section" style="display: none;">
+                    <div id="audiobook-layout-container">
+                        <!-- Left Pane (Controls) -->
+                        <div id="audiobook-left-pane">
+                            <div class="pane-header">
+                                <h2>Audiobook Creator</h2>
+                            </div>
+                            <div class="left-pane-controls">
+                                <button id="audiobook-open-ebook-btn" class="button-primary">Open Ebook</button>
+                                <input type="file" id="audiobook-file-input" style="display: none;" accept=".epub,.mobi,.azw3,.pdf">
+                                <hr>
+                                <h4>Chapters</h4>
+                                <div id="audiobook-chapter-list" class="chapter-list">
+                                    <!-- Chapters will be populated by JS -->
+                                </div>
+                                <hr>
+                                <h4>Settings</h4>
+                                <div class="setting-item">
+                                    <label for="audiobook-voice-select">Voice:</label>
+                                    <select id="audiobook-voice-select">
+                                        <option value="default">Default Voice</option>
+                                        <!-- Voices will be populated by JS -->
+                                    </select>
+                                </div>
+                                <hr>
+                                <button id="audiobook-queue-btn" class="button-primary" disabled>Queue Audiobook</button>
+                                <div id="audiobook-status-area" class="status-area">
+                                    <!-- Status messages will appear here -->
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Right Pane (Preview & Metadata) -->
+                        <div id="audiobook-right-pane">
+                            <div id="audiobook-metadata-display">
+                                <img id="audiobook-cover-image" src="" alt="Book Cover" style="display: none;">
+                                <h3 id="audiobook-title"></h3>
+                                <p id="audiobook-author"></p>
+                            </div>
+                            <div id="audiobook-chapter-preview">
+                                <textarea id="audiobook-chapter-text" readonly></textarea>
+                            </div>
+                        </div>
+                    </div>
+                </section>
             </div>
         </div>
     </main>
@@ -465,6 +511,7 @@
     <script type="module" src="{{ url_for('static', filename='js/dom.js') }}"></script>
     <script type="module" src="{{ url_for('static', filename='js/editor.js') }}"></script>
     <script type="module" src="{{ url_for('static', filename='js/forum.js') }}"></script>
+    <script type="module" src="{{ url_for('static', filename='js/audio.js') }}"></script>
     <script type="module" src="{{ url_for('static', filename='js/queue.js') }}"></script>
     <script type="module" src="{{ url_for('static', filename='js/schedule.js') }}"></script>
     <script type="module" src="{{ url_for('static', filename='js/settings.js') }}"></script>
