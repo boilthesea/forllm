@@ -10,8 +10,8 @@ from .database import save_generated_persona
 
 # Generator Imports
 from .generators.ollama_connector import OllamaConnector
+from .generators.tts_connector import TTSConnector
 # from .generators.diffusers_connector import DiffusersConnector # Placeholder
-# from .generators.tts_connector import TTSConnector # Placeholder
 # from .generators.music_connector import MusicConnector # Placeholder
 # from .generators.video_connector import VideoConnector # Placeholder
 
@@ -95,6 +95,7 @@ def llm_worker(flask_app):
         'respond_to_post': OllamaConnector,
         'respond_to_post_tag': OllamaConnector,
         'optimize_prompt': OllamaConnector,
+        'generate_audiobook_chapter': TTSConnector,
         # 'generate_image': DiffusersConnector, # Placeholder
         # 'generate_tts': TTSConnector, # Placeholder
         # 'generate_music': MusicConnector, # Placeholder
@@ -144,23 +145,23 @@ def llm_worker(flask_app):
                 result = {'status': 'error', 'error_message': f"Unknown request_type: {request_type}"}
 
             if result:
-                if result.get('status') == 'complete':
-                    cursor.execute("UPDATE llm_requests SET status = 'complete', processed_at = CURRENT_TIMESTAMP, result_object_id = ? WHERE request_id = ?", (result.get('result_object_id'), request_id,))
-                    
-                    # Activate dependent requests
-                    cursor.execute(
-                        """
-                        UPDATE llm_requests
-                        SET status = 'pending', post_id_to_respond_to = ?
-                        WHERE parent_request_id = ? AND status = 'pending_dependency'
-                        """, (result.get('result_object_id'), request_id))
-                    if cursor.rowcount > 0:
-                        print(f"Request {request_id}: Activated {cursor.rowcount} dependent request(s).")
+                if result.get('status') == 'success':
+                    cursor.execute("UPDATE llm_requests SET status = 'complete', processed_at = CURRENT_TIMESTAMP, result_text = ? WHERE request_id = ?", (json.dumps(result), request_id))
+                    db_conn.commit()
+
+                    parent_request_id = request_data.get('parent_request_id')
+                    if parent_request_id:
+                        cursor.execute("SELECT COUNT(*) FROM llm_requests WHERE parent_request_id = ? AND status != 'complete'", (parent_request_id,))
+                        incomplete_children = cursor.fetchone()
+
+                        if incomplete_children == 0:
+                            cursor.execute("UPDATE llm_requests SET status = 'pending' WHERE request_id = ? AND request_type = 'generate_audiobook_parent'", (parent_request_id,))
+                            db_conn.commit()
+                            print(f"All children for parent {parent_request_id} are complete. Queuing parent for assembly.")
 
                 elif result.get('status') == 'error':
                     cursor.execute("UPDATE llm_requests SET status = 'error', error_message = ?, processed_at = CURRENT_TIMESTAMP WHERE request_id = ?", (result.get('error_message', 'Unknown error'), request_id))
-                
-                db_conn.commit()
+                    db_conn.commit()
 
         except sqlite3.Error as e:
             print(f"SQLite error in LLM worker: {e}")

@@ -498,6 +498,37 @@
                         </div>
                     </div>
                 </section>
+
+                <section id="audiobook-library-section" class="miniapp-section" style="display: none;">
+                    <div class="pane-header">
+                        <h2>Audiobook Library</h2>
+                    </div>
+                    <div id="audiobook-grid" class="media-grid">
+                        <!-- Audiobooks will be populated here by JS -->
+                    </div>
+                </section>
+
+                <section id="audiobook-player-section" class="miniapp-section" style="display: none;">
+                    <div class="pane-header">
+                        <h2 id="player-book-title"></h2>
+                        <div class="pane-header-controls">
+                            <button id="back-to-library-btn" class="button-icon" title="Back to Library">< Back to Library</button>
+                        </div>
+                    </div>
+                    <div id="audiobook-player-container">
+                        <div id="player-left-pane">
+                            <img id="player-cover-image" src="" alt="Book Cover">
+                        </div>
+                        <div id="player-right-pane">
+                            <h3 id="player-book-author"></h3>
+                            <audio id="audiobook-player" controls></audio>
+                            <div class="chapter-selector-container">
+                                <label for="player-chapter-select">Chapter:</label>
+                                <select id="player-chapter-select"></select>
+                            </div>
+                        </div>
+                    </div>
+                </section>
             </div>
         </div>
     </main>

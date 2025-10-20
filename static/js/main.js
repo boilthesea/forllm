@@ -26,7 +26,7 @@ import {
 } from './settings.js';
 
 import { loadQueueData } from './queue.js';
-import { initAudiobookGenerator } from './audio.js';
+import { initAudiobookGenerator, initAudiobookLibrary } from './audio.js';
 
 import { showSection, lastVisibleSectionId, toggleMobileMenu, isMobile } from './ui.js';
 
@@ -65,6 +65,7 @@ function initialLoad() {
     });
     initializeSettings(); // Loads settings, models, and renders the settings UI
     initAudiobookGenerator();
+    initAudiobookLibrary();
     loadCurrentStatus();
     loadNextSchedule();
     setInterval(loadCurrentStatus, 30000); // Update status every 30 seconds

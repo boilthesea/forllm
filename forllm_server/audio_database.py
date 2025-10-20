@@ -38,6 +38,61 @@ def init_audio_db():
     conn.commit()
     conn.close()
 
+def add_audiobook(title, author, cover_image_path, source_file_hash, status):
+    conn = get_audio_db_connection()
+    cursor = conn.cursor()
+    cursor.execute(
+        "INSERT INTO audiobooks (title, author, cover_image_path, source_file_hash, status) VALUES (?, ?, ?, ?, ?)",
+        (title, author, cover_image_path, source_file_hash, status)
+    )
+    book_id = cursor.lastrowid
+    conn.commit()
+    conn.close()
+    return book_id
+
+def add_chapter(book_id, chapter_index, title, extracted_text):
+    conn = get_audio_db_connection()
+    cursor = conn.cursor()
+    cursor.execute(
+        "INSERT INTO audiobook_chapters (book_id, chapter_index, title, extracted_text) VALUES (?, ?, ?, ?)",
+        (book_id, chapter_index, title, extracted_text)
+    )
+    chapter_id = cursor.lastrowid
+    conn.commit()
+    conn.close()
+    return chapter_id
+
+def get_chapters_for_book(book_id):
+    conn = get_audio_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM audiobook_chapters WHERE book_id = ?", (book_id,))
+    chapters = [dict(row) for row in cursor.fetchall()]
+    conn.close()
+    return chapters
+
+def update_audiobook_status(book_id, status):
+    conn = get_audio_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("UPDATE audiobooks SET status = ? WHERE book_id = ?", (status, book_id))
+    conn.commit()
+    conn.close()
+
+def get_completed_audiobooks():
+    conn = get_audio_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM audiobooks WHERE status = 'completed'")
+    audiobooks = [dict(row) for row in cursor.fetchall()]
+    conn.close()
+    return audiobooks
+
+def get_audiobook_by_id(book_id):
+    conn = get_audio_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM audiobooks WHERE book_id = ?", (book_id,))
+    audiobook = dict(cursor.fetchone()) if cursor.fetchone() else None
+    conn.close()
+    return audiobook
+
 if __name__ == '__main__':
     init_audio_db()
     print("Audiobook database initialized.")

@@ -381,6 +381,12 @@ Review blueprint.md and compare it to this phased development plan, read whateve
     *   **`templates/index.html`**: Add a description for the new reusable `#generation-modal` component.
     *   **`static/js/main.js`**: Update its description to include the new event listener for handling submissions from the generation modal.
 
+5.  **Phase 8.5: Document Phase 5 Changes (Audiobook Miniapp)**
+    *   **New Database (`forllm_audio.db`)**: Describe the purpose and schema of the new database for managing audiobook metadata.
+    *   **New Directory (`media/audiobooks/`)**: Document the new directory for storing generated audiobook files.
+    *   **`calibre_handler.py`**: Add an entry for this new module, explaining its role in ebook ingestion and conversion.
+    *   **UI/UX Flow**: Detail the two-pane UI for audiobook generation, the library view, and the player view.
+    *   **Backend Logic**: Update the `tts_connector.py` description to include its new responsibilities for chapter-by-chapter processing and final audiobook assembly. Describe the parent/child job dependency model used in the `llm_requests` queue.
 ---
 
 ## Further Considerations

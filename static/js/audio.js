@@ -102,4 +102,80 @@ function selectChapter(chapterIndex) {
     }
 }
 
-export { initAudiobookGenerator };
+function initAudiobookLibrary() {
+    document.addEventListener('DOMContentLoaded', () => {
+        const backToLibraryBtn = document.getElementById('back-to-library-btn');
+        if (backToLibraryBtn) {
+            backToLibraryBtn.addEventListener('click', showAudiobookLibrary);
+        }
+    });
+}
+
+async function showAudiobookLibrary() {
+    document.getElementById('audiobook-player-section').style.display = 'none';
+    document.getElementById('audiobook-library-section').style.display = 'block';
+    document.getElementById('audiobook-generation-section').style.display = 'none';
+
+    try {
+        const audiobooks = await api.get('/api/audio/audiobooks');
+        const grid = document.getElementById('audiobook-grid');
+        grid.innerHTML = '';
+        if (audiobooks.length === 0) {
+            grid.innerHTML = '<p>No completed audiobooks found.</p>';
+            return;
+        }
+        audiobooks.forEach(book => {
+            const bookElement = document.createElement('div');
+            bookElement.className = 'audiobook-item';
+            bookElement.dataset.bookId = book.id;
+            bookElement.innerHTML = `
+                <img src="${book.cover_image_path}" alt="Cover for ${book.title}">
+                <div class="audiobook-info">
+                    <h4>${book.title}</h4>
+                    <p>${book.author}</p>
+                </div>
+            `;
+            bookElement.addEventListener('click', () => showAudiobookPlayer(book.id));
+            grid.appendChild(bookElement);
+        });
+    } catch (error) {
+        console.error('Error fetching audiobooks:', error);
+        document.getElementById('audiobook-grid').innerHTML = '<p>Error loading audiobooks.</p>';
+    }
+}
+
+async function showAudiobookPlayer(bookId) {
+    document.getElementById('audiobook-library-section').style.display = 'none';
+    document.getElementById('audiobook-player-section').style.display = 'block';
+
+    try {
+        const book = await api.get(`/api/audio/audiobooks/${bookId}`);
+        document.getElementById('player-book-title').textContent = book.title;
+        document.getElementById('player-book-author').textContent = book.author;
+        document.getElementById('player-cover-image').src = book.cover_image_path;
+
+        const player = document.getElementById('audiobook-player');
+        player.src = book.output_file_path;
+
+        const chapterSelect = document.getElementById('player-chapter-select');
+        chapterSelect.innerHTML = '';
+        const chapters = JSON.parse(book.chapters_json);
+        chapters.forEach(chapter => {
+            const option = document.createElement('option');
+            option.value = chapter.start_time;
+            option.textContent = chapter.title;
+            chapterSelect.appendChild(option);
+        });
+
+        chapterSelect.addEventListener('change', () => {
+            player.currentTime = parseFloat(chapterSelect.value);
+            player.play();
+        });
+
+    } catch (error) {
+        console.error(`Error fetching audiobook ${bookId}:`, error);
+        // Handle error display
+    }
+}
+
+export { initAudiobookGenerator, initAudiobookLibrary, showAudiobookLibrary };
