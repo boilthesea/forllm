@@ -5,3 +5,6 @@ Pygments>=2.10.0 # For syntax highlighting
 beautifulsoup4>=4.10.0
 tiktoken
 waitress
+kokoro>=0.8.0
+soundfile>=0.13.1
+numpy
