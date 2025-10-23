@@ -1499,6 +1499,26 @@ def get_recent_media(limit=10):
        print(f"Database error in get_recent_media: {e}")
        return []
 
+def create_generated_media_entry(media_entry):
+    """
+    Creates an entry in the generated_media table.
+    `media_entry` is a dict with keys matching the table columns.
+    Returns the new media_id on success, None on failure.
+    """
+    db = get_db()
+    try:
+        with db:
+            cursor = db.execute("""
+                INSERT INTO generated_media (
+                    llm_request_id, source_app, media_type, file_path, prompt, project_id
+                ) VALUES (:llm_request_id, :source_app, :media_type, :file_path, :prompt, :project_id)
+            """, media_entry)
+            return cursor.lastrowid
+    except sqlite3.Error as e:
+        logger = current_app.logger if current_app and hasattr(current_app, 'logger') else logging.getLogger(__name__)
+        logger.error(f"Database error in create_generated_media_entry: {e}")
+        return None
+
 def get_subforum_details(subforum_id):
     try:
         db = get_db()
