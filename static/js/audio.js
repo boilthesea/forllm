@@ -23,10 +23,11 @@ function initAudiobookGenerator() {
 }
 
 async function handleFileUpload(event) {
-    const file = event.target.files;
-    if (!file) {
+    const files = event.target.files;
+    if (!files.length) {
         return;
     }
+const file = files[0]; // Get the first file from the FileList
 
     const formData = new FormData();
     formData.append('ebook_file', file);

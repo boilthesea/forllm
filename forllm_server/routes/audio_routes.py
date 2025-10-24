@@ -9,19 +9,23 @@ audio_bp = Blueprint('audio_bp', __name__)
 
 @audio_bp.route('/api/audio/upload_ebook', methods=['POST'])
 def upload_ebook():
-    data = request.get_json()
-    ebook_path = data.get('path')
+    if 'ebook_file' not in request.files:
+        return jsonify({"error": "No file part in the request"}), 400
 
-    if not ebook_path:
-        return jsonify({"error": "File path is required"}), 400
+    file = request.files['ebook_file']
 
-    try:
-        with open(ebook_path, 'rb') as f:
-            file_hash = hashlib.sha256(f.read()).hexdigest()
-    except FileNotFoundError:
-        return jsonify({"error": "Ebook file not found"}), 404
+    if file.filename == '':
+        return jsonify({"error": "No selected file"}), 400
 
-    ebook_data = get_ebook_metadata(ebook_path)
+    if file:
+        # Read content for hashing
+        file_content = file.read()
+        file_hash = hashlib.sha256(file_content).hexdigest()
+        
+        # Reset cursor for calibre_handler
+        file.seek(0)
+
+        ebook_data = get_ebook_metadata(file)
     if not ebook_data:
         return jsonify({"error": "Failed to process ebook"}), 500
 
