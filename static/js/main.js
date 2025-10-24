@@ -199,6 +199,19 @@ document.addEventListener('DOMContentLoaded', () => {
             });
         }
     });
+
+    // --- Delegated Event Listener for Secondary Navigation ---
+    const secondaryNavContainer = document.getElementById('secondary-nav-container');
+    if (secondaryNavContainer) {
+        secondaryNavContainer.addEventListener('click', (e) => {
+            if (e.target.id === 'audiobooks-nav-btn') {
+                e.preventDefault();
+                showSection('audiobook-generation-section');
+                // showAudiobookLibrary(); // Or show the generator view first
+            }
+            // Add else if for music, images, videos later
+        });
+    }
 });
 
 // --- Generation Modal Listener ---
