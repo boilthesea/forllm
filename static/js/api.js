@@ -93,3 +93,10 @@ export async function tagPostForPersonaResponse(postId, personaId) {
         return null; // Or re-throw: throw error;
     }
 }
+
+export const api = {
+    get: (url, silentError = false) => apiRequest(url, 'GET', null, false, silentError),
+    post: (url, data, isFormData = false, silentError = false) => apiRequest(url, 'POST', data, isFormData, silentError),
+    put: (url, data, silentError = false) => apiRequest(url, 'PUT', data, false, silentError),
+    delete: (url, silentError = false) => apiRequest(url, 'DELETE', null, false, silentError)
+};
