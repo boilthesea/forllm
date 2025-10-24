@@ -96,6 +96,7 @@ def llm_worker(flask_app):
         'respond_to_post_tag': OllamaConnector,
         'optimize_prompt': OllamaConnector,
         'generate_audiobook_chapter': TTSConnector,
+        'generate_audiobook_parent': TTSConnector,
         # 'generate_image': DiffusersConnector, # Placeholder
         # 'generate_tts': TTSConnector, # Placeholder
         # 'generate_music': MusicConnector, # Placeholder
