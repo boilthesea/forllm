@@ -160,7 +160,7 @@ async function showAudiobookPlayer(bookId) {
 
         const chapterSelect = document.getElementById('player-chapter-select');
         chapterSelect.innerHTML = '';
-        const chapters = JSON.parse(book.chapters_json);
+        const chapters = book.chapters;
         chapters.forEach(chapter => {
             const option = document.createElement('option');
             option.value = chapter.start_time;

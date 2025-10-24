@@ -94,6 +94,8 @@ def get_audiobook_by_id(book_id):
     cursor.execute("SELECT * FROM audiobooks WHERE book_id = ?", (book_id,))
     row = cursor.fetchone()
     audiobook = dict(row) if row else None
+    if audiobook:
+        audiobook['chapters'] = get_chapters_for_book(book_id)
     conn.close()
     return audiobook
 
