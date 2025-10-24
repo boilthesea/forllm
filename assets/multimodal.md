@@ -387,6 +387,11 @@ Review blueprint.md and compare it to this phased development plan, read whateve
     *   **`calibre_handler.py`**: Add an entry for this new module, explaining its role in ebook ingestion and conversion.
     *   **UI/UX Flow**: Detail the two-pane UI for audiobook generation, the library view, and the player view.
     *   **Backend Logic**: Update the `tts_connector.py` description to include its new responsibilities for chapter-by-chapter processing and final audiobook assembly. Describe the parent/child job dependency model used in the `llm_requests` queue.
+    *   **API Endpoints**: Add a description for the new `forllm_server/routes/audio_routes.py` file and its endpoints:
+        *   `POST /api/audio/upload_ebook`: Handles ebook file upload, calls the `calibre_handler` to process it, and populates the `audiobooks` and `audiobook_chapters` tables.
+        *   `POST /api/audio/queue_audiobook`: Creates the parent and child jobs in the `llm_requests` table to begin the audiobook generation process.
+        *   `GET /api/audio/audiobooks`: Fetches a list of all completed audiobooks for the library view.
+        *   `GET /api/audio/audiobooks/<int:book_id>`: Fetches the details for a single audiobook, including its chapter list, for the player view.
 ---
 
 ## Further Considerations
