@@ -1,7 +1,7 @@
 from flask import Blueprint, request, jsonify
 from forllm_server.calibre_handler import get_ebook_metadata
 from forllm_server.audio_database import add_audiobook, add_chapter, get_chapters_for_book, update_audiobook_status, get_completed_audiobooks, get_audiobook_by_id
-from forllm_server.llm_queue import add_llm_request
+from forllm_server.database import add_llm_request
 import hashlib
 import json
 

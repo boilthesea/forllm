@@ -92,10 +92,24 @@ def get_audiobook_by_id(book_id):
     conn = get_audio_db_connection()
     cursor = conn.cursor()
     cursor.execute("SELECT * FROM audiobooks WHERE book_id = ?", (book_id,))
-    audiobook = dict(cursor.fetchone()) if cursor.fetchone() else None
+    row = cursor.fetchone()
+    audiobook = dict(row) if row else None
     conn.close()
     return audiobook
 
+def get_chapter_by_id(chapter_id):
+    conn = get_audio_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM audiobook_chapters WHERE chapter_id = ?", (chapter_id,))
+    row = cursor.fetchone()
+    chapter = dict(row) if row else None
+    conn.close()
+    return chapter
+
+
+
 if __name__ == '__main__':
+
     init_audio_db()
+
     print("Audiobook database initialized.")

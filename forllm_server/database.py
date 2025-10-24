@@ -810,6 +810,28 @@ def soft_delete_post(post_id):
         current_app.logger.error(f"Database error in soft_delete_post for post {post_id}: {e}")
         return False
 
+def add_llm_request(request_type, params, status='pending', parent_request_id=None):
+    """Adds a new request to the llm_requests table."""
+    db = get_db()
+    try:
+        with db:
+            params_json = json.dumps(params)
+            cursor = db.execute(
+                """
+                INSERT INTO llm_requests (request_type, request_params, status, parent_request_id, requested_by_user_id)
+                VALUES (?, ?, ?, ?, ?)
+                """,
+                (request_type, params_json, status, parent_request_id, CURRENT_USER_ID)
+            )
+            new_request_id = cursor.lastrowid
+            # Fetch the newly created request to return it
+            cursor.execute("SELECT * FROM llm_requests WHERE request_id = ?", (new_request_id,))
+            new_request = cursor.fetchone()
+            return dict(new_request) if new_request else None
+    except sqlite3.Error as e:
+        current_app.logger.error(f"Database error in add_llm_request: {e}")
+        return None
+
 def update_post(post_id, content, title=None, tagged_persona_ids=None, tagged_file_paths=None):
     """
     Updates a post's content and its list of tagged personas and files.
