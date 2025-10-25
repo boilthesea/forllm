@@ -1,8 +1,11 @@
-import { api } from './api.js';
+import { apiRequest } from './api.js';
 
 let ebookData = null;
+let voiceOptions = null;
 
-function initAudiobookGenerator() {
+async function initAudiobookGenerator() {
+    await loadVoiceOptions(); // Load voices first
+
     const openEbookBtn = document.getElementById('audiobook-open-ebook-btn');
     const fileInput = document.getElementById('audiobook-file-input');
     const chapterList = document.getElementById('audiobook-chapter-list');
@@ -20,7 +23,101 @@ function initAudiobookGenerator() {
     if (chapterList) {
         chapterList.addEventListener('click', handleChapterSelection);
     }
+
+    const queueBtn = document.getElementById('audiobook-queue-btn');
+    if (queueBtn) {
+        queueBtn.addEventListener('click', queueAudiobook);
+    }
 }
+
+async function loadVoiceOptions() {
+    try {
+        const data = await apiRequest('/api/tts/voices');
+        voiceOptions = data;
+        populateLanguageSelector();
+    } catch (error) {
+        console.error('Failed to load TTS voice options:', error);
+        const langContainer = document.getElementById('audiobook-language-select');
+        if (langContainer) {
+            langContainer.innerHTML = '<p class="error-message">Could not load voices.</p>';
+        }
+    }
+}
+
+function populateLanguageSelector() {
+    const langContainer = document.getElementById('audiobook-language-select');
+    if (!langContainer || !voiceOptions || !voiceOptions.tts_models) return;
+
+    const kokoroModel = voiceOptions.tts_models.find(m => m.id === 'kokoro');
+    if (!kokoroModel) return;
+
+    const languages = [...new Set(kokoroModel.voices.map(v => v.language))];
+    
+    const langMap = {
+        'en': 'English', 'es': 'Spanish', 'fr': 'French', 'hi': 'Hindi',
+        'it': 'Italian', 'ja': 'Japanese', 'pt': 'Portuguese', 'zh': 'Chinese'
+    };
+
+    langContainer.innerHTML = '';
+    languages.forEach((langCode, index) => {
+        const radioWrapper = document.createElement('div');
+        radioWrapper.className = 'radio-option';
+
+        const radioInput = document.createElement('input');
+        radioInput.type = 'radio';
+        radioInput.id = `lang-${langCode}`;
+        radioInput.name = 'audiobook-language';
+        radioInput.value = langCode;
+        if (index === 0) { // Default select English
+            radioInput.checked = true;
+        }
+
+        const radioLabel = document.createElement('label');
+        radioLabel.htmlFor = `lang-${langCode}`;
+        radioLabel.textContent = langMap[langCode] || langCode;
+
+        radioWrapper.appendChild(radioInput);
+        radioWrapper.appendChild(radioLabel);
+        langContainer.appendChild(radioWrapper);
+    });
+
+    langContainer.addEventListener('change', (event) => {
+        if (event.target.name === 'audiobook-language') {
+            populateVoiceSelector(event.target.value);
+        }
+    });
+
+    // Initial population
+    // Initial population for the default language (first in the list)
+    if (languages.length > 0) {
+        populateVoiceSelector(languages[0]);
+    }
+}
+
+function populateVoiceSelector(languageCode) {
+    const voiceSelect = document.getElementById('audiobook-voice-select');
+    if (!voiceSelect || !voiceOptions) return;
+
+    const kokoroModel = voiceOptions.tts_models.find(m => m.id === 'kokoro');
+    const voices = kokoroModel.voices.filter(v => v.language === languageCode);
+
+    voiceSelect.innerHTML = '';
+    if (voices.length === 0) {
+        voiceSelect.innerHTML = '<option value="">No voices for this language</option>';
+        return;
+    }
+
+    voices.forEach(voice => {
+        const option = document.createElement('option');
+        option.value = voice.code;
+        // Example: "Heart - American Female"
+        const accent = voice.accent.charAt(0).toUpperCase() + voice.accent.slice(1);
+        const gender = voice.gender.charAt(0).toUpperCase() + voice.gender.slice(1);
+        option.textContent = `${voice.name} - ${accent} ${gender}`;
+        voiceSelect.appendChild(option);
+    });
+}
+
 
 async function handleFileUpload(event) {
     const files = event.target.files;
@@ -37,11 +134,7 @@ const file = files[0]; // Get the first file from the FileList
     document.getElementById('audiobook-queue-btn').disabled = true;
 
     try {
-        const response = await api.post('/api/audio/upload_ebook', formData, {
-            headers: {
-                'Content-Type': 'multipart/form-data'
-            }
-        });
+        const response = await apiRequest('/api/audio/upload_ebook', 'POST', formData, true); // Use apiRequest
         ebookData = response;
         populateAudiobookUI(ebookData);
         statusArea.textContent = 'Ebook processed successfully. Please review the chapters.';
@@ -103,6 +196,44 @@ function selectChapter(chapterIndex) {
     }
 }
 
+async function queueAudiobook() {
+    const statusArea = document.getElementById('audiobook-status-area');
+    if (!ebookData || !ebookData.book_id) {
+        statusArea.textContent = 'Error: No ebook data loaded.';
+        return;
+    }
+
+    const voiceSelect = document.getElementById('audiobook-voice-select');
+    const selectedVoice = voiceSelect.value;
+
+    if (!selectedVoice) {
+        statusArea.textContent = 'Error: Please select a voice.';
+        return;
+    }
+
+    // In a real app, you'd get the list of selected chapters.
+    // For now, we assume all chapters are selected.
+    const selectedChapterIds = ebookData.chapters.map(c => c.chapter_id);
+
+    const payload = {
+        book_id: ebookData.book_id,
+        chapter_ids: selectedChapterIds,
+        voice: selectedVoice
+    };
+
+    statusArea.textContent = 'Queueing audiobook generation...';
+    document.getElementById('audiobook-queue-btn').disabled = true;
+
+    try {
+        const response = await apiRequest('/api/audio/queue_audiobook', 'POST', payload);
+        statusArea.textContent = `Audiobook queued successfully (Job ID: ${response.parent_job_id}).`;
+    } catch (error) {
+        console.error('Error queueing audiobook:', error);
+        statusArea.textContent = `Error: ${error.message}`;
+        document.getElementById('audiobook-queue-btn').disabled = false;
+    }
+}
+
 function initAudiobookLibrary() {
     document.addEventListener('DOMContentLoaded', () => {
         const backToLibraryBtn = document.getElementById('back-to-library-btn');
@@ -118,7 +249,7 @@ async function showAudiobookLibrary() {
     document.getElementById('audiobook-generation-section').style.display = 'none';
 
     try {
-        const audiobooks = await api.get('/api/audio/audiobooks');
+        const audiobooks = await apiRequest('/api/audio/audiobooks');
         const grid = document.getElementById('audiobook-grid');
         grid.innerHTML = '';
         if (audiobooks.length === 0) {
@@ -150,7 +281,7 @@ async function showAudiobookPlayer(bookId) {
     document.getElementById('audiobook-player-section').style.display = 'block';
 
     try {
-        const book = await api.get(`/api/audio/audiobooks/${bookId}`);
+        const book = await apiRequest(`/api/audio/audiobooks/${bookId}`);
         document.getElementById('player-book-title').textContent = book.title;
         document.getElementById('player-book-author').textContent = book.author;
         document.getElementById('player-cover-image').src = book.cover_image_path;

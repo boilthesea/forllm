@@ -64,10 +64,10 @@ def upload_ebook():
 def queue_audiobook():
     data = request.get_json()
     book_id = data.get('book_id')
-    voice_id = data.get('voice_id')
+    voice = data.get('voice') # Changed from voice_id to voice
 
-    if not book_id or not voice_id:
-        return jsonify({"error": "book_id and voice_id are required"}), 400
+    if not book_id or not voice:
+        return jsonify({"error": "book_id and voice are required"}), 400
 
     chapters = get_chapters_for_book(book_id)
     if not chapters:
@@ -75,7 +75,7 @@ def queue_audiobook():
 
     parent_request_params = {
         "book_id": book_id,
-        "voice_id": voice_id,
+        "voice": voice,
         "chapter_count": len(chapters)
     }
     parent_request = add_llm_request(
@@ -88,7 +88,7 @@ def queue_audiobook():
         child_request_params = {
             "book_id": book_id,
             "chapter_id": chapter['id'],
-            "voice_id": voice_id
+            "voice": voice
         }
         add_llm_request(
             request_type='generate_audiobook_chapter',

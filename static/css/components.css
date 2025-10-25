@@ -405,3 +405,17 @@ input:checked + .slider:before {
     cursor: pointer;
     text-decoration: underline;
 }
+
+
+/* Audiobook Generator Language Selector */
+#audiobook-language-select {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 15px; /* Adds space between the radio buttons */
+}
+
+.radio-option {
+    display: flex;
+    align-items: center;
+    gap: 5px; /* Adds space between the radio button and its label */
+}

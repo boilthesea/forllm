@@ -61,6 +61,14 @@ async function fetchDefaultOptimizerPrompt() {
 }
 
 /**
+ * Fetches the available TTS models and voices from the server.
+ * @returns {Promise<object>} A promise that resolves to the voice options object.
+ */
+async function fetchVoiceOptions() {
+    return apiRequest('/api/tts/voices');
+}
+
+/**
  * The main entry point for initializing the settings system.
  * Fetches all required data concurrently and then renders the UI.
  */
@@ -82,10 +90,11 @@ export async function initializeSettings() {
 
     try {
         // Step 1: Fetch settings, models, and default optimizer prompt in parallel
-        const [settings, modelsResult, optimizerDefault] = await Promise.all([
+        const [settings, modelsResult, optimizerDefault, voiceOptions] = await Promise.all([
             fetchSettings(),
             fetchOllamaModels(),
-            fetchDefaultOptimizerPrompt()
+            fetchDefaultOptimizerPrompt(),
+            fetchVoiceOptions()
         ]);
 
         // Step 2: Process the fetched settings and update the global state
@@ -147,6 +156,9 @@ export async function initializeSettings() {
 
         // Step 6: Update all other UI elements with the final, correct settings
         updateSettingsUI();
+
+        // Step 6a: Populate the TTS model selection UI
+        populateTTSModelUI(voiceOptions);
 
         // Step 7: Fetch context window for the selected model if needed
         const contextDisplay = document.querySelector('#settings-page-content #selected-model-context-window-display') || document.querySelector('#settings-modal #selected-model-context-window-display');
@@ -408,8 +420,11 @@ function renderContainerHTML(container) {
 <div id="settings-tts-section" class="settings-tab-section" style="display:none">
    <h4>Text to Speech (TTS)</h4>
    <div class="setting-item">
-       <label for="settings-tts-model">TTS Model:</label>
-       <input type="text" id="settings-tts-model" name="settings_tts_model" class="text-input">
+       <label>TTS Model:</label>
+       <div id="tts-model-selection-container">
+           <!-- Radio buttons will be dynamically inserted here -->
+           <p>Loading TTS models...</p>
+       </div>
    </div>
 </div>
 <div id="settings-music-section" class="settings-tab-section" style="display:none">
@@ -810,7 +825,7 @@ export async function saveSettings(container) {
     const chPrimaryHistoryBudgetRatioInput = container.querySelector('#ch-primary-history-budget-ratio');
     const imagesModelInput = container.querySelector('#settings-images-model');
     const videoApiUrlInput = container.querySelector('#settings-video-api-url');
-    const ttsModelInput = container.querySelector('#settings-tts-model');
+    const ttsModelInput = container.querySelector('input[name="settings_tts_model"]:checked');
     const musicModelInput = container.querySelector('#settings-music-model');
     const optimizerOverrideInput = container.querySelector('#prompt-optimizer-override');
     const saveButton = container.querySelector('#save-settings-btn');
@@ -833,7 +848,7 @@ export async function saveSettings(container) {
         ch_primary_history_budget_ratio: chPrimaryHistoryBudgetRatioInput.value,
         settings_images_model: imagesModelInput.value,
         settings_video_api_url: videoApiUrlInput.value,
-        settings_tts_model: ttsModelInput.value,
+        settings_tts_model: ttsModelInput ? ttsModelInput.value : '',
         settings_music_model: musicModelInput.value,
         prompt_optimizer_override: optimizerOverrideInput.value
     };
@@ -906,5 +921,53 @@ export async function loadOllamaModels() {
     console.warn("loadOllamaModels() is deprecated and should not be called directly.");
     // This function is now a no-op because initializeSettings handles it.
 }
+
+/**
+ * Populates the TTS model selection area with radio buttons.
+ * @param {object} voiceOptions - The voice options object fetched from the API.
+ */
+function populateTTSModelUI(voiceOptions) {
+    const containers = [document.getElementById('settings-modal'), document.getElementById('settings-page-section')];
+    containers.forEach(container => {
+        if (!container) return;
+        const ttsContainer = container.querySelector('#tts-model-selection-container');
+        if (!ttsContainer) return;
+
+        ttsContainer.innerHTML = ''; // Clear loading message
+
+        if (voiceOptions && voiceOptions.tts_models && voiceOptions.tts_models.length > 0) {
+            voiceOptions.tts_models.forEach((model, index) => {
+                const radioId = `tts-model-${model.id}-${container.id}`;
+                const radioWrapper = document.createElement('div');
+                radioWrapper.classList.add('radio-option');
+
+                const radioInput = document.createElement('input');
+                radioInput.type = 'radio';
+                radioInput.id = radioId;
+                radioInput.name = 'settings_tts_model';
+                radioInput.value = model.id;
+
+                // Check against currentSettings or default to the first one
+                if (currentSettings.settings_tts_model === model.id) {
+                    radioInput.checked = true;
+                } else if (!currentSettings.settings_tts_model && index === 0) {
+                    radioInput.checked = true;
+                }
+
+
+                const radioLabel = document.createElement('label');
+                radioLabel.htmlFor = radioId;
+                radioLabel.textContent = model.name;
+
+                radioWrapper.appendChild(radioInput);
+                radioWrapper.appendChild(radioLabel);
+                ttsContainer.appendChild(radioWrapper);
+            });
+        } else {
+            ttsContainer.innerHTML = '<p>No TTS models available.</p>';
+        }
+    });
+}
+
 
 // All custom instructions logic has been moved to static/js/custom-instructions.js
