@@ -181,7 +181,8 @@ Once a book is processed, the user is presented with a dedicated two-pane interf
     *   **Open Ebook Button:** To start a new conversion.
     *   **Chapter List:** A selectable list of all extracted chapters. Users can deselect non-content chapters (e.g., "Title Page," "Copyright").
     *   **Settings:**
-        *   **Voice Selector:** A dropdown to choose the TTS voice (with a default set in the main app settings).
+        *   **Language Selector:** A set of radio buttons to filter voices by language.
+        *   **Voice Selector:** A dropdown, populated based on the selected language, to choose the specific TTS voice.
         *   Other parameters (speed, etc.) as needed.
     *   **Action Buttons:**
         *   **Queue Audiobook:** The primary action.
@@ -382,14 +383,16 @@ Review blueprint.md and compare it to this phased development plan, read whateve
     *   **`static/js/main.js`**: Update its description to include the new event listener for handling submissions from the generation modal.
 
 5.  **Phase 8.5: Document Phase 5 Changes (Audiobook Miniapp)**
+    *   **New File (`forllm_server/voice_options.json`)**: Document the new JSON file that stores a structured list of available TTS models and their voices, including metadata like language, accent, and gender.
     *   **New Database (`forllm_audio.db`)**: Describe the purpose and schema of the new database for managing audiobook metadata.
     *   **New Directory (`media/audiobooks/`)**: Document the new directory for storing generated audiobook files.
     *   **`calibre_handler.py`**: Add an entry for this new module, explaining its role in ebook ingestion and conversion.
-    *   **UI/UX Flow**: Detail the two-pane UI for audiobook generation, the library view, and the player view.
+    *   **UI/UX Flow**: Detail the two-pane UI for audiobook generation, including the new language and voice selection controls. Also describe the library view and the player view.
     *   **Backend Logic**: Update the `tts_connector.py` description to include its new responsibilities for chapter-by-chapter processing and final audiobook assembly. Describe the parent/child job dependency model used in the `llm_requests` queue.
     *   **API Endpoints**: Add a description for the new `forllm_server/routes/audio_routes.py` file and its endpoints:
         *   `POST /api/audio/upload_ebook`: Handles ebook file upload, calls the `calibre_handler` to process it, and populates the `audiobooks` and `audiobook_chapters` tables.
-        *   `POST /api/audio/queue_audiobook`: Creates the parent and child jobs in the `llm_requests` table to begin the audiobook generation process.
+        *   `POST /api/audio/queue_audiobook`: Creates the parent and child jobs in the `llm_requests` table to begin the audiobook generation process. This endpoint now accepts a `voice` parameter.
+        *   `GET /api/tts/voices`: A new endpoint in a new `tts_routes.py` file that serves the `voice_options.json` file to the frontend.
         *   `GET /api/audio/audiobooks`: Fetches a list of all completed audiobooks for the library view.
         *   `GET /api/audio/audiobooks/<int:book_id>`: Fetches the details for a single audiobook, including its chapter list, for the player view.
 ---

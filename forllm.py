@@ -24,6 +24,7 @@ from forllm_server.routes.file_routes import file_routes
 from forllm_server.routes.custom_instruction_routes import custom_instruction_routes
 from forllm_server.routes.generation_routes import generation_bp
 from forllm_server.routes.audio_routes import audio_bp
+from forllm_server.routes.tts_routes import tts_bp
 
 # --- Flask App Initialization ---
 app = Flask(__name__, template_folder='templates', static_folder='static')
@@ -43,6 +44,7 @@ app.register_blueprint(file_routes)
 app.register_blueprint(custom_instruction_routes)
 app.register_blueprint(generation_bp)
 app.register_blueprint(audio_bp)
+app.register_blueprint(tts_bp)
 
 
 # Register database close function
