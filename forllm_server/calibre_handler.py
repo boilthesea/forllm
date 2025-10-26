@@ -4,7 +4,26 @@ import zipfile
 import uuid
 from bs4 import BeautifulSoup
 import shutil
- 
+from forllm_server.audio_database import get_audio_setting
+
+def get_ebook_convert_command():
+    """
+    Determines the correct command for ebook-convert.
+    Priority:
+    1. Manual path from audio_settings.
+    2. System PATH.
+    """
+    manual_path = get_audio_setting('calibre_path')
+    executable_name = "ebook-convert.exe" if os.name == 'nt' else "ebook-convert"
+
+    if manual_path and os.path.isdir(manual_path):
+        full_path = os.path.join(manual_path, executable_name)
+        if os.path.exists(full_path):
+            return full_path
+    
+    # Fallback to PATH
+    return executable_name
+
 def get_ebook_metadata(ebook_file_obj):
     temp_dir = "temp_conversion"
     os.makedirs(temp_dir, exist_ok=True)
@@ -16,8 +35,9 @@ def get_ebook_metadata(ebook_file_obj):
     htmlz_path = os.path.join(temp_dir, f"{uuid.uuid4()}.htmlz")
 
     try:
+        ebook_convert_cmd = get_ebook_convert_command()
         subprocess.run(
-            ["ebook-convert", temp_ebook_path, htmlz_path],
+            [ebook_convert_cmd, temp_ebook_path, htmlz_path],
             check=True,
             capture_output=True,
             text=True

@@ -169,11 +169,28 @@
    </div>
 </div>
 <div id="settings-tts-section" class="settings-tab-section" style="display:none">
-   <h4>Text to Speech (TTS)</h4>
-   <div class="setting-item">
-       <label for="settings-tts-model">TTS Model:</label>
-       <input type="text" id="settings-tts-model" name="settings_tts_model" class="text-input">
-   </div>
+    <h4>Text to Speech (TTS)</h4>
+    <div class="setting-item">
+        <label for="settings-tts-model">TTS Model:</label>
+        <input type="text" id="settings-tts-model" name="settings_tts_model" class="text-input">
+    </div>
+    <hr class="modal-hr">
+    <h4>Calibre Configuration</h4>
+    <div class="setting-item">
+        <label>Calibre `ebook-convert` Status:</label>
+        <div id="calibre-status-indicator">
+             <span id="calibre-path-status">PATH: <span class="status-dot status-loading"></span></span>
+             <span id="calibre-manual-path-status" style="margin-left: 15px;">Manual: <span class="status-dot status-loading"></span></span>
+        </div>
+    </div>
+    <div class="setting-item">
+        <label for="calibre-manual-path-input">Manual Calibre Path:</label>
+        <div class="file-input-container">
+            <input type="text" id="calibre-manual-path-input" class="text-input" readonly placeholder="Select a directory...">
+            <button id="browse-calibre-path-btn" class="button-secondary">Browse</button>
+        </div>
+        <p class="description">If Calibre is not in your system's PATH, specify the installation directory. The app will search for 'ebook-convert'.</p>
+    </div>
 </div>
 <div id="settings-music-section" class="settings-tab-section" style="display:none">
    <h4>Music Generation</h4>

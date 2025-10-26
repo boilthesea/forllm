@@ -1,11 +1,19 @@
 from flask import Blueprint, request, jsonify
 from forllm_server.calibre_handler import get_ebook_metadata
-from forllm_server.audio_database import add_audiobook, add_chapter, get_chapters_for_book, update_audiobook_status, get_completed_audiobooks, get_audiobook_by_id
+from forllm_server.audio_database import add_audiobook, add_chapter, get_chapters_for_book, update_audiobook_status, get_completed_audiobooks, get_audiobook_by_id, set_audio_setting, get_audio_setting
 from forllm_server.database import add_llm_request
 import hashlib
 import json
-
+import os
+import shutil
+ 
 audio_bp = Blueprint('audio_bp', __name__)
+
+def find_executable(name, path):
+    for root, dirs, files in os.walk(path):
+        if name in files:
+            return os.path.join(root, name)
+    return None
 
 @audio_bp.route('/api/audio/upload_ebook', methods=['POST'])
 def upload_ebook():
@@ -115,3 +123,42 @@ def get_single_audiobook(book_id):
     if audiobook:
         return jsonify(audiobook)
     return jsonify({"error": "Audiobook not found"}), 404
+
+@audio_bp.route('/api/audio/settings/calibre_path', methods=['GET', 'POST'])
+def calibre_path():
+    if request.method == 'POST':
+        data = request.get_json()
+        path = data.get('path')
+        if not path or not os.path.isdir(path):
+            return jsonify({"error": "Invalid path provided"}), 400
+
+        executable_path = find_executable("ebook-convert.exe" if os.name == 'nt' else "ebook-convert", path)
+
+        if executable_path:
+            verified_path = os.path.dirname(executable_path)
+            set_audio_setting('calibre_path', verified_path)
+            return jsonify({"message": "Calibre path verified and saved.", "path": verified_path})
+        else:
+            return jsonify({"error": "'ebook-convert' not found in the specified path."}), 404
+    else: # GET
+        path = get_audio_setting('calibre_path')
+        return jsonify({"path": path})
+
+@audio_bp.route('/api/audio/status/calibre', methods=['GET'])
+def calibre_status():
+    # Check system PATH
+    path_status = "found" if shutil.which("ebook-convert") else "not_found"
+
+    # Check manual path
+    manual_path = get_audio_setting('calibre_path')
+    manual_path_status = "not_found"
+    if manual_path:
+        executable_name = "ebook-convert.exe" if os.name == 'nt' else "ebook-convert"
+        if os.path.exists(os.path.join(manual_path, executable_name)):
+            manual_path_status = "found"
+
+    return jsonify({
+        "path_status": path_status,
+        "manual_path": manual_path,
+        "manual_path_status": manual_path_status
+    })

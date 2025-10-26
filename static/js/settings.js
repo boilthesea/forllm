@@ -448,6 +448,8 @@ function renderContainerHTML(container) {
     attachContainerEventHandlers(container);
     // Initialize the delegated event listeners for custom instructions ONCE
     initializeCustomInstructions();
+    // Initialize Calibre-specific settings
+    initializeCalibreSettings(container);
 }
 
 function attachContainerEventHandlers(container) {
@@ -548,6 +550,8 @@ function attachContainerEventHandlers(container) {
     updateSettingsUI();
    // Load file indexing settings when the LLM tab is shown
    loadFileIndexingSettings(container);
+   // Calibre settings
+   container.querySelector('#browse-calibre-path-btn')?.addEventListener('click', () => browseForCalibrePath(container));
 }
 
 // --- File Indexing Logic ---
@@ -971,3 +975,92 @@ function populateTTSModelUI(voiceOptions) {
 
 
 // All custom instructions logic has been moved to static/js/custom-instructions.js
+
+// --- Calibre Settings Logic ---
+
+function initializeCalibreSettings(container) {
+    if (!container) return;
+    checkCalibreStatus(container);
+    loadManualCalibrePath(container);
+}
+
+async function checkCalibreStatus(container) {
+    const pathStatusDot = container.querySelector('#calibre-path-status .status-dot');
+    const manualPathStatusDot = container.querySelector('#calibre-manual-path-status .status-dot');
+
+    if (!pathStatusDot || !manualPathStatusDot) return;
+
+    try {
+        const status = await apiRequest('/api/audio/status/calibre');
+        updateStatusDot(pathStatusDot, status.path_status);
+        updateStatusDot(manualPathStatusDot, status.manual_path_status);
+    } catch (error) {
+        console.error("Error checking Calibre status:", error);
+        updateStatusDot(pathStatusDot, 'error');
+        updateStatusDot(manualPathStatusDot, 'error');
+    }
+}
+
+async function loadManualCalibrePath(container) {
+    const pathInput = container.querySelector('#calibre-manual-path-input');
+    if (!pathInput) return;
+    try {
+        const data = await apiRequest('/api/audio/settings/calibre_path');
+        if (data.path) {
+            pathInput.value = data.path;
+        }
+    } catch (error) {
+        console.error("Error loading manual Calibre path:", error);
+    }
+}
+
+async function browseForCalibrePath(container) {
+    const input = container.querySelector('#calibre-manual-path-input');
+    const browseBtn = container.querySelector('#browse-calibre-path-btn');
+    browseBtn.textContent = '...';
+    browseBtn.disabled = true;
+    try {
+        const response = await apiRequest('/api/utils/browse-folder');
+        if (response && response.path) {
+            // Now, send this path to the backend for verification and saving
+            await saveCalibrePath(response.path, container);
+        }
+    } catch (error) {
+        console.error("Error browsing for Calibre folder:", error);
+        alert(`Failed to browse for folder: ${error.message}`);
+    } finally {
+        browseBtn.textContent = 'Browse';
+        browseBtn.disabled = false;
+    }
+}
+
+async function saveCalibrePath(path, container) {
+    try {
+        const response = await apiRequest('/api/audio/settings/calibre_path', 'POST', { path });
+        const pathInput = container.querySelector('#calibre-manual-path-input');
+        if (pathInput) {
+            pathInput.value = response.path;
+        }
+        // Re-check status after saving
+        await checkCalibreStatus(container);
+    } catch (error) {
+        console.error("Error saving Calibre path:", error);
+        alert(`Error: ${error.message}`);
+        // Re-check status to show the current (failed) state
+        await checkCalibreStatus(container);
+    }
+}
+
+function updateStatusDot(dotElement, status) {
+    dotElement.classList.remove('status-loading', 'status-ok', 'status-error');
+    if (status === 'found') {
+        dotElement.classList.add('status-ok');
+        dotElement.title = 'Found';
+    } else if (status === 'not_found') {
+        dotElement.classList.add('status-error');
+        dotElement.title = 'Not Found';
+    } else {
+        dotElement.classList.add('status-error');
+        dotElement.title = 'Error';
+    }
+}

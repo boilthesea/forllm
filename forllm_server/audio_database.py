@@ -35,9 +35,31 @@ def init_audio_db():
     );
     ''')
 
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS audio_settings (
+        key TEXT PRIMARY KEY,
+        value TEXT NOT NULL
+    );
+    ''')
+ 
     conn.commit()
     conn.close()
 
+def set_audio_setting(key, value):
+    conn = get_audio_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("REPLACE INTO audio_settings (key, value) VALUES (?, ?)", (key, value))
+    conn.commit()
+    conn.close()
+
+def get_audio_setting(key):
+    conn = get_audio_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT value FROM audio_settings WHERE key = ?", (key,))
+    row = cursor.fetchone()
+    conn.close()
+    return row['value'] if row else None
+ 
 def add_audiobook(title, author, cover_image_path, source_file_hash, status):
     conn = get_audio_db_connection()
     cursor = conn.cursor()

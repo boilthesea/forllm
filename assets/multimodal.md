@@ -395,6 +395,8 @@ Review blueprint.md and compare it to this phased development plan, read whateve
         *   `GET /api/tts/voices`: A new endpoint in a new `tts_routes.py` file that serves the `voice_options.json` file to the frontend.
         *   `GET /api/audio/audiobooks`: Fetches a list of all completed audiobooks for the library view.
         *   `GET /api/audio/audiobooks/<int:book_id>`: Fetches the details for a single audiobook, including its chapter list, for the player view.
+        *   `GET, POST /api/audio/settings/calibre_path`: Gets or sets the manual path to the Calibre installation directory. The POST request verifies the path by searching for `ebook-convert`.
+        *   `GET /api/audio/status/calibre`: Checks for the presence of `ebook-convert` in both the system PATH and the manually configured path.
 ---
 
 ## Further Considerations
