@@ -390,6 +390,15 @@ function renderContainerHTML(container) {
     <h3>Global Default Persona</h3>
     <select id="global-default-persona-select"></select>
     <button id="save-global-default-persona-btn">Save Global Default</button>
+    <div class="settings-subsection">
+       <h4>Prompt Optimizer</h4>
+       <div class="setting-item">
+           <label for="prompt-optimizer-override">Optimizer Prompt Override:</label>
+           <textarea id="prompt-optimizer-override" name="prompt_optimizer_override" class="textarea-input" rows="4"></textarea>
+           <span class="tooltip-icon" title="Override the default system prompt for the @optimize command.">?</span>
+       </div>
+       <button id="restore-default-optimizer-btn">Restore Default</button>
+    </div>
 </div>
 <div id="settings-custom-instructions-section" class="settings-tab-section" style="display:none">
     <h2>Custom Instructions</h2>
@@ -426,6 +435,23 @@ function renderContainerHTML(container) {
            <p>Loading TTS models...</p>
        </div>
    </div>
+    <hr class="modal-hr">
+    <h4>Calibre Configuration</h4>
+    <div class="setting-item">
+        <label>Calibre \`ebook-convert\` Status:</label>
+        <div id="calibre-status-indicator">
+             <span id="calibre-path-status">PATH: <span class="status-dot status-loading"></span></span>
+             <span id="calibre-manual-path-status" style="margin-left: 15px;">Manual: <span class="status-dot status-loading"></span></span>
+        </div>
+    </div>
+    <div class="setting-item">
+        <label for="calibre-manual-path-input">Manual Calibre Path:</label>
+        <div class="file-input-container">
+            <input type="text" id="calibre-manual-path-input" class="text-input" readonly placeholder="Select a directory...">
+            <button id="browse-calibre-path-btn" class="button-secondary">Browse</button>
+        </div>
+        <p class="description">If Calibre is not in your system's PATH, specify the installation directory. The app will search for \`ebook-convert\`.</p>
+    </div>
 </div>
 <div id="settings-music-section" class="settings-tab-section" style="display:none">
    <h4>Music Generation</h4>
@@ -433,15 +459,6 @@ function renderContainerHTML(container) {
        <label for="settings-music-model">Music Model:</label>
        <input type="text" id="settings-music-model" name="settings_music_model" class="text-input">
    </div>
-</div>
-<div class="settings-subsection">
-   <h4>Prompt Optimizer</h4>
-   <div class="setting-item">
-       <label for="prompt-optimizer-override">Optimizer Prompt Override:</label>
-       <textarea id="prompt-optimizer-override" name="prompt_optimizer_override" class="textarea-input" rows="4"></textarea>
-       <span class="tooltip-icon" title="Override the default system prompt for the @optimize command.">?</span>
-   </div>
-   <button id="restore-default-optimizer-btn">Restore Default</button>
 </div>
 `;
     // Attach all event handlers and initialize components for this container
