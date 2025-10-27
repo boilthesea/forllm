@@ -101,7 +101,7 @@ def queue_audiobook():
         add_llm_request(
             request_type='generate_audiobook_chapter',
             params=child_request_params,
-            parent_request_id=parent_request['id'],
+            parent_request_id=parent_request['request_id'],
             status='pending_dependency'
         )
 
@@ -109,7 +109,7 @@ def queue_audiobook():
 
     return jsonify({
         "message": "Audiobook generation queued successfully",
-        "parent_request_id": parent_request['id']
+        "parent_request_id": parent_request['request_id']
     })
 
 @audio_bp.route('/api/audio/audiobooks', methods=['GET'])
