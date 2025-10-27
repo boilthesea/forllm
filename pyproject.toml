@@ -6,6 +6,7 @@ dependencies = [
     "beautifulsoup4>=4.10.0",
     "flask>=2.0",
     "kokoro>=0.8.0",
+    "lxml>=5.2.2",
     "markdown-it-py>=3.0.0",
     "numpy>=2.3.4",
     "pygments>=2.10.0",

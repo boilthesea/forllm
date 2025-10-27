@@ -4,6 +4,7 @@ import zipfile
 import uuid
 from bs4 import BeautifulSoup
 import shutil
+import logging
 from forllm_server.audio_database import get_audio_setting
 
 def get_ebook_convert_command():
@@ -36,69 +37,95 @@ def get_ebook_metadata(ebook_file_obj):
 
     try:
         ebook_convert_cmd = get_ebook_convert_command()
-        subprocess.run(
+        logging.info(f"Attempting ebook conversion with command: {' '.join([ebook_convert_cmd, temp_ebook_path, htmlz_path])}")
+        
+        result = subprocess.run(
             [ebook_convert_cmd, temp_ebook_path, htmlz_path],
             check=True,
             capture_output=True,
-            text=True
+            text=True,
+            encoding='utf-8',
+            errors='ignore'
         )
+        logging.info(f"Ebook conversion stdout: {result.stdout}")
+        if result.stderr:
+            logging.warning(f"Ebook conversion stderr: {result.stderr}")
+
     except subprocess.CalledProcessError as e:
-         print(f"Error during ebook conversion: {e.stderr}")
-         return None
+        logging.error(f"Error during ebook conversion. Command: '{e.cmd}'. Return code: {e.returncode}.")
+        logging.error(f"Stdout: {e.stdout}")
+        logging.error(f"Stderr: {e.stderr}")
+        return None
     except FileNotFoundError:
-         print("Error: 'ebook-convert' command not found. Is Calibre installed and in your PATH?")
-         return None
+        logging.error("Error: 'ebook-convert' command not found. Is Calibre installed and in your PATH or configured in settings?")
+        return None
+    except Exception as e:
+        logging.error(f"An unexpected error occurred during ebook conversion: {e}")
+        return None
+
+    try:
+        unzip_dir = os.path.join(temp_dir, "unzipped")
+        with zipfile.ZipFile(htmlz_path, 'r') as zip_ref:
+            zip_ref.extractall(unzip_dir)
+
+        metadata_path = os.path.join(unzip_dir, "metadata.opf")
+        html_path = os.path.join(unzip_dir, "index.html")
+
+        if not os.path.exists(metadata_path) or not os.path.exists(html_path):
+            logging.error("Conversion failed: metadata.opf or index.html not found in HTMLZ output.")
+            return None
+
+        with open(metadata_path, 'r', encoding='utf-8') as f:
+            metadata_content = f.read()
+        
+        with open(html_path, 'r', encoding='utf-8') as f:
+            html_content = f.read()
+
+        metadata_soup = BeautifulSoup(metadata_content, 'lxml-xml')
+        html_soup = BeautifulSoup(html_content, 'html.parser')
+
+        title = metadata_soup.find('dc:title').text if metadata_soup.find('dc:title') else "Unknown Title"
+        author = metadata_soup.find('dc:creator').text if metadata_soup.find('dc:creator') else "Unknown Author"
+        
+        cover_item = metadata_soup.find('item', {'id': 'cover'})
+        cover_path = None
+        if cover_item:
+            cover_href = cover_item.get('href')
+            if cover_href:
+                # Correctly join the path for the cover image
+                cover_source_path = os.path.join(unzip_dir, cover_href)
+                if os.path.exists(cover_source_path):
+                    # You might want to copy this to a permanent location and store that path
+                    # For now, we'll just confirm it exists and store the temp path
+                    cover_path = cover_source_path
+                else:
+                    logging.warning(f"Cover image specified in metadata but not found at: {cover_source_path}")
+
+
+        chapters = []
+        for header in html_soup.find_all(['h1', 'h2']):
+            chapter_title = header.get_text().strip()
+            chapter_content = []
+            for sibling in header.find_next_siblings():
+                if sibling.name in ['h1', 'h2']:
+                    break
+                chapter_content.append(sibling.get_text().strip())
+            
+            if chapter_title and chapter_content:
+                chapters.append({
+                    "title": chapter_title,
+                    "text": "\n".join(chapter_content)
+                })
+
+        # This is a temporary solution. The cover path points to a temp file.
+        # A real solution would copy the cover to a permanent media directory.
+        return {
+            "title": title,
+            "author": author,
+            "cover_path": cover_path,
+            "chapters": chapters
+        }
     finally:
-         if os.path.exists(temp_dir):
-             shutil.rmtree(temp_dir)
- 
-    unzip_dir = os.path.join(temp_dir, "unzipped")
-    with zipfile.ZipFile(htmlz_path, 'r') as zip_ref:
-         zip_ref.extractall(unzip_dir)
- 
-    metadata_path = os.path.join(unzip_dir, "metadata.opf")
-    html_path = os.path.join(unzip_dir, "index.html")
- 
-    if not os.path.exists(metadata_path) or not os.path.exists(html_path):
-         return None
- 
-    with open(metadata_path, 'r', encoding='utf-8') as f:
-         metadata_content = f.read()
-     
-    with open(html_path, 'r', encoding='utf-8') as f:
-         html_content = f.read()
- 
-    metadata_soup = BeautifulSoup(metadata_content, 'xml')
-    html_soup = BeautifulSoup(html_content, 'html.parser')
- 
-    title = metadata_soup.find('dc:title').text if metadata_soup.find('dc:title') else "Unknown Title"
-    author = metadata_soup.find('dc:creator').text if metadata_soup.find('dc:creator') else "Unknown Author"
-     
-    cover_item = metadata_soup.find('item', {'id': 'cover'})
-    cover_path = None
-    if cover_item:
-         cover_href = cover_item.get('href')
-         if cover_href:
-             cover_path = os.path.join(unzip_dir, cover_href)
- 
-    chapters = []
-    for header in html_soup.find_all(['h1', 'h2']):
-         chapter_title = header.get_text().strip()
-         chapter_content = []
-         for sibling in header.find_next_siblings():
-             if sibling.name in ['h1', 'h2']:
-                 break
-             chapter_content.append(sibling.get_text().strip())
-         
-         if chapter_title and chapter_content:
-             chapters.append({
-                 "title": chapter_title,
-                 "text": "\n".join(chapter_content)
-             })
- 
-    return {
-         "title": title,
-         "author": author,
-         "cover_path": cover_path,
-         "chapters": chapters
-     }
+        # Cleanup happens after all operations are complete
+        if os.path.exists(temp_dir):
+            shutil.rmtree(temp_dir)

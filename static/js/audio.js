@@ -149,9 +149,13 @@ function populateAudiobookUI(data) {
     document.getElementById('audiobook-author').textContent = data.author || 'Unknown Author';
 
     const coverImage = document.getElementById('audiobook-cover-image');
-    if (data.cover_image_path) {
-        coverImage.src = data.cover_image_path;
-        coverImage.style.display = 'block';
+    if (data.cover_path) {
+        // The path from calibre is temporary. We need a way to serve it.
+        // For now, let's assume an endpoint `/api/audio/temp_cover?path=...`
+        // This needs to be implemented on the backend.
+        // As a placeholder, we won't set the src until that's done.
+        // coverImage.src = `/api/audio/temp_cover?path=${encodeURIComponent(data.cover_path)}`;
+        coverImage.style.display = 'none'; // Hide until backend endpoint exists
     } else {
         coverImage.style.display = 'none';
     }
@@ -162,20 +166,35 @@ function populateAudiobookUI(data) {
         const chapterItem = document.createElement('div');
         chapterItem.className = 'chapter-item';
         chapterItem.dataset.chapterIndex = index;
-        chapterItem.textContent = chapter.title;
+
+        const checkbox = document.createElement('input');
+        checkbox.type = 'checkbox';
+        checkbox.checked = true;
+        checkbox.id = `chapter-checkbox-${chapter.chapter_id}`;
+        checkbox.dataset.chapterId = chapter.chapter_id;
+        
+        const label = document.createElement('label');
+        label.htmlFor = `chapter-checkbox-${chapter.chapter_id}`;
+        label.textContent = chapter.title;
+        label.className = 'chapter-title-label';
+
+        chapterItem.appendChild(checkbox);
+        chapterItem.appendChild(label);
         chapterList.appendChild(chapterItem);
     });
 
     if (data.chapters.length > 0) {
-        selectChapter(0);
+        selectChapter(0); // Select first chapter by default
     }
 
     document.getElementById('audiobook-queue-btn').disabled = false;
 }
 
 function handleChapterSelection(event) {
-    if (event.target.classList.contains('chapter-item')) {
-        const chapterIndex = parseInt(event.target.dataset.chapterIndex, 10);
+    // Clicking anywhere on the item should select it for viewing
+    const chapterItem = event.target.closest('.chapter-item');
+    if (chapterItem) {
+        const chapterIndex = parseInt(chapterItem.dataset.chapterIndex, 10);
         selectChapter(chapterIndex);
     }
 }
@@ -183,16 +202,16 @@ function handleChapterSelection(event) {
 function selectChapter(chapterIndex) {
     const chapterItems = document.querySelectorAll('#audiobook-chapter-list .chapter-item');
     chapterItems.forEach(item => {
-        if (parseInt(item.dataset.chapterIndex, 10) === chapterIndex) {
-            item.classList.add('selected');
-        } else {
-            item.classList.remove('selected');
-        }
+        item.classList.remove('selected');
     });
+
+    if (chapterItems[chapterIndex]) {
+        chapterItems[chapterIndex].classList.add('selected');
+    }
 
     const chapter = ebookData.chapters[chapterIndex];
     if (chapter) {
-        document.getElementById('audiobook-chapter-text').value = chapter.extracted_text;
+        document.getElementById('audiobook-chapter-text').value = chapter.text;
     }
 }
 
@@ -211,13 +230,22 @@ async function queueAudiobook() {
         return;
     }
 
-    // In a real app, you'd get the list of selected chapters.
-    // For now, we assume all chapters are selected.
-    const selectedChapterIds = ebookData.chapters.map(c => c.chapter_id);
+    const selectedCheckboxes = document.querySelectorAll('#audiobook-chapter-list input[type="checkbox"]:checked');
+    
+    if (selectedCheckboxes.length === 0) {
+        statusArea.textContent = 'Error: Please select at least one chapter.';
+        return;
+    }
+
+    const selectedChapters = Array.from(selectedCheckboxes).map(checkbox => {
+        const chapterId = parseInt(checkbox.dataset.chapterId, 10);
+        // Find the full chapter data from our stored ebookData
+        return ebookData.chapters.find(c => c.chapter_id === chapterId);
+    });
 
     const payload = {
         book_id: ebookData.book_id,
-        chapter_ids: selectedChapterIds,
+        chapters: selectedChapters, // Send the full chapter objects
         voice: selectedVoice
     };
 
@@ -226,7 +254,7 @@ async function queueAudiobook() {
 
     try {
         const response = await apiRequest('/api/audio/queue_audiobook', 'POST', payload);
-        statusArea.textContent = `Audiobook queued successfully (Job ID: ${response.parent_job_id}).`;
+        statusArea.textContent = `Audiobook queued successfully (Job ID: ${response.parent_request_id}).`;
     } catch (error) {
         console.error('Error queueing audiobook:', error);
         statusArea.textContent = `Error: ${error.message}`;
