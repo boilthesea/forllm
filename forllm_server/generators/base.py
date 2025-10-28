@@ -5,7 +5,7 @@ class BaseGenerator(ABC):
     Abstract base class for all content generators.
     """
     @abstractmethod
-    def generate(self, request_details: dict) -> dict:
+    def generate(self, request_details: dict, *args, **kwargs) -> dict:
         """
         The main method for a generator. It takes a dictionary of request details
         and performs the generation task.

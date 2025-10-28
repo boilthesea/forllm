@@ -11,9 +11,11 @@ from forllm_server.audio_database import get_chapters_for_book, update_audiobook
 class TTSConnector(BaseGenerator):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.pipeline = kokoro.KPipeline()
+        # The pipeline will be initialized on-demand in the generation methods
+        # to allow for language selection per-request.
+        self.pipeline = None
 
-    def generate(self, request_details):
+    def generate(self, request_details, *args, **kwargs):
         request_type = request_details.get('request_type')
         if request_type == 'generate_audiobook_chapter':
             return self._generate_audiobook_chapter(request_details)
@@ -55,9 +57,16 @@ class TTSConnector(BaseGenerator):
     def _generate_audiobook_chapter(self, request_details):
         params = request_details.get('params', {})
         chapter_id = params.get('chapter_id')
+        voice = params.get('voice')
 
-        if not chapter_id:
-            raise ValueError("chapter_id is required for audiobook generation.")
+        if not chapter_id or not voice:
+            raise ValueError("chapter_id and voice are required for audiobook generation.")
+
+        # Derive lang_code from the voice prefix (e.g., 'af_heart' -> 'a')
+        lang_code = voice.split('_')[:1]
+
+        # Initialize pipeline here with the correct language
+        pipeline = kokoro.KPipeline(lang_code=lang_code)
 
         chapter = get_chapter_by_id(chapter_id)
         if not chapter:
@@ -84,7 +93,7 @@ class TTSConnector(BaseGenerator):
         process = subprocess.Popen(ffmpeg_command, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
         try:
-            for chunk in self.pipeline.tts_stream(text):
+            for chunk in pipeline.tts_stream(text):
                 process.stdin.write(chunk)
         except Exception as e:
             process.kill()

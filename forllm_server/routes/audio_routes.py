@@ -71,12 +71,14 @@ def upload_ebook():
 @audio_bp.route('/api/audio/queue_audiobook', methods=['POST'])
 def queue_audiobook():
     data = request.get_json()
+    print(f"Received data for queue_audiobook: {data}")
     book_id = data.get('book_id')
     voice = data.get('voice')
+    lang_code = data.get('lang_code')
     selected_chapters = data.get('chapters')
 
-    if not book_id or not voice or not selected_chapters:
-        return jsonify({"error": "book_id, voice, and a list of chapters are required"}), 400
+    if not book_id or not voice or not selected_chapters or not lang_code:
+        return jsonify({"error": "book_id, voice, lang_code, and a list of chapters are required"}), 400
 
     if not isinstance(selected_chapters, list) or len(selected_chapters) == 0:
         return jsonify({"error": "chapters must be a non-empty list"}), 400
@@ -84,6 +86,7 @@ def queue_audiobook():
     parent_request_params = {
         "book_id": book_id,
         "voice": voice,
+        "lang_code": lang_code,
         "chapter_count": len(selected_chapters)
     }
     parent_request = add_llm_request(
@@ -96,7 +99,8 @@ def queue_audiobook():
         child_request_params = {
             "book_id": book_id,
             "chapter_id": chapter['chapter_id'], # Correct key is 'chapter_id'
-            "voice": voice
+            "voice": voice,
+            "lang_code": lang_code
         }
         add_llm_request(
             request_type='generate_audiobook_chapter',

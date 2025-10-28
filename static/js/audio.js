@@ -243,10 +243,13 @@ async function queueAudiobook() {
         return ebookData.chapters.find(c => c.chapter_id === chapterId);
     });
 
+    const selectedLanguage = document.querySelector('input[name="audiobook-language"]:checked').value;
+
     const payload = {
         book_id: ebookData.book_id,
         chapters: selectedChapters, // Send the full chapter objects
-        voice: selectedVoice
+        voice: selectedVoice,
+        lang_code: selectedLanguage
     };
 
     statusArea.textContent = 'Queueing audiobook generation...';
