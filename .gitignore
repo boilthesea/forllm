@@ -3,6 +3,7 @@ FORLLM_plan.md
 uploads/
 *.gi.*
 gi/
+media/audiobooks/temp/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

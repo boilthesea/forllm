@@ -4,6 +4,7 @@ import kokoro
 import soundfile as sf
 import numpy as np
 import subprocess
+import json
 from forllm_server.database import get_db, create_generated_media_entry
 from forllm_server.generators.base import BaseGenerator
 from forllm_server.audio_database import get_chapters_for_book, update_audiobook_status, get_chapter_by_id, get_audiobook_by_id
@@ -55,7 +56,8 @@ class TTSConnector(BaseGenerator):
             raise
 
     def _generate_audiobook_chapter(self, request_details):
-        params = request_details.get('params', {})
+        params_str = request_details.get('request_params', '{}')
+        params = json.loads(params_str)
         chapter_id = params.get('chapter_id')
         voice = params.get('voice')
 
@@ -63,7 +65,7 @@ class TTSConnector(BaseGenerator):
             raise ValueError("chapter_id and voice are required for audiobook generation.")
 
         # Derive lang_code from the voice prefix (e.g., 'af_heart' -> 'a')
-        lang_code = voice.split('_')[:1]
+        lang_code = voice[:1]
 
         # Initialize pipeline here with the correct language
         pipeline = kokoro.KPipeline(lang_code=lang_code)
@@ -73,7 +75,7 @@ class TTSConnector(BaseGenerator):
             raise ValueError(f"Chapter with id {chapter_id} not found.")
 
         text = chapter['extracted_text']
-        book_id = params.get('book_id')
+        book_id = chapter['book_id']
         book = get_audiobook_by_id(book_id)
 
         output_dir = os.path.join('media', 'audiobooks', 'temp', str(book_id))
@@ -105,7 +107,8 @@ class TTSConnector(BaseGenerator):
         return {"status": "success", "file_path": output_path}
 
     def _assemble_audiobook(self, request_details):
-        params = request_details.get('params', {})
+        params_str = request_details.get('request_params', '{}')
+        params = json.loads(params_str)
         book_id = params.get('book_id')
 
         if not book_id:
@@ -118,6 +121,7 @@ class TTSConnector(BaseGenerator):
         temp_dir = os.path.join('media', 'audiobooks', 'temp', str(book_id))
         output_dir = os.path.join('media', 'audiobooks')
         os.makedirs(output_dir, exist_ok=True)
+        os.makedirs(temp_dir, exist_ok=True)
         
         output_filename = f"{book['title'].replace(' ', '_')}.m4b"
         output_path = os.path.join(output_dir, output_filename)
@@ -135,14 +139,20 @@ class TTSConnector(BaseGenerator):
             '-f', 'concat',
             '-safe', '0',
             '-i', concat_list_path,
-            '-i', book['cover_image_path'],
-            '-map', '0:a',
-            '-map', '1:v',
+        ]
+
+        cover_path = book.get('cover_image_path')
+        if cover_path and os.path.exists(cover_path):
+            ffmpeg_command.extend(['-i', cover_path, '-map', '0:a', '-map', '1:v'])
+        else:
+            ffmpeg_command.extend(['-map', '0:a'])
+
+        ffmpeg_command.extend([
             '-c', 'copy',
             '-metadata', f"title={book['title']}",
             '-metadata', f"artist={book['author']}",
             output_path
-        ]
+        ])
 
         try:
             subprocess.run(ffmpeg_command, check=True)

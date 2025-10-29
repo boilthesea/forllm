@@ -117,7 +117,7 @@ def llm_worker(flask_app):
             db_conn.row_factory = sqlite3.Row
             cursor = db_conn.cursor()
 
-            cursor.execute("SELECT * FROM llm_requests WHERE status = 'pending' ORDER BY requested_at ASC LIMIT 1")
+            cursor.execute("SELECT * FROM llm_requests WHERE status = 'pending' AND parent_request_id IS NULL ORDER BY requested_at ASC LIMIT 1")
             request_data = cursor.fetchone()
 
             if not request_data:
@@ -150,15 +150,22 @@ def llm_worker(flask_app):
                     cursor.execute("UPDATE llm_requests SET status = 'complete', processed_at = CURRENT_TIMESTAMP, result_text = ? WHERE request_id = ?", (json.dumps(result), request_id))
                     db_conn.commit()
 
-                    parent_request_id = request_data.get('parent_request_id')
-                    if parent_request_id:
-                        cursor.execute("SELECT COUNT(*) FROM llm_requests WHERE parent_request_id = ? AND status != 'complete'", (parent_request_id,))
-                        incomplete_children = cursor.fetchone()
+                    # After a child job is marked 'complete', check if the parent can be activated.
+                    cursor.execute("SELECT parent_request_id FROM llm_requests WHERE request_id = ?", (request_id,))
+                    parent_id_tuple = cursor.fetchone()
 
-                        if incomplete_children == 0:
-                            cursor.execute("UPDATE llm_requests SET status = 'pending' WHERE request_id = ? AND request_type = 'generate_audiobook_parent'", (parent_request_id,))
+                    if parent_id_tuple and parent_id_tuple:
+                        parent_request_id = parent_id_tuple
+                        
+                        # Check if all children of this parent are now complete
+                        cursor.execute("SELECT COUNT(*) FROM llm_requests WHERE parent_request_id = ? AND status NOT IN ('complete', 'complete_target_deleted')", (parent_request_id,))
+                        incomplete_children_count = cursor.fetchone()
+
+                        if incomplete_children_count == 0:
+                            # All children are done, activate the parent job
+                            cursor.execute("UPDATE llm_requests SET status = 'pending' WHERE request_id = ? AND status = 'pending_dependency'", (parent_request_id,))
                             db_conn.commit()
-                            print(f"All children for parent {parent_request_id} are complete. Queuing parent for assembly.")
+                            print(f"All children for parent request {parent_request_id} are complete. Activating parent for final assembly.")
 
                 elif result.get('status') == 'error':
                     cursor.execute("UPDATE llm_requests SET status = 'error', error_message = ?, processed_at = CURRENT_TIMESTAMP WHERE request_id = ?", (result.get('error_message', 'Unknown error'), request_id))
